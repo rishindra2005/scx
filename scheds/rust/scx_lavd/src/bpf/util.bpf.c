@@ -63,10 +63,9 @@ struct {
 } cpu_ctx_stor SEC(".maps");
 
 __hidden
-u64 __get_task_ctx_slowpath(struct task_struct __arg_trusted *p,
-			    struct cpu_ctx *cpuc)
+u64 __find_task_ctx(struct task_struct __arg_trusted *p, struct cpu_ctx *cpuc, bool quiet)
 {
-	u64 raw = (u64)scx_task_data(p);
+	u64 raw = (u64)(quiet ? __scx_task_data(p) : scx_task_data(p));
 
 	if (cpuc && raw) {
 		cpuc->cached_task = (u64)p;
@@ -412,6 +411,34 @@ bool queued_on_cpu(struct cpu_ctx *cpuc)
 }
 
 __hidden
+bool is_cpu_congested(struct cpu_ctx *cpuc)
+{
+	int nr;
+
+	nr = scx_bpf_dsq_nr_queued(SCX_DSQ_LOCAL_ON | cpuc->cpu_id);
+	if (nr >= LAVD_CPU_CONGESTED_THRES)
+		return true;
+
+	if (use_cpdom_dsq()) {
+		nr += scx_bpf_dsq_nr_queued(cpdom_to_dsq(cpuc->cpdom_id));
+		if (nr >= LAVD_CPU_CONGESTED_THRES)
+			return true;
+
+		nr += scx_bpf_dsq_nr_queued(cpdom_to_turb_dsq(cpuc->cpdom_id));
+		if (nr >= LAVD_CPU_CONGESTED_THRES)
+			return true;
+	}
+
+	if (use_per_cpu_dsq()) {
+		nr += scx_bpf_dsq_nr_queued(cpu_to_dsq(cpuc->cpu_id));
+		if (nr >= LAVD_CPU_CONGESTED_THRES)
+			return true;
+	}
+
+	return false;
+}
+
+__hidden
 u64 peek_dsq_vtime(u64 dsq_id)
 {
 	struct task_struct *p;
@@ -452,6 +479,50 @@ u64 get_target_dsq_id(struct task_struct *p, struct cpu_ctx *cpuc, task_ctx *tas
 		return cpdom_to_dsq(cpuc->cpdom_id);
 
 	return cpdom_to_turb_dsq(cpuc->cpdom_id);
+}
+
+/*
+ * Current warmth of @cpu_id for @taskc: 0 unless @cpu_id is the CPU the task
+ * last ran on (taskc->cpu_id). Heat decays linearly to 0 across
+ * LAVD_CPU_WARM_LIFETIME_NS of away-time.
+ */
+__hidden
+u64 task_cpu_warmth(task_ctx __arg_arena *taskc, u32 cpu_id, u64 now)
+{
+	u64 away_ns, heat = taskc->cpu_heat;
+
+	if (!heat || taskc->cpu_id != cpu_id)
+		return 0;
+
+	away_ns = time_delta(now, taskc->last_stopping_clk);
+	if (away_ns >= LAVD_CPU_WARM_LIFETIME_NS)
+		return 0;
+
+	return heat - (heat * away_ns) / LAVD_CPU_WARM_LIFETIME_NS;
+}
+
+/*
+ * Add the slice a task just spent on @cpuc to its warmth, saturating at full
+ * heat after LAVD_CPU_WARM_SAT_NS of residence. Heat follows the CPU the task
+ * last ran on (taskc->cpu_id); a migration onto @cpuc (prev_cpu_id != cpu_id)
+ * restarts the clock from this slice.
+ */
+__hidden
+void task_update_cpu_warmth(task_ctx __arg_arena *taskc, struct cpu_ctx *cpuc,
+			    u64 slice_used, u64 now)
+{
+	u64 gain, w;
+
+	gain = (min(slice_used, (u64)LAVD_CPU_WARM_SAT_NS) * LAVD_SCALE) /
+	       LAVD_CPU_WARM_SAT_NS;
+
+	if (taskc->prev_cpu_id == cpuc->cpu_id) {
+		w = task_cpu_warmth(taskc, cpuc->cpu_id, now) + gain;
+		taskc->cpu_heat = min(w, (u64)LAVD_SCALE);
+	} else {
+		taskc->cpu_heat = min(gain, (u64)LAVD_SCALE);
+	}
+	taskc->last_stopping_clk = now;
 }
 
 /**

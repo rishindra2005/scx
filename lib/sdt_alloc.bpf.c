@@ -8,7 +8,7 @@
 #include <scx/common.bpf.h>
 #include <lib/arena_map.h>
 #include <lib/alloc/bpf_helpers_local.h>
-#include <lib/sdt_task.h>
+#include <lib/sdt_alloc.h>
 #include <scx/arena_userspace_interrop.bpf.h>
 
 struct scx_alloc_stack __arena *prealloc_stack;
@@ -23,6 +23,34 @@ struct scx_alloc_stack __arena *prealloc_stack;
  * that the loop counter's value is imprecise.
  */
 static __u64 zero = 0;
+
+/*
+ * Workaround for a kernel problem: bpf_arena_alloc_pages() can fail from a
+ * sleepable program although memory is available. Since commit b8467290edab
+ * ("bpf: arena: make arena kfuncs any context safe") the kernel hands out arena
+ * pages under the arena's raw spinlock with interrupts disabled, so they come
+ * from alloc_pages_nolock() whatever the caller's context: a trylock on the
+ * per-CPU and zone free lists, no reclaim, and NULL as soon as another CPU
+ * holds them. A sleepable caller should never see that, and the fix belongs in
+ * the kernel; until the kernel has it, retry a bounded number of times before
+ * treating the failure as out of memory, since the contention it comes from is
+ * over in microseconds.
+ */
+#define ARENA_ALLOC_PAGES_RETRIES	64
+
+static void __arena *arena_alloc_pages_retry(__u64 nr_pages)
+{
+	void __arena *mem = NULL;
+	__u32 i;
+
+	bpf_for(i, 0, ARENA_ALLOC_PAGES_RETRIES) {
+		mem = bpf_arena_alloc_pages(&arena, NULL, nr_pages, NUMA_NO_NODE, 0);
+		if (mem)
+			break;
+	}
+
+	return mem;
+}
 
 /*
  * XXX Hack to get the verifier to find the arena for sdt_exit_task.
@@ -41,7 +69,7 @@ __hidden void scx_arena_subprog_init(void)
 	if (scx_arena_verify_once)
 		return;
 
-	scx_err_loc("arena pointer %p", &arena);
+	scx_err("IGN: arena pointer %p", &arena);
 	scx_arena_verify_once = true;
 }
 
@@ -108,15 +136,23 @@ void __arena *scx_alloc_stack_pop(struct scx_alloc_stack __arena *stack)
 static
 int scx_alloc_stack(struct scx_alloc_stack __arena *stack)
 {
+	void __arena * __arena *next;
 	void __arena *slab;
 
 	bpf_spin_lock(&alloc_lock);
 	if (stack->idx >= SDT_TASK_ALLOC_STACK_MIN)
 		return 0;
+	if (stack->reserve) {
+		next = (void __arena * __arena *)stack->reserve;
+		slab = stack->reserve;
+		stack->reserve = *next;
+		*next = NULL;
+		goto install;
+	}
 
 	bpf_spin_unlock(&alloc_lock);
 
-	slab = bpf_arena_alloc_pages(&arena, NULL, 1, NUMA_NO_NODE, 0);
+	slab = arena_alloc_pages_retry(1);
 	if (slab == NULL)
 		return -ENOMEM;
 
@@ -127,13 +163,18 @@ int scx_alloc_stack(struct scx_alloc_stack __arena *stack)
 	 * allocation does not fit into the stack.
 	 */
 	if (stack->idx >= SDT_TASK_ALLOC_STACK_MAX) {
-
+		/*
+		 * Keep the page mapped: freeing it can immediately recycle the same
+		 * virtual address while stale BPF arena accesses are still in flight.
+		 */
+		next = (void __arena * __arena *)slab;
+		*next = stack->reserve;
+		stack->reserve = slab;
 		bpf_spin_unlock(&alloc_lock);
-
-		bpf_arena_free_pages(&arena, slab, 1);
 		return -EAGAIN;
 	}
 
+install:
 	stack->stack[stack->idx] = slab;
 	stack->idx += 1;
 
@@ -193,27 +234,77 @@ void __arena *scx_alloc_from_pool(struct sdt_pool *pool,
 	return ptr;
 }
 
-/* Allocate element from the pool. Must be called with a then pool lock held. */
+/*
+ * Allocate an element from the pool. Takes alloc_lock internally; must be
+ * called WITHOUT it held. Carve under the lock; drop it only for the sleepable
+ * page refill, then re-check before installing, mirroring scx_alloc_stack().
+ */
 static
 void __arena *scx_alloc_from_pool_sleepable(struct sdt_pool *pool)
 {
-	__u64 elem_size, max_elems;
-	void __arena *slab;
+	void __arena * __arena *next;
+	__u64 elem_size = pool->elem_size;
+	__u64 max_elems = pool->max_elems;
+	__u64 nr_pages;
+	void __arena *slab = NULL;
 	void __arena *ptr;
 
-	elem_size = pool->elem_size;
-	max_elems = pool->max_elems;
+	bpf_spin_lock(&alloc_lock);
 
-	/* If the chunk is spent, get a new one. */
-	if (pool->idx >= max_elems) {
-		slab = bpf_arena_alloc_pages(&arena, NULL,
-			div_round_up(max_elems * elem_size, PAGE_SIZE), NUMA_NO_NODE, 0);
+	/* Fast path: carve the next element from the current slab. */
+	if (pool->idx < max_elems) {
+		ptr = (void __arena *)((__u64)pool->slab + elem_size * pool->idx);
+		pool->idx += 1;
+		bpf_spin_unlock(&alloc_lock);
+		return ptr;
+	}
+	if (pool->reserve) {
+		slab = pool->reserve;
+		next = (void __arena * __arena *)slab;
+		pool->reserve = *next;
+		*next = NULL;
 		pool->slab = slab;
-		pool->idx = 0;
+		pool->idx = 1;
+		bpf_spin_unlock(&alloc_lock);
+		return slab;
 	}
 
-	ptr = (void __arena *)((__u64) pool->slab + elem_size * pool->idx);
+	/* Slab spent: drop the lock for the sleepable page allocation. */
+	bpf_spin_unlock(&alloc_lock);
+
+	nr_pages = div_round_up(max_elems * elem_size, PAGE_SIZE);
+	slab = arena_alloc_pages_retry(nr_pages);
+	if (!slab)
+		return NULL;
+
+	bpf_spin_lock(&alloc_lock);
+
+	/*
+	 * Re-check: another thread may have installed a fresh slab while we
+	 * slept. If still spent, install ours; otherwise keep the winner's and
+	 * cache ours for the next refill.
+	 */
+	if (pool->idx >= max_elems) {
+		pool->slab = slab;
+		pool->idx = 0;
+		slab = NULL;
+	} else {
+		/*
+		 * Keep a refill which lost the race for the next exhausted slab.
+		 * Returning it to the arena here can immediately recycle the same
+		 * virtual address on another CPU while stale BPF arena accesses are
+		 * still in flight.
+		 */
+		next = (void __arena * __arena *)slab;
+		*next = pool->reserve;
+		pool->reserve = slab;
+		slab = NULL;
+	}
+
+	ptr = (void __arena *)((__u64)pool->slab + elem_size * pool->idx);
 	pool->idx += 1;
+
+	bpf_spin_unlock(&alloc_lock);
 
 	return ptr;
 }
@@ -252,6 +343,7 @@ static int pool_set_size(struct sdt_pool *pool, __u64 data_size, __u64 nr_pages)
 
 	pool->elem_size = data_size;
 	pool->max_elems = (PAGE_SIZE * nr_pages) / pool->elem_size;
+	pool->reserve = NULL;
 	/* Populate the pool slab on the first allocation. */
 	pool->idx = pool->max_elems;
 
@@ -260,7 +352,7 @@ static int pool_set_size(struct sdt_pool *pool, __u64 data_size, __u64 nr_pages)
 
 /* initialize the whole thing, maybe misnomer */
 __hidden int
-scx_alloc_init(struct scx_allocator *alloc, __u64 data_size)
+scx_alloc_init(struct scx_allocator *alloc, __u64 data_size, __u64 align)
 {
 	size_t min_chunk_size;
 	int ret;
@@ -268,17 +360,35 @@ scx_alloc_init(struct scx_allocator *alloc, __u64 data_size)
 	_Static_assert(sizeof(struct sdt_chunk) <= PAGE_SIZE,
 		"chunk size must fit into a page");
 
-	ret = pool_set_size(&chunk_pool, sizeof(struct sdt_chunk), 1);
-	if (ret != 0)
-		return ret;
+	/*
+	 * chunk_pool, desc_pool and prealloc_stack are shared across allocator
+	 * instances. Set them up on the first init only: rerunning would orphan
+	 * the previous instance's remaining preallocations.
+	 */
+	if (!prealloc_stack) {
+		ret = pool_set_size(&chunk_pool, sizeof(struct sdt_chunk), 1);
+		if (ret != 0)
+			return ret;
 
-	ret = pool_set_size(&desc_pool, sizeof(struct sdt_desc), 1);
-	if (ret != 0)
-		return ret;
+		ret = pool_set_size(&desc_pool, sizeof(struct sdt_desc), 1);
+		if (ret != 0)
+			return ret;
 
-	/* Wrap data into a descriptor and word align. */
+		prealloc_stack = arena_alloc_pages_retry(div_round_up(sizeof(*prealloc_stack),
+								      PAGE_SIZE));
+		if (prealloc_stack == NULL)
+			return -ENOMEM;
+	}
+
+	if (!align)
+		align = 8;
+	if (unlikely(align < 8 || (align & (align - 1)))) {
+		scx_err_loc("invalid alignment %llu", align);
+		return -EINVAL;
+	}
+
 	data_size += sizeof(struct sdt_data);
-	data_size = round_up(data_size, 8);
+	data_size = round_up(data_size, align);
 
 	/*
 	 * Ensure we allocate large enough chunks from the arena to avoid excessive
@@ -288,10 +398,6 @@ scx_alloc_init(struct scx_allocator *alloc, __u64 data_size)
 	ret = pool_set_size(&alloc->pool, data_size, min_chunk_size);
 	if (ret != 0)
 		return ret;
-
-	prealloc_stack = bpf_arena_alloc_pages(&arena, NULL, div_round_up(sizeof(*prealloc_stack), PAGE_SIZE), NUMA_NO_NODE, 0);
-	if (prealloc_stack == NULL)
-		return -ENOMEM;
 
 	/* On success, returns with the lock taken. */
 	ret = scx_alloc_attempt(prealloc_stack);
@@ -358,7 +464,7 @@ int scx_alloc_free_idx(struct scx_allocator *alloc, __u64 idx)
 	sdt_desc_t * __arena *desc_children;
 	struct sdt_chunk __arena *chunk;
 	sdt_desc_t *desc;
-	struct sdt_data __arena *data;
+	void __arena *data;
 	__u64 level, shift, pos;
 	__u64 lv_pos[SDT_TASK_LEVELS];
 	int ret;
@@ -412,13 +518,16 @@ int scx_alloc_free_idx(struct scx_allocator *alloc, __u64 idx)
 	pos = idx & mask;
 	data = chunk->data[pos];
 	if (likely(data)) {
-		*data = (struct sdt_data) {
-			.tid.genn = data->tid.genn + 1,
+		struct sdt_data __arena *tailer = sdt_tailer(alloc, data);
+		__u64 __arena *words = data;
+
+		*tailer = (struct sdt_data) {
+			.tid.genn = tailer->tid.genn + 1,
 		};
 
 		/* Zero out one word at a time. */
 		for (i = zero; i < (alloc->pool.elem_size - sizeof(struct sdt_data)) / 8 && can_loop; i++) {
-			data->payload[i] = 0;
+			words[i] = 0;
 		}
 	}
 
@@ -502,7 +611,8 @@ static sdt_desc_t * desc_find_empty(sdt_desc_t *desc,
 	return desc;
 }
 
-static void scx_alloc_finish(struct sdt_data __arena *data, __u64 idx)
+static void scx_alloc_finish(struct scx_allocator *alloc, void __arena *data,
+			     __u64 idx)
 {
 	bpf_spin_lock(&alloc_lock);
 
@@ -513,28 +623,45 @@ static void scx_alloc_finish(struct sdt_data __arena *data, __u64 idx)
 
 	bpf_spin_unlock(&alloc_lock);
 
-	data->tid.idx = idx;
+	sdt_tailer(alloc, data)->tid.idx = idx;
 }
 
-__hidden
+/* global so loop callers don't explode the verifier insn budget */
+__noinline
 u64 scx_alloc_internal(struct scx_allocator *alloc)
 {
 	struct scx_alloc_stack __arena *stack = prealloc_stack;
-	struct sdt_data __arena *data = NULL;
+	void __arena *data = NULL;
 	struct sdt_chunk __arena *chunk;
 	sdt_desc_t *desc;
 	__u64 idx, pos;
 	int ret;
 
 	if (!alloc) {
-		scx_err_loc("No allocator found\n");
+		scx_err_loc("No allocator found");
+		return (u64)NULL;
+	}
+
+	/*
+	 * A NULL root aliases arena page zero and silently corrupts whatever
+	 * lives there, fail loudly instead.
+	 */
+	if (unlikely(!alloc->root)) {
+		scx_bpf_error("allocator not initialized");
 		return (u64)NULL;
 	}
 
 	/* On success, call returns with the lock taken. */
 	ret = scx_alloc_attempt(stack);
 	if (ret != 0) {
-		scx_err_loc("scx_alloc_attempt failed with %d\n", ret);
+		/*
+		 * The kernel would not hand out a page even after the retries:
+		 * free memory is at the zone's minimum watermark and this
+		 * allocator cannot wait for reclaim. Fail this allocation, not
+		 * the scheduler: the caller reports -ENOMEM and one fork fails,
+		 * where an scx_bpf_error() would take every task with it.
+		 */
+		__sync_fetch_and_add(&alloc_stats.alloc_nomem, 1);
 		return (u64)NULL;
 	}
 
@@ -544,7 +671,7 @@ u64 scx_alloc_internal(struct scx_allocator *alloc)
 	bpf_spin_unlock(&alloc_lock);
 
 	if (unlikely(desc == NULL)) {
-		scx_err_loc("failed to find empty tree key");
+		scx_bpf_error("failed to find empty tree key");
 		return (u64)NULL;
 	}
 
@@ -556,15 +683,16 @@ u64 scx_alloc_internal(struct scx_allocator *alloc)
 	if (!data) {
 		data = scx_alloc_from_pool_sleepable(&alloc->pool);
 		if (!data) {
+			/* As above: one failed allocation, not a dead scheduler. */
 			scx_alloc_free_idx(alloc, idx);
-			scx_err_loc("failed to allocate data from pool");
+			__sync_fetch_and_add(&alloc_stats.alloc_nomem, 1);
 			return (u64)NULL;
 		}
 	}
 
 	chunk->data[pos] = data;
 
-	scx_alloc_finish(data, idx);
+	scx_alloc_finish(alloc, data, idx);
 
 	return (u64)data;
 }
@@ -599,7 +727,7 @@ u64 scx_static_alloc_internal(size_t bytes, size_t alignment)
 
 	if (alloc_bytes > scx_static.max_alloc_bytes) {
 		bpf_spin_unlock(&alloc_lock);
-		scx_err_loc("invalid request %ld, max is %ld\n", alloc_bytes,
+		scx_err_loc("invalid request %ld, max is %ld", alloc_bytes,
 			      scx_static.max_alloc_bytes);
 		return (u64)NULL;
 	}
@@ -620,9 +748,7 @@ u64 scx_static_alloc_internal(size_t bytes, size_t alignment)
 		 * allocation memory.
 		 */
 
-		memory = bpf_arena_alloc_pages(&arena, NULL,
-					       scx_static.max_alloc_bytes / PAGE_SIZE,
-					       NUMA_NO_NODE, 0);
+		memory = arena_alloc_pages_retry(scx_static.max_alloc_bytes / PAGE_SIZE);
 		if (!memory)
 			return (u64)NULL;
 
@@ -666,7 +792,7 @@ int scx_static_init(size_t alloc_pages)
 	size_t max_bytes = alloc_pages * PAGE_SIZE;
 	void __arena *memory;
 
-	memory = bpf_arena_alloc_pages(&arena, NULL, alloc_pages, NUMA_NO_NODE, 0);
+	memory = arena_alloc_pages_retry(alloc_pages);
 	if (!memory)
 		return -ENOMEM;
 
@@ -865,7 +991,7 @@ int scx_stk_get_arena_memory(struct scx_stk *stack, __u64 nr_pages, __u64 nstk_s
 	if (!stack)
 		return -EINVAL;
 
-	mem = (__u64)bpf_arena_alloc_pages(&arena, NULL, nstk_segs * nr_pages, NUMA_NO_NODE, 0);
+	mem = (__u64)arena_alloc_pages_retry(nstk_segs * nr_pages);
 	if (!mem)
 		return -ENOMEM;
 
@@ -1397,5 +1523,119 @@ int scx_userspace_arena_free_pages(struct scx_userspace_arena_free_pages_args *c
 	u32 pages = (ctx->sz + PAGE_SIZE - 1) / PAGE_SIZE;
 
 	bpf_arena_free_pages(&arena, ctx->addr, pages);
+	return 0;
+}
+
+/*
+ * Poor man's userspace-driven RCU, standing in until BPF grows bpf_call_rcu().
+ * scx_urcu_free() pushes freed nodes onto the active side of a two-sided list.
+ * Userspace waits for an RCU grace period, see rust/scx_arena, and then runs a
+ * BPF program which calls scx_urcu_reclaim() to return the draining side to the
+ * allocator and flip the sides.
+ *
+ * A side may only be reclaimed after a grace period which started after the
+ * side stopped being active. Readers still holding pointers into the nodes and
+ * frees which read the active index before the flip are all inside RCU read
+ * sections which such a grace period waits out.
+ */
+
+/* sized so that exhaustion means seconds of spinning */
+#define SCX_URCU_CAS_TRIES	(1U << 23)
+
+/* per-call reclaim cap to bound the verifier walk */
+#define SCX_URCU_RECLAIM_BATCH	4096
+
+/*
+ * Doorbell waking userspace when a free makes the lists go empty to non-empty,
+ * shared by every scx_urcu instance: a wakeup should drain all of them.
+ */
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 4096);
+} scx_urcu_doorbell SEC(".maps");
+
+/* Whether any node is awaiting reclaim. */
+__hidden
+int scx_urcu_pending(struct scx_urcu *urcu)
+{
+	return READ_ONCE(urcu->head[0]) || READ_ONCE(urcu->head[1]);
+}
+
+__hidden
+void scx_urcu_free(struct scx_urcu *urcu, struct scx_allocator *alloc, void __arena *payload)
+{
+	struct sdt_data __arena *data = sdt_tailer(alloc, payload);
+	u32 side, i;
+
+	scx_arena_subprog_init();
+
+	side = READ_ONCE(urcu->active) & 1;
+	bpf_for(i, 0, SCX_URCU_CAS_TRIES) {
+		u64 head = READ_ONCE(urcu->head[side]);
+
+		data->urcu_link = head;
+		if (__sync_val_compare_and_swap(&urcu->head[side], head, (u64)data) != head)
+			continue;
+
+		/*
+		 * Ring on this side's empty to non-empty transition.
+		 *
+		 * No wakeup is lost: userspace sleeps only after seeing both
+		 * sides empty, so the first free afterwards lands on an empty
+		 * side and rings, and later frees pile behind it.
+		 *
+		 * Testing the other side too would lose wakeups: a free which
+		 * read the side before a flip lands opposite one which read it
+		 * after, and each can see the other's node and stay quiet.
+		 */
+		if (!head) {
+			u32 *e = bpf_ringbuf_reserve(&scx_urcu_doorbell, sizeof(*e), 0);
+
+			/* a full doorbell already has wakeups pending */
+			if (e) {
+				*e = 0;
+				bpf_ringbuf_submit(e, 0);
+			}
+		}
+		return;
+	}
+	scx_bpf_error("urcu free CAS exhausted");
+}
+
+/*
+ * Call only after a grace period which started after the previous call. Returns
+ * nonzero when the batch cap cut the walk short: call again, the leftovers need
+ * no new grace period.
+ */
+__hidden
+int scx_urcu_reclaim(struct scx_urcu *urcu, struct scx_allocator *alloc)
+{
+	u32 side = (READ_ONCE(urcu->active) ^ 1) & 1;
+	u32 i;
+
+	scx_arena_subprog_init();
+
+	/*
+	 * The grace period has flushed every free which could still see this
+	 * side as active, so plain accesses suffice from here on.
+	 */
+	bpf_for(i, 0, SCX_URCU_RECLAIM_BATCH) {
+		struct sdt_data __arena *data = (struct sdt_data __arena *)urcu->head[side];
+
+		if (!data)
+			break;
+		urcu->head[side] = data->urcu_link;
+		scx_alloc_free_idx(alloc, data->tid.idx);
+	}
+
+	if (urcu->head[side])
+		return 1;
+
+	/*
+	 * The xchg keeps the flip from becoming visible before the walk's head
+	 * updates: a free that saw the flip early could push onto a stale head
+	 * value which the walk's store then overwrites.
+	 */
+	__sync_lock_test_and_set(&urcu->active, side);
 	return 0;
 }

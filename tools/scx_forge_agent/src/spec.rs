@@ -4,7 +4,7 @@
 //!
 //! Mirrors `tools/scx_forge_agent/spec.toml`: `[scheduler]` (what to build and run),
 //! `[system]` (host/runtime settings), `[ai]` (model selection), `[tracing]`
-//! (optional trace-cmd profiling, event list, and size cap), `[workload]`
+//! (optional perf profiling, event list, and size cap), `[workload]`
 //! (the load to apply, the numeric metric to emit, and how many times to repeat
 //! the measurement), and `[goal]` (what the number means, which direction is
 //! better, and the accept threshold).
@@ -140,18 +140,16 @@ impl Ai {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tracing {
-    /// Enable optional trace-cmd tracing during workloads (only used when
-    /// trace-cmd is available). On by default.
+    /// Enable optional perf recording during workloads (only used when perf is
+    /// available). On by default.
     #[serde(default = "default_true")]
     pub enable_tracing: bool,
-    /// Trace events passed to `trace-cmd record` with `-e`.
+    /// Events passed to `perf record` with `-e`.
     #[serde(default = "default_trace_events")]
     pub trace_events: Vec<String>,
-    /// Cap on the combined `trace.dat` size for a recording. Accepts a plain
-    /// byte count or a human-readable size with a binary suffix (`K`, `M`, `G`,
-    /// optionally followed by `B`), e.g. `256M`, `1G`. trace-cmd records into a
-    /// circular file once the cap is hit, so the recording keeps the most recent
-    /// data and the file stays bounded even for long or busy workloads.
+    /// Cap passed to `perf record --max-size` for perf.data. Accepts a plain byte
+    /// count or a human-readable size with a binary suffix (`K`, `M`, `G`,
+    /// optionally followed by `B`), e.g. `256M`, `1G`.
     #[serde(default = "default_max_trace_size")]
     pub max_trace_size: String,
 }
@@ -242,6 +240,98 @@ impl Default for Goal {
             direction: default_direction(),
             accept_threshold_stddev: default_accept_threshold_stddev(),
         }
+    }
+}
+
+fn default_profile() -> String {
+    "release".to_string()
+}
+fn default_warmup_time() -> u64 {
+    2
+}
+fn default_stats_interval() -> u64 {
+    1
+}
+fn default_build_fix_attempts() -> u32 {
+    10
+}
+fn default_runtime_fix_attempts() -> u32 {
+    5
+}
+fn default_duration() -> u64 {
+    30
+}
+fn default_direction() -> String {
+    "minimize".to_string()
+}
+fn default_runs() -> u64 {
+    1
+}
+fn default_accept_threshold_stddev() -> f64 {
+    1.0
+}
+fn default_max_tool_iterations() -> u32 {
+    20
+}
+fn default_max_turn_seconds() -> u64 {
+    crate::model_timeout::DEFAULT_TURN_TIMEOUT_SECS
+}
+fn default_rounds() -> u32 {
+    32
+}
+fn default_true() -> bool {
+    true
+}
+fn default_max_trace_size() -> String {
+    "256M".to_string()
+}
+fn default_trace_events() -> Vec<String> {
+    [
+        "sched:sched_wakeup",
+        "sched:sched_wakeup_new",
+        "sched:sched_switch",
+        "sched:sched_migrate_task",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
+impl Spec {
+    /// Read and parse a TOML spec file.
+    pub fn load(path: &Path) -> Result<Spec> {
+        let text = std::fs::read_to_string(path)
+            .with_context(|| format!("read spec {}", path.display()))?;
+        let spec: Spec =
+            toml::from_str(&text).with_context(|| format!("parse spec {}", path.display()))?;
+        spec.validate()?;
+        Ok(spec)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.ai.max_turn_seconds == 0 {
+            anyhow::bail!("[ai].max_turn_seconds must be greater than 0");
+        }
+        if self.tracing.enable_tracing && self.tracing.trace_events.is_empty() {
+            anyhow::bail!("[tracing].trace_events must not be empty when tracing is enabled");
+        }
+        if self
+            .tracing
+            .trace_events
+            .iter()
+            .any(|event| event.trim().is_empty())
+        {
+            anyhow::bail!("[tracing].trace_events must not contain empty event names");
+        }
+        // Validate the trace-size cap up front so a bad value fails the run early
+        // rather than mid-recording.
+        self.tracing.max_trace_bytes()?;
+        Ok(())
+    }
+
+    /// Number of measured runs, clamped to at least 1 (matches Python max(1, runs)).
+    pub fn runs(&self) -> u64 {
+        self.workload.runs.max(1)
     }
 }
 
@@ -433,11 +523,12 @@ trace_events = []
         )
         .unwrap();
 
-        assert!(spec
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("[tracing].trace_events must not be empty when tracing is enabled"));
+        assert!(
+            spec.validate()
+                .unwrap_err()
+                .to_string()
+                .contains("[tracing].trace_events must not be empty when tracing is enabled")
+        );
 
         let disabled: Spec = toml::from_str(
             r#"
@@ -464,97 +555,5 @@ trace_events = []
         assert!(parse_size("").is_err());
         assert!(parse_size("M").is_err());
         assert!(parse_size("10T").is_err());
-    }
-}
-
-fn default_profile() -> String {
-    "release".to_string()
-}
-fn default_warmup_time() -> u64 {
-    2
-}
-fn default_stats_interval() -> u64 {
-    1
-}
-fn default_build_fix_attempts() -> u32 {
-    10
-}
-fn default_runtime_fix_attempts() -> u32 {
-    5
-}
-fn default_duration() -> u64 {
-    30
-}
-fn default_direction() -> String {
-    "minimize".to_string()
-}
-fn default_runs() -> u64 {
-    1
-}
-fn default_accept_threshold_stddev() -> f64 {
-    1.0
-}
-fn default_max_tool_iterations() -> u32 {
-    20
-}
-fn default_max_turn_seconds() -> u64 {
-    crate::model_timeout::DEFAULT_TURN_TIMEOUT_SECS
-}
-fn default_rounds() -> u32 {
-    32
-}
-fn default_true() -> bool {
-    true
-}
-fn default_max_trace_size() -> String {
-    "256M".to_string()
-}
-fn default_trace_events() -> Vec<String> {
-    [
-        "sched:sched_wakeup",
-        "sched:sched_wakeup_new",
-        "sched:sched_switch",
-        "sched:sched_migrate_task",
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .collect()
-}
-
-impl Spec {
-    /// Read and parse a TOML spec file.
-    pub fn load(path: &Path) -> Result<Spec> {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("read spec {}", path.display()))?;
-        let spec: Spec =
-            toml::from_str(&text).with_context(|| format!("parse spec {}", path.display()))?;
-        spec.validate()?;
-        Ok(spec)
-    }
-
-    fn validate(&self) -> Result<()> {
-        if self.ai.max_turn_seconds == 0 {
-            anyhow::bail!("[ai].max_turn_seconds must be greater than 0");
-        }
-        if self.tracing.enable_tracing && self.tracing.trace_events.is_empty() {
-            anyhow::bail!("[tracing].trace_events must not be empty when tracing is enabled");
-        }
-        if self
-            .tracing
-            .trace_events
-            .iter()
-            .any(|event| event.trim().is_empty())
-        {
-            anyhow::bail!("[tracing].trace_events must not contain empty event names");
-        }
-        // Validate the trace-size cap up front so a bad value fails the run early
-        // rather than mid-recording.
-        self.tracing.max_trace_bytes()?;
-        Ok(())
-    }
-
-    /// Number of measured runs, clamped to at least 1 (matches Python max(1, runs)).
-    pub fn runs(&self) -> u64 {
-        self.workload.runs.max(1)
     }
 }

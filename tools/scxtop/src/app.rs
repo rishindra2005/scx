@@ -3,31 +3,7 @@
 // This software may be used and distributed according to the terms of the
 // GNU General Public License version 2.
 
-use crate::available_kprobe_events;
-use crate::available_perf_events;
-use crate::bpf_intf;
-use crate::bpf_prog_data::{BpfProgData, BpfProgStats};
-use crate::bpf_skel::BpfSkel;
-use crate::bpf_stats::BpfStats;
-use crate::columns::{
-    get_bpf_program_columns, get_perf_top_columns, get_perf_top_columns_no_bpf,
-    get_process_columns, get_process_columns_no_bpf, get_thread_columns, get_thread_columns_no_bpf,
-    Columns,
-};
-use crate::config::get_config_path;
-use crate::config::Config;
-use crate::get_default_events;
-use crate::render::bpf_programs::{ProgramDetailParams, ProgramsListParams};
-use crate::render::scheduler::{DsqSummaryParams, ProcessLatencyParams, SchedulerViewParams};
-use crate::render::{
-    BpfProgramRenderer, MemoryRenderer, NetworkRenderer, ProcessRenderer, SchedulerRenderer,
-};
-use crate::search;
-use crate::symbol_data::SymbolData;
-use crate::util::{
-    check_perf_capability, default_scxtop_sched_ext_stats, format_hz, read_file_string,
-    sanitize_nbsp, u32_to_i32,
-};
+use crate::APP;
 use crate::AppState;
 use crate::AppTheme;
 use crate::ComponentViewState;
@@ -37,6 +13,7 @@ use crate::EventData;
 use crate::FilterItem;
 use crate::FilteredState;
 use crate::KprobeEvent;
+use crate::LICENSE;
 use crate::LlcData;
 use crate::MemStatSnapshot;
 use crate::NetworkStatSnapshot;
@@ -45,12 +22,35 @@ use crate::PerfEvent;
 use crate::PerfettoTraceManager;
 use crate::ProcData;
 use crate::ProfilingEvent;
+use crate::SCHED_NAME_PATH;
 use crate::ThreadData;
 use crate::VecStats;
 use crate::ViewState;
-use crate::APP;
-use crate::LICENSE;
-use crate::SCHED_NAME_PATH;
+use crate::available_kprobe_events;
+use crate::available_perf_events;
+use crate::bpf_intf;
+use crate::bpf_prog_data::{BpfProgData, BpfProgStats};
+use crate::bpf_skel::BpfSkel;
+use crate::bpf_stats::BpfStats;
+use crate::columns::{
+    Columns, get_bpf_program_columns, get_perf_top_columns, get_perf_top_columns_no_bpf,
+    get_process_columns, get_process_columns_no_bpf, get_thread_columns, get_thread_columns_no_bpf,
+};
+use crate::config::Config;
+use crate::config::get_config_path;
+use crate::get_default_events;
+use crate::render::bpf_programs::{ProgramDetailParams, ProgramsListParams};
+use crate::render::scheduler::{DsqSummaryParams, ProcessLatencyParams, SchedulerViewParams};
+use crate::render::{
+    BandwidthRenderer, BpfProgramRenderer, MemoryRenderer, NetworkRenderer, ProcessRenderer,
+    SchedulerRenderer,
+};
+use crate::search;
+use crate::symbol_data::SymbolData;
+use crate::util::{
+    check_perf_capability, default_scxtop_sched_ext_stats, format_hz, read_file_string,
+    sanitize_nbsp, u32_to_i32,
+};
 use crate::{
     Action, CpuhpEnterAction, CpuhpExitAction, ExecAction, ExitAction, ForkAction, GpuMemAction,
     HwPressureAction, IPIAction, KprobeAction, MangoAppAction, SchedCpuPerfSetAction,
@@ -60,7 +60,7 @@ use crate::{
 };
 use scx_utils::perf;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use glob::glob;
 use libbpf_rs::Link;
 use libbpf_rs::ProgramInput;
@@ -68,6 +68,7 @@ use num_format::{SystemLocale, ToFormattedString};
 use procfs::process::all_processes;
 use ratatui::prelude::Constraint;
 use ratatui::{
+    Frame,
     layout::{Alignment, Direction, Layout, Margin, Rect},
     prelude::Stylize,
     style::{Color, Modifier, Style},
@@ -79,19 +80,18 @@ use ratatui::{
         Gauge, LineGauge, Paragraph, RenderDirection, Row, Scrollbar, ScrollbarOrientation,
         ScrollbarState, Sparkline, Table, TableState, Wrap,
     },
-    Frame,
 };
 use regex::Regex;
 use scx_stats::prelude::StatsClient;
+use scx_utils::Topology;
 use scx_utils::misc::read_from_file;
 use scx_utils::scx_enums;
-use scx_utils::Topology;
 use serde_json::Value as JsonValue;
 use sysinfo::System;
-use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::mpsc::UnboundedSender;
 
-use std::collections::{btree_map::Entry, BTreeMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque, btree_map::Entry};
 use std::os::fd::{AsFd, AsRawFd};
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
@@ -113,6 +113,7 @@ pub struct App<'a> {
     mem_info: MemStatSnapshot,
     memory_view_state: ComponentViewState,
     network_view_state: ComponentViewState,
+    bandwidth_stats: crate::bandwidth_stats::BandwidthStats,
 
     scheduler: String,
     max_cpu_events: usize,
@@ -280,11 +281,13 @@ impl<'a> App<'a> {
         for llc in topo.all_llcs.values() {
             let mut data = LlcData::new(llc.id, llc.node_id, llc.all_cpus.len(), max_cpu_events);
             data.initialize_events(&default_events_str);
+            data.initialize_events(crate::bandwidth_stats::ALL_EVENTS);
             llc_data.insert(llc.id, data);
         }
         for node in topo.nodes.values() {
             let mut data = NodeData::new(node.id, node.all_cpus.len(), max_cpu_events);
             data.initialize_events(&default_events_str);
+            data.initialize_events(crate::bandwidth_stats::ALL_EVENTS);
             node_data.insert(node.id, data);
         }
 
@@ -379,6 +382,7 @@ impl<'a> App<'a> {
             mem_info,
             memory_view_state: ComponentViewState::Default,
             network_view_state: ComponentViewState::Default,
+            bandwidth_stats: crate::bandwidth_stats::BandwidthStats::new(),
             scheduler,
             max_cpu_events,
             max_sched_events: max_cpu_events,
@@ -541,11 +545,13 @@ impl<'a> App<'a> {
         for llc in topo.all_llcs.values() {
             let mut data = LlcData::new(llc.id, llc.node_id, llc.all_cpus.len(), max_cpu_events);
             data.initialize_events(&default_events_str);
+            data.initialize_events(crate::bandwidth_stats::ALL_EVENTS);
             llc_data.insert(llc.id, data);
         }
         for node in topo.nodes.values() {
             let mut data = NodeData::new(node.id, node.all_cpus.len(), max_cpu_events);
             data.initialize_events(&default_events_str);
+            data.initialize_events(crate::bandwidth_stats::ALL_EVENTS);
             node_data.insert(node.id, data);
         }
 
@@ -643,6 +649,7 @@ impl<'a> App<'a> {
             mem_info,
             memory_view_state: ComponentViewState::Default,
             network_view_state: ComponentViewState::Default,
+            bandwidth_stats: crate::bandwidth_stats::BandwidthStats::new(),
             scheduler,
             max_cpu_events,
             max_sched_events: max_cpu_events,
@@ -1115,6 +1122,7 @@ impl<'a> App<'a> {
     /// Uses view-specific data collection to optimize performance.
     fn on_tick(&mut self) -> Result<()> {
         match self.state {
+            AppState::Bandwidth => self.on_tick_bandwidth(),
             AppState::BpfProgramDetail => self.on_tick_bpf_program_detail(),
             AppState::BpfPrograms => self.on_tick_bpf_programs(),
             AppState::Default => self.on_tick_default(),
@@ -2544,6 +2552,7 @@ impl<'a> App<'a> {
         // Update terminal width for overhead history sizing
         self.terminal_width = area.width;
         match self.state {
+            AppState::Bandwidth => self.render_bandwidth(frame),
             AppState::BpfPrograms => self.render_bpf_programs(frame),
             AppState::BpfProgramDetail => self.render_bpf_program_detail(frame),
             AppState::Help => self.render_help(frame),
@@ -2891,6 +2900,15 @@ impl<'a> App<'a> {
                         .active_keymap
                         .action_keys_string(Action::SetState(AppState::Memory)),
                     self.memory_view_state
+                ),
+                Style::default(),
+            )),
+            Line::from(Span::styled(
+                format!(
+                    "{}: display memory bandwidth view",
+                    self.config
+                        .active_keymap
+                        .action_keys_string(Action::SetState(AppState::Bandwidth)),
                 ),
                 Style::default(),
             )),
@@ -3646,15 +3664,16 @@ impl<'a> App<'a> {
             let mut third_row = Vec::new();
             let mut has_third_row_content = false;
 
-            if let Some(layer_id) = proc_data.layer_id {
-                if self.layered_enabled && layer_id >= 0 {
-                    third_row.extend(vec![
-                        Span::styled("Layer: ", Style::default().fg(Color::Yellow)),
-                        Span::raw(layer_id.to_string()),
-                        Span::raw("  "),
-                    ]);
-                    has_third_row_content = true;
-                }
+            if let Some(layer_id) = proc_data.layer_id
+                && self.layered_enabled
+                && layer_id >= 0
+            {
+                third_row.extend(vec![
+                    Span::styled("Layer: ", Style::default().fg(Color::Yellow)),
+                    Span::raw(layer_id.to_string()),
+                    Span::raw("  "),
+                ]);
+                has_third_row_content = true;
             }
 
             if let Some(dsq) = proc_data.dsq {
@@ -3787,6 +3806,27 @@ impl<'a> App<'a> {
 
         frame.render_widget(paragraph, area);
         Ok(())
+    }
+
+    /// Renders the bandwidth application state.
+    fn render_bandwidth(&mut self, frame: &mut Frame) -> Result<()> {
+        // Each metric row is split left/right into LLC and Node panels of
+        // equal width, so a sparkline in either panel wants that many
+        // samples to fill horizontally.
+        let panel_width = (frame.area().width / 2) as usize;
+        if self.max_cpu_events != panel_width && panel_width > 0 {
+            self.resize_events(panel_width);
+        }
+        let theme = self.theme();
+        BandwidthRenderer::render_bandwidth_view(
+            frame,
+            &self.bandwidth_stats,
+            &self.llc_data,
+            &self.node_data,
+            &self.view_state,
+            self.config.tick_rate_ms(),
+            theme,
+        )
     }
 
     /// Renders the memory application state.
@@ -4578,10 +4618,10 @@ impl<'a> App<'a> {
 
         if pid == tgid {
             self.proc_data.remove(&pid);
-        } else if let Entry::Occupied(entry) = self.proc_data.entry(tgid) {
-            if self.in_thread_view {
-                entry.into_mut().remove_thread(pid);
-            }
+        } else if let Entry::Occupied(entry) = self.proc_data.entry(tgid)
+            && self.in_thread_view
+        {
+            entry.into_mut().remove_thread(pid);
         }
 
         if self.state == AppState::Tracing && action.ts > self.trace_start {
@@ -4616,12 +4656,11 @@ impl<'a> App<'a> {
                 Entry::Occupied(entry) => {
                     let proc_data = entry.into_mut();
                     proc_data.layer_id = Some(*parent_layer_id);
-                    if self.in_thread_view {
-                        if let Some(selected_tgid) = self.selected_process {
-                            if selected_tgid == parent_tgid {
-                                proc_data.add_thread(child_pid);
-                            }
-                        }
+                    if self.in_thread_view
+                        && let Some(selected_tgid) = self.selected_process
+                        && selected_tgid == parent_tgid
+                    {
+                        proc_data.add_thread(child_pid);
                     }
                 }
             }
@@ -4658,15 +4697,13 @@ impl<'a> App<'a> {
         let tgid = u32_to_i32(*tgid);
 
         // Update waker information for the thread
-        if let Some(proc_data) = self.proc_data.get_mut(&tgid) {
-            if self.in_thread_view {
-                if let Some(thread_data) = proc_data.threads.get_mut(&tid) {
-                    if *waker_pid != 0 {
-                        thread_data.last_waker_pid = Some(*waker_pid);
-                        thread_data.last_waker_comm = Some(waker_comm.to_string());
-                    }
-                }
-            }
+        if let Some(proc_data) = self.proc_data.get_mut(&tgid)
+            && self.in_thread_view
+            && let Some(thread_data) = proc_data.threads.get_mut(&tid)
+            && *waker_pid != 0
+        {
+            thread_data.last_waker_pid = Some(*waker_pid);
+            thread_data.last_waker_comm = Some(waker_comm.to_string());
         }
 
         if self.state == AppState::Tracing && action.ts > self.trace_start {
@@ -4688,15 +4725,13 @@ impl<'a> App<'a> {
         let tgid = u32_to_i32(*tgid);
 
         // Update waker information for the thread
-        if let Some(proc_data) = self.proc_data.get_mut(&tgid) {
-            if self.in_thread_view {
-                if let Some(thread_data) = proc_data.threads.get_mut(&tid) {
-                    if *waker_pid != 0 {
-                        thread_data.last_waker_pid = Some(*waker_pid);
-                        thread_data.last_waker_comm = Some(waker_comm.to_string());
-                    }
-                }
-            }
+        if let Some(proc_data) = self.proc_data.get_mut(&tgid)
+            && self.in_thread_view
+            && let Some(thread_data) = proc_data.threads.get_mut(&tid)
+            && *waker_pid != 0
+        {
+            thread_data.last_waker_pid = Some(*waker_pid);
+            thread_data.last_waker_comm = Some(waker_comm.to_string());
         }
 
         if self.state == AppState::Tracing && action.ts > self.trace_start {
@@ -4776,12 +4811,11 @@ impl<'a> App<'a> {
                     }
                 };
 
-                if self.in_thread_view {
-                    if let Some(proc_data) = self.selected_proc_data() {
-                        if proc_data.tgid == tgid {
-                            insert_or_update_thread(proc_data, tid, dsq, layer);
-                        }
-                    }
+                if self.in_thread_view
+                    && let Some(proc_data) = self.selected_proc_data()
+                    && proc_data.tgid == tgid
+                {
+                    insert_or_update_thread(proc_data, tid, dsq, layer);
                 }
             };
 
@@ -4805,19 +4839,19 @@ impl<'a> App<'a> {
 
         if let Some(proc_data) = self.proc_data.get_mut(&prev_tgid) {
             proc_data.add_event_data("slice_consumed", *prev_used_slice_ns);
-            if self.in_thread_view {
-                if let Some(thread_data) = proc_data.threads.get_mut(&prev_tid) {
-                    thread_data.add_event_data("slice_consumed", *prev_used_slice_ns);
-                }
+            if self.in_thread_view
+                && let Some(thread_data) = proc_data.threads.get_mut(&prev_tid)
+            {
+                thread_data.add_event_data("slice_consumed", *prev_used_slice_ns);
             }
         }
 
         if let Some(proc_data) = self.proc_data.get_mut(&next_tgid) {
             proc_data.add_event_data("lat_us", *next_dsq_lat_us);
-            if self.in_thread_view {
-                if let Some(thread_data) = proc_data.threads.get_mut(&next_tid) {
-                    thread_data.add_event_data("lat_us", *next_dsq_lat_us);
-                }
+            if self.in_thread_view
+                && let Some(thread_data) = proc_data.threads.get_mut(&next_tid)
+            {
+                thread_data.add_event_data("lat_us", *next_dsq_lat_us);
             }
         }
 
@@ -4963,10 +4997,10 @@ impl<'a> App<'a> {
             .unwrap()
             .sample_rate as u64;
 
-        if let Some(ProfilingEvent::Kprobe(kprobe)) = self.active_prof_events.get_mut(&cpu) {
-            if kprobe.instruction_pointer == Some(action.instruction_pointer) {
-                kprobe.increment_by(sample_rate);
-            }
+        if let Some(ProfilingEvent::Kprobe(kprobe)) = self.active_prof_events.get_mut(&cpu)
+            && kprobe.instruction_pointer == Some(action.instruction_pointer)
+        {
+            kprobe.increment_by(sample_rate);
         }
     }
 
@@ -5042,16 +5076,16 @@ impl<'a> App<'a> {
             self.filter_symbols();
 
             // Only store detailed stack trace if this matches the highlighted instruction pointer
-            if let Some(selected_symbol) = self.get_selected_symbol() {
-                if selected_symbol.symbol_info.address == action.instruction_pointer {
-                    // Store the latest symbolized data for the selected symbol
-                    self.symbol_data.update_selected_symbol_details(
-                        action.instruction_pointer,
-                        &action.kernel_stack,
-                        &action.user_stack,
-                        action.pid,
-                    );
-                }
+            if let Some(selected_symbol) = self.get_selected_symbol()
+                && selected_symbol.symbol_info.address == action.instruction_pointer
+            {
+                // Store the latest symbolized data for the selected symbol
+                self.symbol_data.update_selected_symbol_details(
+                    action.instruction_pointer,
+                    &action.kernel_stack,
+                    &action.user_stack,
+                    action.pid,
+                );
             }
         }
     }
@@ -5067,15 +5101,14 @@ impl<'a> App<'a> {
                 let mut enhanced = sample.clone();
 
                 // If we have cached BPF symbol info, try to get source location
-                if let Some(ref bpf_symbol_info) = self.cached_bpf_symbol_info {
-                    if let Some((line, _col)) =
+                if let Some(ref bpf_symbol_info) = self.cached_bpf_symbol_info
+                    && let Some((line, _col)) =
                         bpf_symbol_info.get_source_location(sample.symbol_info.address)
-                    {
-                        // Update the symbol name to include line number
-                        let base_name = &sample.symbol_info.symbol_name;
-                        enhanced.symbol_info.symbol_name = format!("{} (line {})", base_name, line);
-                        enhanced.symbol_info.line_number = Some(line);
-                    }
+                {
+                    // Update the symbol name to include line number
+                    let base_name = &sample.symbol_info.symbol_name;
+                    enhanced.symbol_info.symbol_name = format!("{} (line {})", base_name, line);
+                    enhanced.symbol_info.line_number = Some(line);
                 }
 
                 enhanced
@@ -7139,10 +7172,10 @@ impl<'a> App<'a> {
         // Add any new processes that aren't already in our proc_data
         for proc in all_procs.flatten() {
             let tgid = proc.pid();
-            if let std::collections::btree_map::Entry::Vacant(entry) = self.proc_data.entry(tgid) {
-                if let Ok(proc_data) = ProcData::from_tgid(tgid, 10) {
-                    entry.insert(proc_data);
-                }
+            if let std::collections::btree_map::Entry::Vacant(entry) = self.proc_data.entry(tgid)
+                && let Ok(proc_data) = ProcData::from_tgid(tgid, 10)
+            {
+                entry.insert(proc_data);
             }
         }
 
@@ -7284,6 +7317,65 @@ impl<'a> App<'a> {
     /// Memory view: focus on memory stats
     fn on_tick_memory(&mut self) -> Result<()> {
         self.mem_info.update()?;
+        Ok(())
+    }
+
+    /// Bandwidth view: sample resctrl MBM/CMT counters, roll up per-LLC
+    /// readings into node-level and system-level aggregates, and append them
+    /// to the per-topology EventData ring buffers used by the renderer.
+    fn on_tick_bandwidth(&mut self) -> Result<()> {
+        // Push a zero for every LLC/Node first — the renderer needs a fresh
+        // sample slot even when nothing is collected this tick.
+        for event in crate::bandwidth_stats::ALL_EVENTS {
+            for llc_data in self.llc_data.values_mut() {
+                llc_data.add_event_data(event, 0);
+            }
+            for node_data in self.node_data.values_mut() {
+                node_data.add_event_data(event, 0);
+            }
+        }
+
+        let snapshot = match self.bandwidth_stats.sample()? {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+
+        // Map resctrl domain id (== Llc::kernel_id) to the monotonic id used
+        // as the key for LlcData / NodeData.
+        for llc in self.topo.all_llcs.values() {
+            let Some(reading) = snapshot.per_domain.get(&llc.kernel_id) else {
+                continue;
+            };
+            if let Some(llc_data) = self.llc_data.get_mut(&llc.id) {
+                llc_data.add_cpu_event_data(
+                    crate::bandwidth_stats::EVENT_MBM_LOCAL_BPS,
+                    reading.mbm_local_bps,
+                );
+                llc_data.add_cpu_event_data(
+                    crate::bandwidth_stats::EVENT_MBM_TOTAL_BPS,
+                    reading.mbm_total_bps,
+                );
+                llc_data.add_cpu_event_data(
+                    crate::bandwidth_stats::EVENT_LLC_OCCUPANCY,
+                    reading.llc_occupancy_bytes,
+                );
+            }
+            if let Some(node_data) = self.node_data.get_mut(&llc.node_id) {
+                node_data.add_cpu_event_data(
+                    crate::bandwidth_stats::EVENT_MBM_LOCAL_BPS,
+                    reading.mbm_local_bps,
+                );
+                node_data.add_cpu_event_data(
+                    crate::bandwidth_stats::EVENT_MBM_TOTAL_BPS,
+                    reading.mbm_total_bps,
+                );
+                node_data.add_cpu_event_data(
+                    crate::bandwidth_stats::EVENT_LLC_OCCUPANCY,
+                    reading.llc_occupancy_bytes,
+                );
+            }
+        }
+
         Ok(())
     }
 

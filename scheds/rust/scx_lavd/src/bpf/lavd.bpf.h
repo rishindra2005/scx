@@ -104,6 +104,8 @@ enum consts_internal {
 
 	LAVD_CPU_UTIL_MAX_FOR_CPUPERF	= p2s(85), /* 85.0% */
 	LAVD_CPU_UTIL_THR_FOR_MAX_FREQ	= p2s(80), /* cpu utilization threshold to update max freq */
+	LAVD_CPUPERF_UP_SHIFT		= 6, /* raise in steps of capacity / 64 */
+	LAVD_CPUPERF_DOWN_SHIFT		= 5, /* lower only past a capacity / 32 deadband */
 
 	LAVD_CC_REQ_CAPACITY_HEADROOM	= p2s(25), /* 25%: inflate required capacity by 25% to handle sudden spikes */
 	LAVD_CC_PER_CPU_UTIL		= p2s(50), /* 50%: maximum per-CPU utilization */
@@ -121,8 +123,21 @@ enum consts_internal {
 	LAVD_CPDOM_MIG_SHIFT		= 3, /* when mildly loaded: 1/2**3 = [-12.5%, +12.5%] */
 	LAVD_CPDOM_MIG_SHIFT_OL		= 4, /* when over-loaded:   1/2**4 = [-6.25%, +6.25%] */
 	LAVD_CPDOM_MIG_PROB_FT		= (LAVD_SYS_STAT_INTERVAL_NS / LAVD_SLICE_MAX_NS_DFL), /* roughly twice per interval */
+	LAVD_CPU_CONGESTED_THRES	= 1, /* the CPU is congested when one or more tasks are waiting across its DSQs */
 
 	LAVD_FUTEX_OP_INVALID		= -1,
+};
+
+/*
+ * Per-CPU warmth: a proxy for the microarchitectural state a task builds up on
+ * a CPU (L1/L2 cache, TLB entries). Heat accrues with on-CPU residence and
+ * decays once the task leaves; a warmer previous CPU earns a longer wait
+ * before the task migrates. Full heat is LAVD_SCALE.
+ */
+enum consts_cpu_warmth {
+	LAVD_CPU_ID_NONE		= 0xffff, /* no warm CPU, for introspection */
+	LAVD_CPU_WARM_SAT_NS		= (500ULL * NSEC_PER_USEC), /* residence to full heat */
+	LAVD_CPU_WARM_LIFETIME_NS	= (5ULL * NSEC_PER_MSEC), /* linear decay to 0 once away */
 };
 
 enum consts_flags {
@@ -143,6 +158,7 @@ enum consts_flags {
 	LAVD_FLAG_MIGRATION_AGGRESSIVE  = (0x1 << 14), /* immediate task migration is necessary. */
 	LAVD_FLAG_DOMAIN_PINNED		= (0x1 << 15), /* task's cpumask is confined to a single compute domain */
 	LAVD_FLAG_IS_EFFECTIVELY_PINNED	= (0x1 << 16), /* effective cpumask weight is 1 (permanent or migrate-disable) */
+	LAVD_FLAG_WARM_CPU		= (0x1 << 17), /* wait on the previous CPU: enqueue on its per-CPU DSQ */
 };
 
 #define LAVD_MASK_MIGRATION		(LAVD_FLAG_MIGRATION_AGGRESSIVE)
@@ -240,6 +256,10 @@ struct task_ctx {
 					/* Estimated task util using ravg duty cycle */
 	struct ravg_data avg_util_ravg;	/* Running average of task utilization using ravg */
 	char	waker_comm[TASK_COMM_LEN + 1]; /* last waker's comm */
+
+	/* --- per-CPU warmth (cache/TLB state) --- */
+	u64	last_stopping_clk;	/* when cpu_heat was last integrated (task stopped) */
+	u16	cpu_heat;		/* residence-integrated heat for cpu_id [0, LAVD_SCALE] */
 } __attribute__((aligned(CACHELINE_SIZE)));
 
 /*
@@ -367,7 +387,6 @@ struct cpu_ctx {
 	u8		cpdom_alt_id;	/* compute domain id of alternative type */
 	u8		is_online;	/* is this CPU online? */
 	u8		__pad0[2];
-	u32		cpuperf_cur;	/* CPU's current performance target */
 	volatile s32	futex_op;	/* futex op in futex V1 */
 
 	/* --- cacheline 1 boundary (64 bytes): write accumulators --- */
@@ -442,6 +461,9 @@ struct cpu_ctx {
 	volatile u32	avg_util_invr;	/* average of the scaled CPU utilization, which is capacity and frequency invariant. */
 	volatile u32	cur_util_invr;	/* the scaled CPU utilization of the current interval, which is capacity and frequency invariant. */
 	volatile u32	lat_headroom;	/* latency headroom available to this CPU (inversely related to irq/steal time) */
+	volatile u32	cpuperf_target;	/* performance target computed at the last sys_stat
+					   interval, committed at ops.running() */
+	u32		cpuperf_cur;	/* CPU's current performance target */
 	/*
 	 * Steal utilization: steal_time as a fraction of duration_wall,
 	 * in LAVD_SHIFT fixed-point. cur_* is the current interval value;
@@ -626,6 +648,7 @@ extern volatile u64		powersave_mode_ns;
 /* Helpers from util.bpf.c for querying CPU/task state. */
 extern const volatile bool	per_cpu_dsq;
 extern const volatile u64	pinned_slice_ns;
+extern const volatile u8	no_ovrflw_extend;
 
 extern volatile bool		reinit_cpumask_for_performance;
 extern volatile bool		no_preemption;
@@ -650,9 +673,16 @@ void reset_task_flag(task_ctx *taskc, u64 flag);
 bool test_task_flag(task_ctx *taskc, u64 flag);
 bool test_task_flag_mask(task_ctx __arg_arena *taskc, u64 flag);
 
+extern const volatile u64	warm_cpu_ns;	/* warm-CPU wait budget (ns) */
+
+/* Per-CPU warmth clock (util.bpf.c). */
+u64 task_cpu_warmth(task_ctx __arg_arena *taskc, u32 cpu_id, u64 now);
+void task_update_cpu_warmth(task_ctx __arg_arena *taskc, struct cpu_ctx *cpuc,
+			    u64 slice_used, u64 now);
+
 static __always_inline bool use_per_cpu_dsq(void)
 {
-	return per_cpu_dsq || pinned_slice_ns;
+	return per_cpu_dsq || pinned_slice_ns || warm_cpu_ns;
 }
 
 static __always_inline  bool is_per_cpu_dsq_migratable(void)
@@ -672,7 +702,44 @@ static __always_inline bool use_cpdom_dsq(void)
 	return !per_cpu_dsq;
 }
 
+static __always_inline bool is_turbulent_cpu(struct cpu_ctx *cpuc)
+{
+	/*
+	 * A CPU is turbulent when its latency headroom (inversely related
+	 * to IRQ/steal time) falls below the latency-sensitive threshold.
+	 * Turbulent CPUs primarily serve the turbulent DSQ (non-latency-
+	 * critical tasks); steady CPUs serve latency-critical work.
+	 */
+	return cpuc->lat_headroom < LAVD_LC_LATENCY_SENSITIVE_THRESH;
+}
+
+static __always_inline bool is_steady_cpu(struct cpu_ctx *cpuc)
+{
+	return !is_turbulent_cpu(cpuc);
+}
+
+static __always_inline bool
+can_consume_steady_dsq(struct cpdom_ctx *cpdomc)
+{
+	struct cpu_ctx *cpuc = get_cpu_ctx();
+	bool turbulent = cpuc && is_turbulent_cpu(cpuc);
+
+	/*
+	 * Whether the current CPU should consume or steal from a cpdom's
+	 * steady (non-turbulent) DSQ. A steady CPU always can. A turbulent
+	 * CPU -- a poor home for the latency-critical tasks that live on
+	 * the steady DSQ -- can do so only to prevent starvation: when the
+	 * steady DSQ is more backed up than the turbulent DSQ, or no steady
+	 * CPU is available to drain it.
+	 */
+	return !turbulent ||
+	       scx_bpf_dsq_nr_queued(cpdom_to_dsq(cpdomc->id)) >
+		       scx_bpf_dsq_nr_queued(cpdom_to_turb_dsq(cpdomc->id)) ||
+	       cpdomc->nr_steady_cpus == 0;
+}
+
 bool queued_on_cpu(struct cpu_ctx *cpuc);
+bool is_cpu_congested(struct cpu_ctx *cpuc);
 u64 get_target_dsq_id(struct task_struct *p, struct cpu_ctx *cpuc, task_ctx *taskc);
 u16 normalize_lat_cri(u16 lat_cri);
 
@@ -689,6 +756,38 @@ u32 preemption_vulnerability(u16 normalized_lat_cri, u32 util_est)
 	u32 lat_step = normalized_lat_cri / LAVD_VULN_THRESH_STEP_SIZE;
 	u32 util_step = util_est / LAVD_VULN_THRESH_STEP_SIZE;
 	return lat_step * LAVD_VULN_THRESH_UTIL_STEPS + util_step;
+}
+
+/*
+ * Does the predicted wait for @cpu to free up fit the task's warmth-extended
+ * budget? The base budget is warm_cpu_ns; warm cache and TLB state on @cpu
+ * stretch it up to 2x, so a task still warm there waits rather than migrate to
+ * a cold CPU and refill. The wait is the time until the running task stops plus
+ * the service time of tasks already queued ahead on that CPU's DSQ.
+ */
+static __always_inline
+bool warm_cpu_wait_ok(task_ctx *taskc, s32 cpu, u64 now)
+{
+	struct cpu_ctx *cpuc = get_cpu_ctx_id(cpu);
+	u64 heat, budget, est, wait;
+
+	if (!cpuc)
+		return false;
+
+	heat = task_cpu_warmth(taskc, cpu, now);
+	budget = (warm_cpu_ns * (LAVD_SCALE + heat)) >> LAVD_SHIFT;
+	est = READ_ONCE(cpuc->est_stopping_clk);
+	wait = time_delta(est, now);
+
+	/*
+	 * Add the wait for tasks already queued ahead on @cpu. This is rough: it
+	 * assumes @p is served last and that every queued task runs the
+	 * system-average slice. A per-core qload_invr would sharpen the latter;
+	 * revisit once per-core queued load is tracked.
+	 */
+	wait += (u64)scx_bpf_dsq_nr_queued(cpu_to_dsq(cpu)) * sys_stat.slice_wall;
+
+	return wait <= budget;
 }
 
 /*
@@ -714,12 +813,36 @@ extern struct bpf_cpumask __kptr *steady_cpumask; /* CPU mask for non-turbulent 
 
 struct dsq_entry {
 	u64 dsq_id;
-	u64 vtime;
-	bool eligible;
+	u64 vtime;	/* head-task vtime, or U64_MAX when this CPU should
+			 * not consume this DSQ (sorts last, skipped). */
 };
 
 u64 peek_dsq_vtime(u64 dsq_id);
 void sort_dsqs(struct dsq_entry *a, struct dsq_entry *b, struct dsq_entry *c);
+
+/* Overflow-set bookkeeping helpers. */
+
+/*
+ * Atomically add @cpu to the global overflow cpumask. Mirrors the return
+ * semantics of bpf_cpumask_test_and_set_cpu(): true if the bit was
+ * already set, false if it was newly set.
+ */
+static __always_inline bool
+ovrflw_test_and_set(struct bpf_cpumask *ovrflw, s32 cpu)
+{
+	return bpf_cpumask_test_and_set_cpu(cpu, ovrflw);
+}
+
+/*
+ * Atomically remove @cpu from the global overflow cpumask. Mirrors the
+ * return semantics of bpf_cpumask_test_and_clear_cpu(): true if the bit
+ * was set before this call, false if it was already clear.
+ */
+static __always_inline bool
+ovrflw_test_and_clear(struct bpf_cpumask *ovrflw, s32 cpu)
+{
+	return bpf_cpumask_test_and_clear_cpu(cpu, ovrflw);
+}
 
 /* Load balancer helpers. */
 
@@ -736,7 +859,7 @@ void reset_lock_futex_boost(task_ctx *taskc, struct cpu_ctx *cpuc);
 
 u64 get_est_stopping_clk(task_ctx *taskc, u64 now);
 void try_proc_introspec_cmd(struct task_struct *p, task_ctx *taskc);
-void reset_cpu_preemption_info(struct cpu_ctx *cpuc, bool released);
+void reset_cpu_preemption_info(struct cpu_ctx *cpuc);
 int shrink_boosted_slice_remote(struct cpu_ctx *cpuc, u64 now);
 void shrink_boosted_slice_at_tick(struct task_struct *p,
 					 struct cpu_ctx *cpuc, u64 now);
@@ -744,7 +867,7 @@ void preempt_at_tick(struct task_struct *p, struct cpu_ctx *cpuc);
 void try_find_and_kick_victim_cpu(struct task_struct *p,
 					 task_ctx *taskc,
 					 s32 preferred_cpu,
-					 u64 dsq_id);
+					 u64 cpdom_id);
 
 extern volatile bool is_monitored;
 
@@ -801,9 +924,9 @@ struct pick_ctx {
 
 
 s32 find_cpu_in(const struct cpumask *src_mask, struct cpu_ctx *cpuc_cur);
-s32  pick_idle_cpu(struct pick_ctx *ctx, bool *is_idle);
+s32  pick_idle_cpu(struct pick_ctx *ctx, bool extend_ovrflw, bool *is_idle);
 
-bool consume_task(u64 cpu_dsq_id, u64 cpdom_dsq_id);
+bool consume_task(u64 cpdom_id);
 
 extern u64 cur_logical_clk;
 u64 calc_when_to_run(struct task_struct *p, task_ctx *taskc);

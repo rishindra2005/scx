@@ -14,6 +14,7 @@ use log::warn;
 use scx_p2dq::SchedulerOpts as P2dqOpts;
 use scx_userspace_arena::alloc::Allocator;
 use scx_userspace_arena::alloc::HeapAllocator;
+use scx_utils::Topology;
 use scx_utils::build_id;
 use scx_utils::compat;
 use scx_utils::compat::tracefs_mount;
@@ -24,23 +25,22 @@ use scx_utils::scx_ops_load;
 use scx_utils::scx_ops_open;
 use scx_utils::uei_exited;
 use scx_utils::uei_report;
-use scx_utils::Topology;
 
 use libbpf_rs::skel::Skel;
 use scx_arena::ArenaLib;
 use scx_p2dq::types;
 use scx_utils::NR_CPU_IDS;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 use clap::Parser;
 use crossbeam::channel::RecvTimeoutError;
-use libbpf_rs::libbpf_sys::bpf_program__set_autoattach;
 use libbpf_rs::AsRawLibbpf;
 use libbpf_rs::Link;
 use libbpf_rs::MapCore as _;
 use libbpf_rs::OpenObject;
+use libbpf_rs::libbpf_sys::bpf_program__set_autoattach;
 use log::debug;
 use log::info;
 use nix::unistd::Pid;
@@ -167,6 +167,7 @@ pub struct Scheduler {
     _arena: HeapAllocator<ArenaAllocator>,
     _struct_ops: libbpf_rs::Link,
     _links: Vec<Link>,
+    _arenalib: ArenaLib,
     stats_server: StatsServer<(), Metrics>,
 
     // Fields are dropped in declaration order, this must be last as arena holds a reference to the
@@ -276,7 +277,7 @@ impl Builder<'_> {
         Ok(links)
     }
 
-    fn load_skel(&self) -> Result<Pin<Rc<SkelWithObject>>> {
+    fn load_skel(&self) -> Result<(Pin<Rc<SkelWithObject>>, ArenaLib)> {
         let mut out: Rc<MaybeUninit<SkelWithObject>> = Rc::new_uninit();
         let uninit_skel = Rc::get_mut(&mut out).expect("brand new rc should be unique");
 
@@ -344,7 +345,9 @@ impl Builder<'_> {
                     .p2dq_config
                     .thermal_enabled = std::mem::MaybeUninit::new(true);
             } else {
-                debug!("Kernel does not support thermal pressure tracking (CONFIG_SCHED_HW_PRESSURE not enabled)");
+                debug!(
+                    "Kernel does not support thermal pressure tracking (CONFIG_SCHED_HW_PRESSURE not enabled)"
+                );
             }
         }
 
@@ -395,10 +398,11 @@ impl Builder<'_> {
             freq_array[i] = freq_array[i]
                 .checked_add(freq_array[i - 1])
                 .ok_or_else(|| {
-                    let err =
-                        concat!("frequencies overflowed! please ensure that frequencies sum to",
-                    " <=1. as these are floating point numbers, you may have to decrease by",
-                    " slightly more than you expect.");
+                    let err = concat!(
+                        "frequencies overflowed! please ensure that frequencies sum to",
+                        " <=1. as these are floating point numbers, you may have to decrease by",
+                        " slightly more than you expect."
+                    );
                     anyhow::anyhow!(err)
                 })?;
         }
@@ -448,8 +452,7 @@ impl Builder<'_> {
         scx_p2dq::init_skel!(&mut skel, topo);
 
         let task_size = std::mem::size_of::<types::task_p2dq>();
-        let arenalib = ArenaLib::init(skel.object_mut(), task_size, *NR_CPU_IDS)?;
-        arenalib.setup()?;
+        let arenalib = ArenaLib::setup(skel.object_mut(), task_size, 0, *NR_CPU_IDS)?;
 
         let out = unsafe {
             // SAFETY: initialising field by field. open_object is already "initialised" (it's
@@ -462,7 +465,7 @@ impl Builder<'_> {
             Pin::new_unchecked(out.assume_init())
         };
 
-        Ok(out)
+        Ok((out, arenalib))
     }
 }
 
@@ -470,7 +473,7 @@ impl<'a> TryFrom<Builder<'a>> for Scheduler {
     type Error = anyhow::Error;
 
     fn try_from(b: Builder<'a>) -> Result<Scheduler> {
-        let skel = b.load_skel()?;
+        let (skel, arenalib) = b.load_skel()?;
 
         let arena = HeapAllocator::new(ArenaAllocator(skel.clone()));
         let stats_server = StatsServer::new(stats::server_data()).launch()?;
@@ -486,6 +489,7 @@ impl<'a> TryFrom<Builder<'a>> for Scheduler {
             _arena: arena,
             _struct_ops: struct_ops,
             _links: links,
+            _arenalib: arenalib,
             stats_server,
             skel,
         })
@@ -796,7 +800,7 @@ pub fn run(args: Args) -> Result<()> {
 
         move || -> Result<()> {
             for builder in BuilderIterator::from(&*args) {
-                info!("{:?}", &builder);
+                info!("{:?}", builder);
 
                 let sched: Scheduler = builder.try_into()?;
 

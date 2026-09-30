@@ -16,8 +16,8 @@ defaults:
 
 env:
   PS4: '+ $(date "+%H:%M:%S") '
-  BPF_CLANG: clang-19
-  SCX_PACKAGES: "pkg-config lld clang clang-19 llvm-19 libelf-dev libzstd-dev protobuf-compiler libseccomp-dev libcap-ng-dev stress-ng mold"
+  BPF_CLANG: clang-22
+  SCX_PACKAGES: "pkg-config lld clang clang-22 llvm-22 libbpf-dev libelf-dev libzstd-dev protobuf-compiler libseccomp-dev libcap-ng-dev stress-ng mold"
   SCHED_EXT_KERNEL_URL: https://git.kernel.org/pub/scm/linux/kernel/git/tj/sched_ext.git
   SCHED_EXT_KERNEL_TAG: for-next
   RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
@@ -55,6 +55,16 @@ jobs:
           tmpdir=$(mktemp -d)
           tar -xf rust/scx_utils/vmlinux.tar.zst -C "$tmpdir"
           diff --no-dereference -qr scheds/vmlinux/ "$tmpdir/vmlinux/"
+      - name: Check enum defs sync
+        run: |
+          tmpdir=$(mktemp -d)
+          ./scripts/gen_enum_defs.py scheds/vmlinux/vmlinux.h \
+            "$tmpdir/enum_defs.autogen.h" \
+            "$tmpdir/enums_abi.autogen.h" \
+            "$tmpdir/enums_abi.autogen.rs"
+          diff -u scheds/include/scx/enum_defs.autogen.h "$tmpdir/enum_defs.autogen.h"
+          diff -u scheds/include/scx/enums_abi.autogen.h "$tmpdir/enums_abi.autogen.h"
+          diff -u rust/scx_utils/src/enums_abi.autogen.rs "$tmpdir/enums_abi.autogen.rs"
 
   veristat:
     if: github.repository == 'sched-ext/scx' || github.event_name != 'schedule'
@@ -68,7 +78,7 @@ jobs:
           - name: scx__stable__6_13
             url: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
             tag: linux-6.13.y
-            veristat-disable: scx_layered scx_lavd scx_arena_selftests
+            veristat-disable: scx_layered scx_lavd scx_arena_selftests scx_mlfq scx_flow
           - name: scx__stable__6_16
             url: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
             tag: linux-6.16.y
@@ -204,6 +214,8 @@ jobs:
           tool: cargo-nextest
       - name: Unit tests
         run: cargo nextest run --cargo-profile ci --workspace --locked --no-fail-fast --status-level fail --success-output never
+      - name: Compat header tests
+        run: make -C lib/selftests/compat test
 
   test:
     if: always() && (github.repository == 'sched-ext/scx' || github.event_name != 'schedule')
@@ -216,7 +228,7 @@ jobs:
         scheds:
           - flash beerland bpfland cosmos
           - layered p2dq lavd mitosis
-          - rlfifo rustland tickless
+          - rlfifo rustland tickless mlfq
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -301,7 +313,7 @@ jobs:
           disable_annotations: true
       - uses: ./.github/actions/install-deps-action
       - name: Build
-        run: cargo build --profile ci --locked -p scx_arena_selftests -p scx_cake -p scx_pandemonium
+        run: cargo build --profile ci --locked -p scx_arena_selftests -p scx_cake -p scx_pandemonium -p scx_eevdf
       - name: Arena selftests and scheduler tests
         uses: likewhatevs/vng-action@v0.7.0
         with:
@@ -329,7 +341,7 @@ jobs:
               results[arena_selftests]="PASS"
               passed="${passed} arena_selftests"
             fi
-            for sched in cake pandemonium; do
+            for sched in cake pandemonium eevdf; do
               echo "=== Testing ${sched} ==="
               stress-ng -t 31 --aggressive -M -c $(nproc) -f $(nproc) \
                 --affinity 1 --affinity-delay 1 --affinity-pin &
@@ -358,7 +370,7 @@ jobs:
             {
               echo "| Scheduler | Result |"
               echo "|-----------|--------|"
-              for sched in arena_selftests cake pandemonium; do
+              for sched in arena_selftests cake pandemonium eevdf; do
                 if [ "${results[$sched]}" = "PASS" ]; then
                   echo "| ${sched} | ✅ |"
                 else

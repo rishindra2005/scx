@@ -1,36 +1,36 @@
 use std::collections::BTreeMap;
 use std::io::Write;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::thread::current;
 use std::thread::ThreadId;
+use std::thread::current;
 use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use chrono::DateTime;
 use chrono::Local;
 use scx_stats::prelude::*;
-use scx_stats_derive::stat_doc;
 use scx_stats_derive::Stats;
+use scx_stats_derive::stat_doc;
 use scx_utils::Cpumask;
 use scx_utils::Topology;
 use serde::Deserialize;
 use serde::Serialize;
 use tracing::warn;
 
-use crate::bpf_intf;
 use crate::BpfStats;
-use crate::Layer;
-use crate::LayerKind;
-use crate::Stats;
 use crate::LAYER_USAGE_OPEN;
 use crate::LAYER_USAGE_PROTECTED;
 use crate::LAYER_USAGE_PROTECTED_PREEMPT;
 use crate::LAYER_USAGE_SUM_UPTO;
+use crate::Layer;
+use crate::LayerKind;
+use crate::Stats;
+use crate::bpf_intf;
 
 const GSTAT_EXCL_IDLE: usize = bpf_intf::global_stat_id_GSTAT_EXCL_IDLE as usize;
 const GSTAT_EXCL_WAKEUP: usize = bpf_intf::global_stat_id_GSTAT_EXCL_WAKEUP as usize;
@@ -78,15 +78,14 @@ const LSTAT_LLC_DRAIN_TRY: usize = bpf_intf::layer_stat_id_LSTAT_LLC_DRAIN_TRY a
 const LSTAT_LLC_DRAIN: usize = bpf_intf::layer_stat_id_LSTAT_LLC_DRAIN as usize;
 const LSTAT_SKIP_REMOTE_NODE: usize = bpf_intf::layer_stat_id_LSTAT_SKIP_REMOTE_NODE as usize;
 
+const LSTAT_RUNQ_LAT_BASE: usize = bpf_intf::layer_stat_id_LSTAT_RUNQ_LAT_BASE as usize;
+const NR_RUNQ_LAT_BUCKETS: usize = bpf_intf::consts_NR_RUNQ_LAT_BUCKETS as usize;
+
 const LLC_LSTAT_LAT: usize = bpf_intf::llc_layer_stat_id_LLC_LSTAT_LAT as usize;
 const LLC_LSTAT_CNT: usize = bpf_intf::llc_layer_stat_id_LLC_LSTAT_CNT as usize;
 
 fn calc_frac(a: f64, b: f64) -> f64 {
-    if b != 0.0 {
-        a / b * 100.0
-    } else {
-        0.0
-    }
+    if b != 0.0 { a / b * 100.0 } else { 0.0 }
 }
 
 fn fmt_pct(v: f64) -> String {
@@ -251,6 +250,8 @@ pub struct LayerStats {
     pub node_loads: Vec<f64>,
     #[stat(desc = "Whether xnuma gating is active for this layer (0/1)")]
     pub xnuma_active: u32,
+    #[stat(desc = "runqueue latency histogram, log2 us buckets 1us..32s, per stats interval")]
+    pub l_runq_lat_hist: Vec<u64>,
 }
 
 impl LayerStats {
@@ -390,6 +391,9 @@ impl LayerStats {
                 .map(|l| l * 100.0)
                 .collect(),
             xnuma_active: if xnuma_active { 1 } else { 0 },
+            l_runq_lat_hist: (0..NR_RUNQ_LAT_BUCKETS)
+                .map(|b| lstat(LSTAT_RUNQ_LAT_BASE + b))
+                .collect(),
         }
     }
 
@@ -531,7 +535,7 @@ impl LayerStats {
             writeln!(
                 w,
                 "  cpus={:3} [{:3},{:3}] {}",
-                self.cur_nr_cpus, self.min_nr_cpus, self.max_nr_cpus, &cpumask,
+                self.cur_nr_cpus, self.min_nr_cpus, self.max_nr_cpus, cpumask,
             )?;
         }
 
@@ -560,8 +564,8 @@ impl LayerStats {
                 .iter()
                 .zip(self.llc_lats.iter())
                 .enumerate()
-                .filter(|(i, (&frac, _))| {
-                    let nr_cpus = self.nr_llc_cpus.get(*i).copied().unwrap_or(0);
+                .filter(|&(i, (&frac, _))| {
+                    let nr_cpus = self.nr_llc_cpus.get(i).copied().unwrap_or(0);
                     nr_cpus > 0 || frac > 0.0
                 })
                 .map(|(i, (&frac, &lat))| (i, frac, lat))

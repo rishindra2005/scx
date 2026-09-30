@@ -39,10 +39,8 @@ struct tuning_knobs {
 	u64 slice_ns;           // BASE TIME SLICE (DEFAULT 1MS)
 	u64 preempt_thresh_ns;  // TICK PREEMPTION THRESHOLD (DEFAULT 1MS)
 	u64 batch_slice_ns;     // BATCH TASK SLICE CEILING (DEFAULT 20MS)
-	u64 lat_cri_thresh_high; // CLASSIFIER: LAT_CRITICAL THRESHOLD (DEFAULT 32)
-	u64 lat_cri_thresh_low;  // CLASSIFIER: INTERACTIVE THRESHOLD (DEFAULT 8)
 	u64 affinity_mode;      // L2 PLACEMENT: 0=OFF, 1=WEAK, 2=STRONG
-	u64 sojourn_thresh_ns;  // BATCH DSQ RESCUE THRESHOLD (SET BY RUST)
+	u64 codel_thresh_ns;    // BATCH DSQ RESCUE THRESHOLD (SET BY RUST)
 	u64 burst_slice_ns;     // SLICE CEILING DURING BURST/LONGRUN (SET BY RUST, DEFAULT 1MS)
 	u64 topology_tau_ns;    // FIEDLER-DERIVED TIME CONSTANT (1/lambda_2).
 	                        // 0 MEANS RUST HAS NOT YET WRITTEN tau; BPF
@@ -81,8 +79,6 @@ struct pandemonium_stats {
 	u64 nr_l2_miss_batch;
 	u64 nr_l2_hit_interactive;
 	u64 nr_l2_miss_interactive;
-	u64 nr_l2_hit_lat_crit;
-	u64 nr_l2_miss_lat_crit;
 	// CPU RELEASE: TASKS RESCUED FROM LOCAL DSQ BY scx_bpf_reenqueue_local()
 	u64 nr_reenqueue;
 	// CODEL SOJOURN: CURRENT BATCH WAIT AGE (NS), WRITTEN BY tick()
@@ -90,7 +86,7 @@ struct pandemonium_stats {
 	// LONGRUN: 1 IF SUSTAINED BATCH PRESSURE DETECTED, 0 OTHERWISE, WRITTEN BY tick()
 	u64 longrun_mode_active;
 	// OVERFLOW SOJOURN RESCUE: TASKS DISPATCHED BY try_service_older_overflow
-	// AT overflow_sojourn_rescue_ns (DISPATCH STEP 2)
+	// AT codel_target_ns (DISPATCH STEP 2)
 	u64 nr_overflow_rescue;
 	// CROSS-DOMAIN SCATTER ATTRIBUTION: PER-PLACEMENT-PATH COUNT OF LANDINGS
 	// WHERE THE CHOSEN CPU IS IN A DIFFERENT cache domain THAN THE TASK'S last_cpu.
@@ -110,6 +106,28 @@ struct pandemonium_stats {
 	// strand fix -- it should track the formerly tick-floored burst wakes while
 	// the >=900us wake2run bucket collapses.
 	u64 nr_spill_kick_preempt;
+	// TOTAL STEAL COUNT: every successful STEP 1 peer move_to_local, regardless
+	// of domain. nr_cross_domain[XDOM_STEAL] counts only CROSS-domain steals, and
+	// on a two-domain box most steals are same-domain and were counted nowhere --
+	// so "what fraction of the migration count is the dispatch-side steal" had no
+	// answer from anything in the tree. Every successful steal IS a migration by
+	// definition: the task comes off a peer's queue and runs here. One bump, no
+	// per-cause breakdown, operator-useful on any workload.
+	u64 nr_steal;
+	// PER-CPU RUNNABLE DEPTH, ACCUMULATED. THE ADAPTIVE LAYER HAD NO QUEUE
+	// SERIES AT ALL: IT INFERRED LOAD FROM idle_pct, ONE SYSTEM-WIDE INTEGER
+	// PERCENTAGE, WHICH IS WHY THE WHOLE CHAOS LAYER RAN OVER 16 SAMPLES OF
+	// ONE SCALAR. THIS IS THE SERIES PER-CPU REGIME AND PECORA-CARROLL
+	// COUPLING BOTH REQUIRE -- COUPLING MEASURES THE RELATIONSHIP BETWEEN TWO
+	// SERIES, AND UNTIL NOW EXACTLY ONE EXISTED ANYWHERE IN THE SYSTEM.
+	//
+	// SUM/SAMPLES RATHER THAN AN INSTANTANEOUS VALUE, MATCHING THE
+	// wake_lat_sum/wake_lat_samples PAIR ABOVE: A 1HZ READER SAMPLING A QUEUE
+	// THAT MOVES AT MICROSECOND SCALE ALIASES BADLY, SO BPF ACCUMULATES AT
+	// TICK RATE AND USERSPACE DIFFERENCES BOTH FIELDS FOR A TRUE INTERVAL
+	// MEAN. MONOTONIC; NEVER RESET IN BPF.
+	u64 rq_depth_sum;
+	u64 rq_depth_samples;
 };
 
 // XDOM path indices for pandemonium_stats.nr_cross_domain[] (diagnostic).
@@ -121,16 +139,5 @@ struct pandemonium_stats {
 #define XDOM_ENQ_T2      5   // enqueue TIER 2 warm-anchor spill
 #define XDOM_STEAL       6   // dispatch STEP 1 R_eff steal (this_cpu vs peer)
 #define XDOM_STEP5       7   // dispatch STEP 5 cross-domain work-conservation scan
-
-// PROCESS CLASSIFICATION: BPF OBSERVES, RUST LEARNS, BPF APPLIES
-// SHARED BETWEEN BPF MAPS (task_class_observe, task_class_init) AND RUST (procdb.rs)
-struct task_class_entry {
-	u8  tier;
-	u8  _pad[7];
-	u64 avg_runtime;
-	u64 runtime_dev;    // EWMA |RUNTIME - AVG_RUNTIME|
-	u64 wakeup_freq;    // WAKEUP FREQUENCY (EWMA)
-	u64 csw_rate;       // CONTEXT SWITCH RATE (EWMA)
-};
 
 #endif // __INTF_H

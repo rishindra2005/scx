@@ -14,15 +14,15 @@ mod stats;
 use std::ffi::{c_int, c_ulong};
 use std::fmt::Write;
 use std::mem::MaybeUninit;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::anyhow;
+use anyhow::bail;
 use clap::Parser;
 use crossbeam::channel::RecvTimeoutError;
 use libbpf_rs::OpenObject;
@@ -30,7 +30,12 @@ use libbpf_rs::ProgramInput;
 use log::warn;
 use log::{debug, info};
 use scx_stats::prelude::*;
-use scx_utils::autopower::{fetch_power_profile, PowerProfile};
+use scx_utils::Cpumask;
+use scx_utils::NR_CPU_IDS;
+use scx_utils::Powermode;
+use scx_utils::Topology;
+use scx_utils::UserExitInfo;
+use scx_utils::autopower::{PowerProfile, fetch_power_profile};
 use scx_utils::build_id;
 use scx_utils::compat;
 use scx_utils::get_primary_cpus;
@@ -42,11 +47,6 @@ use scx_utils::scx_ops_open;
 use scx_utils::try_set_rlimit_infinity;
 use scx_utils::uei_exited;
 use scx_utils::uei_report;
-use scx_utils::Cpumask;
-use scx_utils::Powermode;
-use scx_utils::Topology;
-use scx_utils::UserExitInfo;
-use scx_utils::NR_CPU_IDS;
 use stats::Metrics;
 
 const SCHEDULER_NAME: &str = "scx_bpfland";
@@ -61,7 +61,7 @@ fn cpus_to_cpumask(cpus: &Vec<usize>) -> String {
     let max_cpu_id = *cpus.iter().max().unwrap();
 
     // Create a byte vector with enough bytes to cover all CPU IDs.
-    let mut bitmask = vec![0u8; (max_cpu_id + 1 + 7) / 8];
+    let mut bitmask = vec![0u8; (max_cpu_id + 1).div_ceil(8)];
 
     // Set the appropriate bits for each CPU ID.
     for cpu_id in cpus {
@@ -195,54 +195,6 @@ struct Opts {
     #[clap(short = 'f', long, action = clap::ArgAction::SetTrue)]
     cpufreq: bool,
 
-    /// Enable TIMELY mode: use TIMELY's delay-driven feedback for adaptive time slices.
-    #[clap(short = 'T', long, action = clap::ArgAction::SetTrue)]
-    timely: bool,
-
-    /// TIMELY lower delay threshold in microseconds.
-    #[clap(long, default_value = "5000")]
-    timely_tlow_us: u64,
-
-    /// TIMELY higher delay threshold in microseconds.
-    #[clap(long, default_value = "50000")]
-    timely_thigh_us: u64,
-
-    /// TIMELY minimum gain value (fixed-point).
-    #[clap(long, default_value = "128")]
-    timely_gain_min: u32,
-
-    /// TIMELY gain step (fixed-point).
-    #[clap(long, default_value = "32")]
-    timely_gain_step: u32,
-
-    /// TIMELY HAI threshold (fixed-point).
-    #[clap(long, default_value = "768")]
-    timely_hai_thresh: u32,
-
-    /// TIMELY HAI multiplier.
-    #[clap(long, default_value = "2")]
-    timely_hai_multiplier: u32,
-
-    /// TIMELY backoff low (fixed-point).
-    #[clap(long, default_value = "768")]
-    timely_backoff_low: u32,
-
-    /// TIMELY backoff high (fixed-point).
-    #[clap(long, default_value = "960")]
-    timely_backoff_high: u32,
-
-    /// TIMELY backoff gradient (fixed-point).
-    #[clap(long, default_value = "992")]
-    timely_backoff_gradient: u32,
-
-    /// TIMELY gradient margin in microseconds.
-    #[clap(long, default_value = "125")]
-    timely_gradient_margin_us: u64,
-
-    /// TIMELY control interval in microseconds.
-    #[clap(long, default_value = "500")]
-    timely_control_interval_us: u64,
-
     /// Enable stats monitoring with the specified interval.
     #[clap(long)]
     stats: Option<f64>,
@@ -312,7 +264,7 @@ impl<'a> Scheduler<'a> {
             Self::resolve_energy_domain(&opts.primary_domain, power_profile).map_err(|err| {
                 anyhow!(
                     "failed to resolve primary domain '{}': {}",
-                    &opts.primary_domain,
+                    opts.primary_domain,
                     err
                 )
             })?;
@@ -365,21 +317,6 @@ impl<'a> Scheduler<'a> {
         rodata.slice_lag = opts.slice_us_lag * 1000;
         rodata.throttle_ns = opts.throttle_us * 1000;
         rodata.primary_all = domain.weight() == *NR_CPU_IDS;
-
-        // TIMELY settings (only effective when timely_enabled=true)
-        rodata.timely_enabled = opts.timely;
-        rodata.timely_tlow_ns = opts.timely_tlow_us * 1000;
-        rodata.timely_thigh_ns = opts.timely_thigh_us * 1000;
-        rodata.timely_gain_min_fp = opts.timely_gain_min;
-        rodata.timely_gain_max_fp = 1024;
-        rodata.timely_gain_step_fp = opts.timely_gain_step;
-        rodata.timely_hai_thresh_fp = opts.timely_hai_thresh;
-        rodata.timely_hai_multiplier = opts.timely_hai_multiplier;
-        rodata.timely_backoff_low_fp = opts.timely_backoff_low;
-        rodata.timely_backoff_high_fp = opts.timely_backoff_high;
-        rodata.timely_backoff_gradient_fp = opts.timely_backoff_gradient;
-        rodata.timely_gradient_margin_ns = opts.timely_gradient_margin_us * 1000;
-        rodata.timely_control_interval_ns = opts.timely_control_interval_us * 1000;
 
         // Generate the list of available CPUs sorted by capacity in descending order.
         let mut cpus: Vec<_> = topo.all_cpus.values().collect();
@@ -513,10 +450,10 @@ impl<'a> Scheduler<'a> {
 
         // Update primary scheduling domain.
         for cpu in 0..*NR_CPU_IDS {
-            if domain.test_cpu(cpu) {
-                if let Err(err) = Self::enable_primary_cpu(skel, cpu as i32) {
-                    bail!("failed to add CPU {} to primary domain: error {}", cpu, err);
-                }
+            if domain.test_cpu(cpu)
+                && let Err(err) = Self::enable_primary_cpu(skel, cpu as i32)
+            {
+                bail!("failed to add CPU {} to primary domain: error {}", cpu, err);
             }
         }
 
@@ -627,18 +564,6 @@ impl<'a> Scheduler<'a> {
             nr_kthread_dispatches: bss_data.nr_kthread_dispatches,
             nr_direct_dispatches: bss_data.nr_direct_dispatches,
             nr_shared_dispatches: bss_data.nr_shared_dispatches,
-            nr_delay_recovery_dispatches: bss_data.nr_delay_recovery_dispatches,
-            nr_delay_middle_add_dispatches: bss_data.nr_delay_middle_add_dispatches,
-            nr_delay_fast_recovery_dispatches: bss_data.nr_delay_fast_recovery_dispatches,
-            nr_delay_rate_limited_dispatches: bss_data.nr_delay_rate_limited_dispatches,
-            nr_gain_floor_dispatches: bss_data.nr_gain_floor_dispatches,
-            nr_gain_ceiling_dispatches: bss_data.nr_gain_ceiling_dispatches,
-            nr_delay_low_region_samples: bss_data.nr_delay_low_region_samples,
-            nr_delay_mid_region_samples: bss_data.nr_delay_mid_region_samples,
-            nr_delay_high_region_samples: bss_data.nr_delay_high_region_samples,
-            nr_gain_floor_resident_samples: bss_data.nr_gain_floor_resident_samples,
-            nr_gain_mid_resident_samples: bss_data.nr_gain_mid_resident_samples,
-            nr_gain_ceiling_resident_samples: bss_data.nr_gain_ceiling_resident_samples,
             nr_idle_select_path_picks: bss_data.nr_idle_select_path_picks,
             nr_idle_enqueue_path_picks: bss_data.nr_idle_enqueue_path_picks,
             nr_idle_prev_cpu_picks: bss_data.nr_idle_prev_cpu_picks,
@@ -654,7 +579,6 @@ impl<'a> Scheduler<'a> {
             nr_keep_running_queued_work: bss_data.nr_keep_running_queued_work,
             nr_dispatch_cpu_dsq_consumes: bss_data.nr_dispatch_cpu_dsq_consumes,
             nr_dispatch_node_dsq_consumes: bss_data.nr_dispatch_node_dsq_consumes,
-            nr_cpu_release_reenqueue: bss_data.nr_cpu_release_reenqueue,
         }
     }
 
@@ -686,12 +610,10 @@ impl Drop for Scheduler<'_> {
         info!("Unregister {SCHEDULER_NAME} scheduler");
 
         // Restore default CPU idle QoS resume latency.
-        if self.opts.idle_resume_us >= 0 {
-            if cpu_idle_resume_latency_supported() {
-                for cpu in self.topo.all_cpus.values() {
-                    update_cpu_idle_resume_latency(cpu.id, cpu.pm_qos_resume_latency_us as i32)
-                        .unwrap();
-                }
+        if self.opts.idle_resume_us >= 0 && cpu_idle_resume_latency_supported() {
+            for cpu in self.topo.all_cpus.values() {
+                update_cpu_idle_resume_latency(cpu.id, cpu.pm_qos_resume_latency_us as i32)
+                    .unwrap();
             }
         }
     }

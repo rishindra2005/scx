@@ -7,7 +7,6 @@
 #[allow(non_upper_case_globals)]
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
-#[allow(dead_code)]
 mod bpf_skel;
 
 mod bpf_intf;
@@ -17,7 +16,6 @@ mod log;
 mod adaptive;
 mod chaos;
 mod cli;
-mod procdb;
 mod scheduler;
 mod topology;
 mod tuning;
@@ -176,94 +174,38 @@ fn run_scheduler(
         let mut open_object = MaybeUninit::uninit();
         let mut sched = Scheduler::init(&mut open_object, nr_cpus)?;
 
-        // POPULATE CACHE TOPOLOGY MAP AT STARTUP
-        match topology::CpuTopology::detect(nr_cpus_display as usize) {
-            Ok(topo) => {
-                topo.log_summary();
-                if let Err(e) = topo.populate_bpf_map(&mut sched) {
-                    log_warn!("CACHE TOPOLOGY MAP WRITE FAILED: {}", e);
-                }
-                if let Err(e) = topo.populate_l2_siblings_map(&sched) {
-                    log_warn!("L2 SIBLINGS MAP WRITE FAILED: {}", e);
-                }
-                // RESISTANCE AFFINITY: COMPUTE R_EFF VIA LAPLACIAN PSEUDOINVERSE
-                // AND POPULATE BPF AFFINITY RANK MAP. SPECTRUM CARRIES lambda_2
-                // AND tau_ns FOR UNIVERSAL TOPOLOGY-DERIVED SCALING.
-                let (reff, rank, mut spectrum) = topo.compute_resistance_affinity();
-                if let Some(pv) = phi_scale {
-                    log_info!(
-                        "PHI OVERRIDE: phi_dist_scale_q16 {} -> {} (--phi-scale)",
-                        spectrum.phi_dist_scale_q16,
-                        pv
-                    );
-                    spectrum.phi_dist_scale_q16 = pv;
-                }
-                topo.log_resistance_affinity(&reff, &rank, spectrum);
-                // T2: derive the emergent de-facto-NUMA domain tree from the cache
-                // graph (min-conductance cuts) and log it. T3's bounded steal reads it.
-                let domains = topo.compute_domain_tree();
-                topo.log_domains(&domains);
-                // T3b.1: flatten the tree to the per-CPU-pair crossing-price matrix
-                // and write it 1:1 with the affinity rank (domain_phi map).
-                let domain_phi = topo.domain_cross_phi_matrix(&domains);
-                if let Err(e) = topo.populate_affinity_rank_map(
-                    &sched,
-                    &reff,
-                    &rank,
-                    spectrum.phi_dist_scale_q16,
-                    &domain_phi,
-                ) {
-                    log_warn!("AFFINITY RANK MAP WRITE FAILED: {}", e);
-                }
-                // T3b.2: partition the tree into emergent overflow domains (L3
-                // granularity) and write cpu_domain -- the the discrete domain map replacement.
-                let ov_domains = topo.overflow_domain_count();
-                let cpu_dom = topo.domain_partition(&domains, ov_domains);
-                for (cpu, &d) in cpu_dom.iter().enumerate() {
-                    if let Err(e) = sched.write_cpu_domain(cpu as u32, d) {
-                        log_warn!("CPU DOMAIN MAP WRITE FAILED (cpu {}): {}", cpu, e);
-                        break;
-                    }
-                }
-                log_info!(
-                    "OVERFLOW DOMAINS: {} (emergent, cpu_domain populated)",
-                    ov_domains
-                );
-                // WRITE tau_ns + codel_eq_ns INTO tuning_knobs. BPF'S tick() ON
-                // CPU 0 PICKS THESE UP AND DERIVES THE TAU-SCALED TIMING STATICS
-                // AND THE R_eff-DERIVED CODEL EQUILIBRIUM TARGET.
-                if let Err(e) = sched.write_topology_fields(spectrum.tau_ns, spectrum.codel_eq_ns) {
-                    log_warn!("TOPOLOGY KNOB WRITE FAILED: {}", e);
-                }
-            }
-            Err(e) => log_warn!("CACHE TOPOLOGY DETECT FAILED: {}", e),
+        // POPULATE CACHE TOPOLOGY AT STARTUP -- the one detect-and-populate
+        // sequence (topology.rs owns it: all computes before any map write,
+        // tuning knobs written last as the "go" signal). The SAME sequence
+        // re-runs on hotplug via CpuTopology::poll_hotplug from both control
+        // loops, so a CPU broken at boot self-corrects and the R_eff/phi/
+        // domain tables track the live width.
+        let mut last_online = topology::CpuTopology::online_cpu_count();
+        if let Err(e) = topology::CpuTopology::detect_and_populate(
+            &mut sched,
+            nr_cpus_display as usize,
+            phi_scale,
+        ) {
+            log_warn!("CACHE TOPOLOGY DETECT FAILED: {}", e);
         }
 
         let should_restart = if no_adaptive {
             // BPF-ONLY MODE: SCHEDULER RUNS WITH DEFAULT KNOBS, NO RUST TUNING
             // STILL PRINTS STATS SO BENCHMARKS GET TELEMETRY FOR BOTH PHASES
             log_info!("PANDEMONIUM IS ACTIVE (BPF ONLY, CTRL+C TO EXIT)");
-            // ONE-SHOT PROCDB WARM-START. BPF-only mode has no adaptive loop,
-            // so without this every app launch re-learns task classes from cold
-            // (12C BPF app-launch 16ms vs ADAPTIVE ~2ms). ProcessDb::new() loads
-            // the persisted profiles and flush_predictions() populates
-            // task_class_init, which enable() reads on every spawn. Construct,
-            // log, drop -- no loop, no 1Hz tax. Stale-but-warm beats cold.
-            match crate::procdb::ProcessDb::new() {
-                Ok(db) => {
-                    let (total, confident) = db.summary();
-                    log_info!(
-                        "PROCDB: BPF-mode warm-start {}/{} confident profiles",
-                        confident,
-                        total
-                    );
-                }
-                Err(e) => log_warn!("PROCDB WARM-START FAILED: {}", e),
-            }
             let mut prev = scheduler::PandemoniumStats::default();
             while !SHUTDOWN.load(Ordering::Relaxed) && !sched.exited() {
                 watchdog::LOOP_HEARTBEAT.fetch_add(1, Ordering::Relaxed);
                 std::thread::sleep(Duration::from_secs(1));
+
+                // HOTPLUG: re-derive topology when the online set changes
+                // (BPF-only mode has no adaptive loop to carry the poll).
+                topology::CpuTopology::poll_hotplug(
+                    &mut sched,
+                    nr_cpus_display as usize,
+                    phi_scale,
+                    &mut last_online,
+                );
 
                 let stats = sched.read_stats();
 
@@ -277,6 +219,7 @@ fn run_scheduler(
                 let delta_wake_samples = stats.wake_lat_samples.wrapping_sub(prev.wake_lat_samples);
                 let delta_hard = stats.nr_hard_kicks.wrapping_sub(prev.nr_hard_kicks);
                 let delta_soft = stats.nr_soft_kicks.wrapping_sub(prev.nr_soft_kicks);
+                let delta_steal = stats.nr_steal.wrapping_sub(prev.nr_steal);
                 let delta_enq_wake = stats.nr_enq_wakeup.wrapping_sub(prev.nr_enq_wakeup);
                 let delta_enq_requeue = stats.nr_enq_requeue.wrapping_sub(prev.nr_enq_requeue);
                 let wake_avg_us = if delta_wake_samples > 0 {
@@ -310,12 +253,6 @@ fn run_scheduler(
                 let dl2_mi = stats
                     .nr_l2_miss_interactive
                     .wrapping_sub(prev.nr_l2_miss_interactive);
-                let dl2_hl = stats
-                    .nr_l2_hit_lat_crit
-                    .wrapping_sub(prev.nr_l2_hit_lat_crit);
-                let dl2_ml = stats
-                    .nr_l2_miss_lat_crit
-                    .wrapping_sub(prev.nr_l2_miss_lat_crit);
                 let l2_pct_b = if dl2_hb + dl2_mb > 0 {
                     dl2_hb * 100 / (dl2_hb + dl2_mb)
                 } else {
@@ -323,11 +260,6 @@ fn run_scheduler(
                 };
                 let l2_pct_i = if dl2_hi + dl2_mi > 0 {
                     dl2_hi * 100 / (dl2_hi + dl2_mi)
-                } else {
-                    0
-                };
-                let l2_pct_l = if dl2_hl + dl2_ml > 0 {
-                    dl2_hl * 100 / (dl2_hl + dl2_ml)
                 } else {
                     0
                 };
@@ -347,11 +279,23 @@ fn run_scheduler(
 
                 if verbose {
                     println!(
-                        "d/s: {:<8} idle: {}% shared: {:<6} preempt: {:<4} keep: {:<4} kick: H={:<4} S={:<4} enq: W={:<4} R={:<4} wake: {}us lat_idle: {}us lat_kick: {}us reenq: {} sjrn: {}ms l2: B={}% I={}% L={}% [BPF{}]",
-                        delta_d, idle_pct, delta_shared, delta_preempt, delta_keep,
-                        delta_hard, delta_soft, delta_enq_wake, delta_enq_requeue,
-                        wake_avg_us, lat_idle_us, lat_kick_us,
-                        delta_reenq, sojourn_ms, l2_pct_b, l2_pct_i, l2_pct_l,
+                        "d/s: {:<8} idle: {}% shared: {:<6} preempt: {:<4} keep: {:<4} kick: H={:<4} S={:<4} enq: W={:<4} R={:<4} wake: {}us lat_idle: {}us lat_kick: {}us reenq: {} sjrn: {}ms l2: B={}% I={}% [BPF{}]",
+                        delta_d,
+                        idle_pct,
+                        delta_shared,
+                        delta_preempt,
+                        delta_keep,
+                        delta_hard,
+                        delta_soft,
+                        delta_enq_wake,
+                        delta_enq_requeue,
+                        wake_avg_us,
+                        lat_idle_us,
+                        lat_kick_us,
+                        delta_reenq,
+                        sojourn_ms,
+                        l2_pct_b,
+                        l2_pct_i,
                         longrun_label,
                     );
                 }
@@ -368,6 +312,7 @@ fn run_scheduler(
                     delta_soft,
                     lat_idle_us,
                     lat_kick_us,
+                    delta_steal,
                 );
 
                 prev = stats;
@@ -378,7 +323,6 @@ fn run_scheduler(
             let final_stats = sched.read_stats();
             let l2_total_b = final_stats.nr_l2_hit_batch + final_stats.nr_l2_miss_batch;
             let l2_total_i = final_stats.nr_l2_hit_interactive + final_stats.nr_l2_miss_interactive;
-            let l2_total_l = final_stats.nr_l2_hit_lat_crit + final_stats.nr_l2_miss_lat_crit;
             let l2_cum_b = if l2_total_b > 0 {
                 final_stats.nr_l2_hit_batch * 100 / l2_total_b
             } else {
@@ -386,11 +330,6 @@ fn run_scheduler(
             };
             let l2_cum_i = if l2_total_i > 0 {
                 final_stats.nr_l2_hit_interactive * 100 / l2_total_i
-            } else {
-                0
-            };
-            let l2_cum_l = if l2_total_l > 0 {
-                final_stats.nr_l2_hit_lat_crit * 100 / l2_total_l
             } else {
                 0
             };
@@ -406,18 +345,28 @@ fn run_scheduler(
                 0
             };
             println!(
-                "[KNOBS] regime=BPF slice_ns={} batch_ns={} preempt_ns={} l2_hit=B:{}%/I:{}%/L:{}% cross_domain_scatter_pct={} cross_domain_sel_tight={} cross_domain_sel_sync={} cross_domain_sel_normal={} cross_domain_sel_dfl={} cross_domain_enq_t1={} cross_domain_enq_t2={} cross_domain_steal={} cross_domain_step5={}",
-                knobs.slice_ns, knobs.batch_slice_ns,
+                "[KNOBS] regime=BPF slice_ns={} batch_ns={} preempt_ns={} l2_hit=B:{}%/I:{}% cross_domain_scatter_pct={} cross_domain_sel_tight={} cross_domain_sel_sync={} cross_domain_sel_normal={} cross_domain_sel_dfl={} cross_domain_enq_t1={} cross_domain_enq_t2={} cross_domain_steal={} cross_domain_step5={}",
+                knobs.slice_ns,
+                knobs.batch_slice_ns,
                 knobs.preempt_thresh_ns,
-                l2_cum_b, l2_cum_i, l2_cum_l,
-                x_scatter_pct, x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7],
+                l2_cum_b,
+                l2_cum_i,
+                x_scatter_pct,
+                x[0],
+                x[1],
+                x[2],
+                x[3],
+                x[4],
+                x[5],
+                x[6],
+                x[7],
             );
 
             sched.read_exit_info()
         } else {
             // ADAPTIVE MODE: BPF + SINGLE-THREAD MONITOR LOOP
             log_info!("PANDEMONIUM IS ACTIVE (CTRL+C TO EXIT)");
-            adaptive::monitor_loop(&mut sched, &SHUTDOWN, verbose, nr_cpus_display)?
+            adaptive::monitor_loop(&mut sched, &SHUTDOWN, verbose, nr_cpus_display, phi_scale)?
         };
 
         log_info!("PANDEMONIUM IS SHUTTING DOWN");

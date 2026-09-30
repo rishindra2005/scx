@@ -1,13 +1,13 @@
 use std::io::Write;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
 use scx_stats::prelude::*;
-use scx_stats_derive::stat_doc;
 use scx_stats_derive::Stats;
+use scx_stats_derive::stat_doc;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -21,17 +21,20 @@ pub struct Metrics {
     pub nr_ev_sticky_dispatches: u64,
     #[stat(desc = "Direct dispatch due to GPU affinity")]
     pub nr_gpu_dispatches: u64,
+    #[stat(desc = "Primary domain overload events (spill to non-primary CPUs)")]
+    pub nr_overload_events: u64,
 }
 
 impl Metrics {
     fn format<W: Write>(&self, w: &mut W) -> Result<()> {
         writeln!(
             w,
-            "[{}] ev_dispatches={} ev_sticky_dispatches={} gpu_dispatches={}",
+            "[{}] ev_dispatches={} ev_sticky_dispatches={} gpu_dispatches={} overload_events={}",
             crate::SCHEDULER_NAME,
             self.nr_event_dispatches,
             self.nr_ev_sticky_dispatches,
             self.nr_gpu_dispatches,
+            self.nr_overload_events,
         )?;
         Ok(())
     }
@@ -41,6 +44,7 @@ impl Metrics {
             nr_event_dispatches: self.nr_event_dispatches - rhs.nr_event_dispatches,
             nr_ev_sticky_dispatches: self.nr_ev_sticky_dispatches - rhs.nr_ev_sticky_dispatches,
             nr_gpu_dispatches: self.nr_gpu_dispatches - rhs.nr_gpu_dispatches,
+            nr_overload_events: self.nr_overload_events - rhs.nr_overload_events,
         }
     }
 }

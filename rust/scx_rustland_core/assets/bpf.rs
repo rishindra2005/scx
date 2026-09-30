@@ -9,39 +9,39 @@ use crate::bpf_intf;
 use crate::bpf_intf::*;
 use crate::bpf_skel::*;
 
+use std::ffi::CStr;
 use std::ffi::c_int;
 use std::ffi::c_ulong;
-use std::ffi::CStr;
 
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Once;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 
 use plain::Plain;
 use procfs::process::all_processes;
 
-use libbpf_rs::libbpf_sys::bpf_object_open_opts;
 use libbpf_rs::OpenObject;
 use libbpf_rs::ProgramInput;
+use libbpf_rs::libbpf_sys::bpf_object_open_opts;
 
 use libc::{c_char, pthread_self, pthread_setschedparam, sched_param};
 
 #[cfg(target_env = "musl")]
 use libc::timespec;
 
+use scx_utils::Topology;
+use scx_utils::UserExitInfo;
 use scx_utils::compat;
 use scx_utils::scx_ops_attach;
 use scx_utils::scx_ops_load;
 use scx_utils::scx_ops_open;
 use scx_utils::uei_exited;
 use scx_utils::uei_report;
-use scx_utils::Topology;
-use scx_utils::UserExitInfo;
 
 use scx_rustland_core::ALLOCATOR;
 
@@ -235,7 +235,6 @@ impl<'cb> BpfScheduler<'cb> {
         //
         // Use of a `str` whose contents are not valid UTF-8 is undefined behavior.
         fn callback(data: &[u8]) -> i32 {
-            #[allow(static_mut_refs)]
             unsafe {
                 // SAFETY: copying from the BPF ring buffer to BUF is safe, since the size of BUF
                 // is exactly the size of QueuedTask and the callback operates in chunks of
@@ -243,7 +242,7 @@ impl<'cb> BpfScheduler<'cb> {
                 // guaranteed by the error code returned by this callback (see below). From a
                 // thread-safety perspective this is also correct, assuming the caller is a
                 // single-thread process (as it is for now).
-                BUF.0.copy_from_slice(data);
+                (*(&raw mut BUF.0)).copy_from_slice(data);
             }
 
             // Return 0 to indicate successful completion of the copy.
@@ -517,10 +516,9 @@ impl<'cb> BpfScheduler<'cb> {
     }
 
     // Receive a task to be scheduled from the BPF dispatcher.
-    #[allow(static_mut_refs)]
     pub fn dequeue_task(&mut self) -> Result<Option<QueuedTask>, i32> {
         let bss_data = self.skel.maps.bss_data.as_mut().unwrap();
-        
+
         // Try to consume the first task from the ring buffer.
         match self.queued.consume_raw_n(1) {
             0 => {
@@ -530,7 +528,8 @@ impl<'cb> BpfScheduler<'cb> {
             }
             1 => {
                 // A valid task is received, convert data to a proper task struct.
-                let task = unsafe { EnqueuedMessage::from_bytes(&BUF.0).to_queued_task() };
+                let task =
+                    unsafe { EnqueuedMessage::from_bytes(&*(&raw const BUF.0)).to_queued_task() };
                 bss_data.nr_queued = bss_data.nr_queued.saturating_sub(1);
 
                 Ok(Some(task))

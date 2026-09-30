@@ -27,7 +27,6 @@ extern const volatile u64	slice_min_ns;
 extern const volatile u64	slice_max_ns;
 extern volatile bool		__weak no_core_compaction;
 extern volatile bool		__weak reinit_cpumask_for_performance;
-const volatile bool	__weak is_autopilot_on;
 
 int do_autopilot(void);
 u32 calc_avg32(u32 old_val, u32 new_val);
@@ -133,7 +132,10 @@ static void collect_sys_stat(void)
 					       + scx_bpf_dsq_nr_queued(cpdom_to_turb_dsq(cpdom_id));
 
 		bpf_for(i, 0, LAVD_CPU_ID_MAX/64) {
-			u64 cpumask = cpdomc->__cpumask[i];
+			u64 cpumask;
+			if ((u32)i * 64 >= nr_cpu_ids)
+				break;
+			cpumask = cpdomc->__cpumask[i];
 			bpf_for(k, 0, 64) {
 				j = cpumask_next_set_bit(&cpumask);
 				if (j < 0)
@@ -398,6 +400,12 @@ static void collect_sys_stat(void)
 		cpuc->cur_util_invr = (compute_invr << LAVD_SHIFT) /
 					c->duration_wall;
 		cpuc->avg_util_invr = calc_asym_avg(cpuc->avg_util_invr, cpuc->cur_util_invr);
+
+		/*
+		 * Both utilization signals are now up to date, so recompute
+		 * the performance target. ops.running() only commits it.
+		 */
+		calc_cpuperf_target(cpuc);
 
 		/*
 		 * Calculate domain-pinned task utilization. Clamp both

@@ -5,7 +5,6 @@
  */
 #pragma once
 
-#include <errno.h>
 #include <lib/atq.h>
 
 /**
@@ -75,28 +74,33 @@ int scx_cgroup_bw_set(struct cgroup *cgrp __arg_trusted, u64 period_us, u64 quot
 
 /**
  * scx_cgroup_bw_throttled - Check if the cgroup is throttled or not.
- * @cgrp_id: cgroup id where a task belongs to.
- * @p: a task to be tested.
- * @taskc: per-task context (scx_task_cgroup_bw *) cast to u64 for caching;
- *         pass 0 when no task context is available.
+ * @p: the task to test; must be the current op's subject task, or NULL to test
+ *     using only the cached billing (never resolving) -- for non-subject ops
+ *     such as ops.dispatch() where scx_bpf_task_cgroup() is illegal. With NULL
+ *     and a cold cache the task is reported not throttled.
+ * @taskc: per-task context (scx_task_cgroup_bw *) cast to u64 for caching.
  *
  * Return 0 when the cgroup is not throttled,
  * -EAGAIN when the cgroup is throttled, and
  * -errno for some other failures.
  */
-int scx_cgroup_bw_throttled(u64 cgrp_id,
-			    struct task_struct *p __arg_trusted, u64 taskc);
+int scx_cgroup_bw_throttled(struct task_struct *p __arg_trusted __arg_nullable, u64 taskc);
 
 /**
  * scx_cgroup_bw_consume - Consume the time actually used after the task execution.
- * @cgrp_id: cgroup id where a task belongs to.
+ * @p: the task being accounted; the current op's subject task, or NULL for a
+ *     cache-only call (a non-subject op such as ops.dispatch()).
+ * @taskc_raw: per-task context (scx_task_cgroup_bw *) cast to u64 for caching.
  * @consumed_ns: amount of time actually used.
- * @taskc: per-task context (scx_task_cgroup_bw *) cast to u64 for caching;
- *         pass 0 when no task context is available.
  *
- * Return 0 for success, -errno for failure.
+ * Return 0 on success -- billed now, nothing to bill (root/unlimited), or
+ * deferred: a cache-only caller (@p == NULL) whose billing cgroup is not yet
+ * resolved has this interval carried in the task and billed on the next
+ * resolved call, so the caller never has to defer its own accounting. Returns
+ * -errno only on a hard failure.
  */
-int scx_cgroup_bw_consume(u64 cgrp_id, u64 consumed_ns, u64 taskc);
+int scx_cgroup_bw_consume(struct task_struct *p __arg_trusted __arg_nullable, u64 taskc,
+			  u64 consumed_ns);
 
 /**
  * scx_cgroup_bw_put_aside - Put aside a task to execute it when the cgroup is
@@ -104,7 +108,6 @@ int scx_cgroup_bw_consume(u64 cgrp_id, u64 consumed_ns, u64 taskc);
  * @p: a task to be put aside since the cgroup is throttled.
  * @taskc: a task-embedded pointer to scx_task_common.
  * @vtime: vtime of a task @p.
- * @cgrp_id: cgroup id where a task belongs to.
  *
  * When a cgroup is throttled (i.e., scx_cgroup_bw_reserve() returns -EAGAIN),
  * a task that is in the ops.enqueue() path should be put aside to the BTQ of
@@ -114,7 +117,18 @@ int scx_cgroup_bw_consume(u64 cgrp_id, u64 consumed_ns, u64 taskc);
  *
  * Return 0 for success, -errno for failure.
  */
-int scx_cgroup_bw_put_aside(struct task_struct *p __arg_trusted, u64 taskc, u64 vtime, u64 cgrp_id);
+int scx_cgroup_bw_put_aside(struct task_struct *p __arg_trusted, u64 taskc, u64 vtime);
+
+/**
+ * scx_cgroup_bw_kick_idle_cb - Wake a CPU after bandwidth replenishment.
+ *
+ * Called by the replenish timer after publishing replenishment results when the
+ * bw_kick_builtin_idle rodata knob is left off before load. The override claims
+ * and kicks an idle CPU through the scheduler's own idle tracking so dispatch
+ * runs even when all CPUs are idle. No kick is needed if every CPU is already
+ * busy. The weak default exits the scheduler with an error.
+ */
+void scx_cgroup_bw_kick_idle_cb(void);
 
 /**
  * scx_cgroup_bw_reenqueue - Reenqueue backlogged tasks.
@@ -130,23 +144,34 @@ int scx_cgroup_bw_put_aside(struct task_struct *p __arg_trusted, u64 taskc, u64 
 int scx_cgroup_bw_reenqueue(void);
 
 /**
- * scx_cgroup_bw_cancel - Cancel throttling for a task.
+ * enum scx_cgroup_bw_cancel_flags - Flags for scx_cgroup_bw_cancel().
+ * @SCX_CGROUP_BW_CANCEL_UNLINK: unlinks the task from its BTQ and keeps
+ *   ownership active.
+ * @SCX_CGROUP_BW_CANCEL_DROP: also drop the task's throttling-ownership
+ *   reference and quiesce in-flight ATQ operations so the task context can be
+ *   freed (from ops.exit_task). Without it, cancel only unlinks the task from
+ *   its BTQ and keeps ownership active.
+ */
+enum scx_cgroup_bw_cancel_flags {
+	SCX_CGROUP_BW_CANCEL_UNLINK = ((u64)0x00),
+	SCX_CGROUP_BW_CANCEL_DROP = ((u64)0x01),
+};
+
+/**
+ * scx_cgroup_bw_cancel - Cancel a task's BTQ membership.
  *
  * @taskc: Pointer to the scx_task_common task context. Passed as a u64
  * to avoid exposing the scx_task_common type to the scheduler.
+ * @flags: bitmask of enum scx_cgroup_bw_cancel_flags.
  *
- * Tasks may be dequeued from the BPF side by the scx core during system
- * calls like sched_setaffinity(2). In that case, we must cancel any
- * throttling-related ATQ insert operations for the task:
- * - We must avoid double inserts caused by the dequeued task being
- *   reenqueed and throttled again while still in an ATQ.
- * - We want to remove tasks not in scx anymore from throttling. While
- *   inserting non-scx tasks into a DSQ is a no-op, we would like our
- *   accounting to be as accurate as possible.
+ * This removes the task from any current bandwidth-throttle queue but leaves it
+ * eligible to be re-queued. Pass SCX_CGROUP_BW_CANCEL_DROP at task exit to
+ * instead mark it dying (SCX_ATQ_DEAD) and quiesce in-flight ATQ ops so the
+ * task context can be freed.
  *
  * Return 0 for success, -errno for failure.
  */
-int scx_cgroup_bw_cancel(u64 taskc);
+int scx_cgroup_bw_cancel(u64 taskc, u64 flags);
 
 /**
  * REGISTER_SCX_CGROUP_BW_ENQUEUE_CB - Register an enqueue callback.
@@ -168,22 +193,23 @@ int scx_cgroup_bw_cancel(u64 taskc);
 		if (p) {							\
 			eqcb(p, (u64)taskc);					\
 			bpf_task_release(p);					\
-		} else {							\
-			scx_bpf_error("BUG: bpf_task_from_pid() failed for "	\
-				      "pid %d -- exiting task was "		\
-				      "unexpectedly throttled", taskc->pid);	\
 		}								\
+		/*								\
+		 * If bpf_task_from_pid() fails the task already exited; a	\
+		 * dying task is not lost by skipping reenqueue. This races	\
+		 * a drain against ops.exit_task, which is expected.		\
+		 */								\
 		return 0;							\
 	}
 
 /**
  * scx_cgroup_bw_is_cgroup_throttled - Test if a cgroup is throttled or not.
  *
- * @cgrp_id: cgroup id
+ * @cgrp: the cgroup to test
  *
  * Return true if the cgroup is throttled. Otherwise, return false.
  */
-int scx_cgroup_bw_is_cgroup_throttled(u64 cgrp_id);
+int scx_cgroup_bw_is_cgroup_throttled(struct cgroup *cgrp);
 
 /**
  * scx_cgroup_bw_is_task_throttled - Test if a task is throttled or not.
@@ -232,17 +258,28 @@ int scx_cgroup_bw_dump(u64 cgrp_id, bool descendent, bool accurate, bool indent)
  * beginning of their per-task context. @common is at offset 0, so all
  * existing scx_task_common casts still work.
  *
- * @common:      Must be first; all existing scx_task_common casts still work.
- * @cgx_raw:     Cached arena pointer to scx_cgroup_ctx (0 = not cached).
- * @llcx_raw:    Cached arena pointer to scx_cgroup_llc_ctx (0 = not cached).
- * @last_llc_id: LLC id for which @llcx_raw was cached.
+ * @common:       Must be first; all existing scx_task_common casts still work.
+ * @bill_cgrp_id: Cached billing cgroup id -- the task's nearest managed
+ *                (limited, or root) ancestor-or-self, resolved on first use
+ *                (0 = unresolved). All accounting/throttling is charged here.
+ * @cgx_raw:      Cached arena pointer to scx_cgroup_ctx (0 = not cached).
+ * @llcx_raw:     Cached arena pointer to scx_cgroup_llc_ctx (0 = not cached).
+ * @bill_gen:     Generation id (cbw_bill_gen) the cached billing state above
+ *                was resolved against; when it lags, the cache is dropped and
+ *                re-resolved.
+ * @pending_ns:   Consumed time a cache-only call could not yet attribute to a
+ *                billing cgroup; carried here and billed on the next resolved
+ *                call so no accounting is lost.
+ * @last_llc_id:  LLC id for which @llcx_raw was cached.
  */
 struct scx_task_cgroup_bw {
 	struct scx_task_common	common;		/* MUST be first */
+	u64			bill_cgrp_id;	/* 0 = unresolved */
 	u64			cgx_raw;	/* 0 = not cached */
 	u64			llcx_raw;	/* 0 = not cached */
+	u64			bill_gen;	/* cbw_bill_gen the cache was resolved against */
+	u64			pending_ns;	/* deferred consumed time, billed once resolved */
 	int			last_llc_id;
 };
 
 typedef struct scx_task_cgroup_bw __arena scx_task_cgroup_bw_t;
-

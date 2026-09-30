@@ -4,6 +4,7 @@
 // GNU General Public License version 2.
 
 mod app;
+pub mod bandwidth_stats;
 pub mod bpf_intf;
 mod bpf_prog_data;
 pub mod bpf_skel;
@@ -40,6 +41,7 @@ pub mod util;
 
 pub use crate::bpf_skel::types::bpf_event;
 pub use app::App;
+pub use bandwidth_stats::{BandwidthSnapshot, BandwidthStats, LlcBandwidth};
 pub use bpf_prog_data::{BpfProgData, BpfProgStats};
 pub use bpf_skel::*;
 pub use columns::{Column, Columns};
@@ -58,8 +60,8 @@ pub use power_data::{
 };
 pub use proc_data::ProcData;
 pub use profiling_events::{
-    available_kprobe_events, available_perf_events, get_default_events, KprobeEvent, PerfEvent,
-    ProfilingEvent,
+    KprobeEvent, PerfEvent, ProfilingEvent, available_kprobe_events, available_perf_events,
+    get_default_events,
 };
 pub use stats::StatAggregation;
 pub use stats::VecStats;
@@ -88,6 +90,8 @@ pub const SCHED_NAME_PATH: &str = "/sys/kernel/sched_ext/root/ops";
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AppState {
+    /// Application is in the memory-bandwidth state.
+    Bandwidth,
     /// Application is in the BPF programs state.
     BpfPrograms,
     /// Application is in the BPF program detail state.
@@ -807,6 +811,7 @@ impl std::fmt::Display for Action {
             Action::ToggleLocalization => write!(f, "ToggleLocalization"),
             Action::ToggleHwPressure => write!(f, "ToggleHwPressure"),
             Action::SetState(AppState::Help) => write!(f, "AppStateHelp"),
+            Action::SetState(AppState::Bandwidth) => write!(f, "AppStateBandwidth"),
             Action::SetState(AppState::Llc) => write!(f, "AppStateLlc"),
             Action::SetState(AppState::Network) => write!(f, "AppStateNetwork"),
             Action::SetState(AppState::Node) => write!(f, "AppStateNode"),

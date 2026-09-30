@@ -49,11 +49,13 @@ struct sdt_desc {
 };
 
 /*
- * Leaf node containing per-task data.
+ * Allocation metadata, trailing the caller's payload so that the payload starts
+ * at the element's alignment boundary, see sdt_tailer(). urcu_link chains
+ * deferred frees so that the payload stays intact for readers until reclaim.
  */
 struct sdt_data {
 	union sdt_id			tid;
-	__u64				payload[];
+	__u64				urcu_link;
 };
 
 /*
@@ -62,7 +64,7 @@ struct sdt_data {
 struct sdt_chunk {
 	union {
 		sdt_desc_t * descs[SDT_TASK_ENTS_PER_CHUNK];
-		struct sdt_data __arena *data[SDT_TASK_ENTS_PER_CHUNK];
+		void __arena *data[SDT_TASK_ENTS_PER_CHUNK];
 	};
 };
 
@@ -78,10 +80,13 @@ struct sdt_chunk {
 struct scx_alloc_stack {
 	__u64 idx;
 	void __arena	*stack[SDT_TASK_ALLOC_STACK_MAX];
+	/* Refill pages which lost the concurrent stack-capacity race. */
+	void __arena	*reserve;
 };
 
 struct sdt_pool {
 	void __arena	*slab;
+	void __arena	*reserve;
 	__u64		elem_size;
 	__u64		max_elems;
 	__u64		idx;
@@ -94,6 +99,7 @@ struct scx_alloc_stats {
 	__u64		free_ops;
 	__u64		active_allocs;
 	__u64		arena_pages_used;
+	__u64		alloc_nomem;	/* allocations the kernel refused a page for */
 };
 
 struct scx_allocator {

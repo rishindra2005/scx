@@ -50,6 +50,13 @@ char _license[] SEC("license") = "GPL";
 private(COSMOS) struct bpf_cpumask __kptr *primary_cpumask;
 
 /*
+ * Complement of @primary_cpumask (only initialized when a primary domain
+ * is defined): CPUs that can be used only when the primary domain is
+ * overloaded.
+ */
+private(COSMOS) struct bpf_cpumask __kptr *nonprimary_cpumask;
+
+/*
  * Set to true when @primary_cpumask is empty (primary domain includes all
  * the CPU).
  */
@@ -152,20 +159,24 @@ const volatile u64 slice_ns = 1000000ULL;
 const volatile u64 slice_lag = 20000000ULL;
 
 /*
- * User CPU utilization threshold to determine when the system is busy.
+ * Per-CPU contention threshold, in the range [0 .. 1024], to determine
+ * when a CPU is busy: a CPU is considered busy when it has had tasks
+ * waiting to run for more than this fraction of time.
+ *
+ * 0 = contention tracking disabled: every CPU is always considered busy
+ * (pure deadline mode) and no contention state is ever updated (the
+ * branches are resolved at load time, since this is read-only data frozen
+ * at that point).
  */
 const volatile u64 busy_threshold;
 
 /*
- * Per-CPU user utilization in the range [0 .. 1024], updated periodically
- * from userspace. Indexed by CPU id.
+ * Maximum time (ns) that tasks are allowed to wait in a shared DSQ before
+ * the primary domain is considered overloaded, allowing tasks to spill to
+ * the non-primary CPUs (0 = tasks are always contained in the primary
+ * domain).
  */
-struct {
-	__uint(type, BPF_MAP_TYPE_ARRAY);
-	__uint(max_entries, MAX_CPUS);
-	__type(key, u32);
-	__type(value, u64);
-} cpu_util_map SEC(".maps");
+const volatile u64 overload_thresh_ns;
 
 /*
  * Scheduler statistics.
@@ -173,6 +184,7 @@ struct {
 volatile u64 nr_event_dispatches;
 volatile u64 nr_ev_sticky_dispatches;
 volatile u64 nr_gpu_dispatches;
+volatile u64 nr_overload_events;
 
 /*
  * Scheduler's exit status.
@@ -203,6 +215,7 @@ struct task_ctx {
 	u64 exec_runtime;
 	u64 wakeup_freq;
 	u64 last_woke_at;
+	u64 last_utime;
 	u64 perf_events;
 	u64 perf_sticky_events;
 };
@@ -268,31 +281,32 @@ struct {
 } gpu_node_map SEC(".maps");
 
 /*
- * PID -> NUMA node mapping for GPU tasks (updated from userspace via NVML).
- * Key is the task's pid (thread id). Entries are removed when the task
- * is no longer using a GPU.
+ * Process TGID -> NUMA node mapping for GPU workload tasks. NVML identifies
+ * GPU processes, and userspace may include peer processes from the same
+ * workload cgroup.
  */
 #define MAX_GPU_PIDS	8192
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, MAX_GPU_PIDS);
-	__type(key, u32);	/* pid (task/thread id) */
+	__type(key, u32);	/* process tgid */
 	__type(value, u32);	/* node_id */
 } gpu_pid_map SEC(".maps");
 
 /*
- * Look up preferred NUMA node for a PID from userspace-provided GPU process
- * list (NVML). Returns node id or negative error.
+ * Look up the preferred NUMA node for a process TGID from the userspace-
+ * provided GPU workload list. Returns a node id or a negative
+ * error.
  */
-static int gpu_node_by_pid(u32 pid)
+static int gpu_node_by_tgid(u32 tgid)
 {
 	u32 *node;
 
 	if (!gpu_enabled || !numa_enabled)
 		return -ENOENT;
 
-	node = bpf_map_lookup_elem(&gpu_pid_map, &pid);
+	node = bpf_map_lookup_elem(&gpu_pid_map, &tgid);
 	if (!node)
 		return -ENOENT;
 
@@ -315,6 +329,10 @@ struct cpu_ctx {
 	u64 last_update;
 	u64 perf_lvl;
 	u64 perf_events;
+	u64 busy_avg;
+	u64 busy_eval_at;
+	u64 acc_utime;
+	bool busy;
 	struct bpf_cpumask __kptr *smt;
 };
 
@@ -469,6 +487,108 @@ static inline u64 shared_dsq(s32 cpu)
 }
 
 /*
+ * Primary domain overload detection.
+ *
+ * When a primary domain is defined, tasks are contained in it and are not
+ * allowed to spill to the non-primary CPUs, unless the primary domain is
+ * overloaded.
+ *
+ * Instantaneous saturation (no idle primary CPU at a given moment) is not
+ * a reliable overload signal: bursty workloads can saturate the domain for
+ * microseconds at a time (e.g., barrier wakeups) and spilling in response
+ * to such transients just moves work to worse CPUs (typically the SMT
+ * siblings of the primary CPUs).
+ *
+ * Overload is instead defined in terms of sustained queueing delay, per
+ * NUMA node: @node_empty_ts tracks the last time the node's shared DSQ was
+ * observed empty from ops.dispatch(), so a shared DSQ that has been
+ * continuously backlogged for longer than @overload_thresh_ns means the
+ * primary domain can't keep up and waiting is costing more than running on
+ * a non-primary CPU.
+ *
+ * When that happens the node is marked overloaded for a short decay window
+ * (@overload_until): spilling is allowed while the window keeps being
+ * renewed by backlogged enqueues and stops automatically once the backlog
+ * drains, without the ping-pong that an instantaneous threshold would
+ * cause.
+ */
+#define OVERLOAD_WINDOW_NS	(25ULL * NSEC_PER_MSEC)
+
+static u64 node_empty_ts[MAX_NODES];
+static u64 overload_until[MAX_NODES];
+
+/*
+ * Return true if the primary domain is overloaded on @node, false
+ * otherwise.
+ */
+static bool is_primary_overloaded(int node)
+{
+	if (primary_all || !overload_thresh_ns)
+		return false;
+
+	if (node < 0 || node >= MAX_NODES)
+		return false;
+
+	return time_before(bpf_ktime_get_ns(), overload_until[node]);
+}
+
+/*
+ * Wake up an idle non-primary CPU (close to @from_cpu) to start draining
+ * the shared DSQ.
+ */
+static void kick_idle_nonprimary(s32 from_cpu)
+{
+	const struct cpumask *nonpri = cast_mask(nonprimary_cpumask);
+	s32 cpu;
+
+	if (!nonpri)
+		return;
+
+	if (numa_enabled)
+		cpu = __COMPAT_scx_bpf_pick_idle_cpu_node(nonpri,
+					__COMPAT_scx_bpf_cpu_node(from_cpu), 0);
+	else
+		cpu = scx_bpf_pick_idle_cpu(nonpri, 0);
+
+	if (cpu >= 0)
+		scx_bpf_kick_cpu(cpu, SCX_KICK_IDLE);
+}
+
+/*
+ * Update the overload state of @node after inserting a task into its
+ * shared DSQ from @cpu.
+ */
+static void update_primary_overload(s32 cpu, int node)
+{
+	u64 now;
+
+	if (primary_all || !overload_thresh_ns)
+		return;
+
+	if (node < 0 || node >= MAX_NODES)
+		return;
+
+	/*
+	 * The shared DSQ has been empty recently: the primary domain is
+	 * keeping up with the load.
+	 */
+	now = bpf_ktime_get_ns();
+	if (time_delta(now, node_empty_ts[node]) < overload_thresh_ns)
+		return;
+
+	if (!is_primary_overloaded(node))
+		__sync_fetch_and_add(&nr_overload_events, 1);
+	overload_until[node] = now + OVERLOAD_WINDOW_NS;
+
+	/*
+	 * Idle non-primary CPUs are never picked and never kicked during
+	 * normal operation, so nothing would drain the backlog without an
+	 * explicit wakeup.
+	 */
+	kick_idle_nonprimary(cpu);
+}
+
+/*
  * Return true if task @p can run on NUMA node @node, false otherwise.
  */
 static bool can_use_node(const struct task_struct *p, int node)
@@ -490,10 +610,10 @@ static bool can_use_node(const struct task_struct *p, int node)
 }
 
 /*
- * If the task is in gpu_pid_map and should run on a different node, pick a CPU
- * on the preferred GPU node. Returns the CPU id (>= 0) on success, or a
- * negative value if the task is not GPU-bound, is already on the right node,
- * or no suitable CPU was found.
+ * If the task's thread group is in gpu_pid_map and should run on a different
+ * node, pick a CPU on the preferred GPU node. Returns the CPU id (>= 0) on
+ * success, or a negative value if the task is not GPU-bound, is already on
+ * the right node, or no suitable CPU was found.
  */
 static s32 pick_cpu_on_gpu_node(const struct task_struct *p, int node,
 				struct task_ctx *tctx)
@@ -502,7 +622,7 @@ static s32 pick_cpu_on_gpu_node(const struct task_struct *p, int node,
 	struct bpf_cpumask *mask;
 	int target_node;
 
-	target_node = gpu_node_by_pid(p->pid);
+	target_node = gpu_node_by_tgid(p->tgid);
 	if (target_node < 0 || target_node == node || !can_use_node(p, target_node))
 		return -ENOENT;
 
@@ -534,27 +654,98 @@ static inline bool is_pcpu_task(const struct task_struct *p)
 }
 
 /*
- * Return true if the given CPU is busy, false otherwise.
+ * Per-CPU user utilization tracking.
+ *
+ * This determines, per CPU, when the scheduler needs to switch to
+ * deadline-mode (using a shared DSQ) vs round-robin mode (using per-CPU
+ * local DSQs).
+ *
+ * The signal is the fraction of wall time the CPU spends executing user
+ * code, deliberately excluding system time: sleep-intensive workloads
+ * (frequent short sleeps and wakeups) burn most of their CPU time in the
+ * kernel, and for them tasks should stay on their CPU / local DSQ to
+ * reduce the scheduling overhead and the balancing pressure in
+ * ops.dispatch(). Only CPUs running sustained user work are worth the
+ * extra migrations that deadline mode brings.
+ *
+ * The user time of the running task (p->utime deltas, charged in
+ * ops.tick() and ops.stopping()) is accumulated per CPU and periodically
+ * folded into an EWMA (@busy_avg) of the user utilization, normalized in
+ * the range [0 .. 1024] of wall time. The busy state is derived from the
+ * EWMA with hysteresis (enter at @busy_threshold, exit at 3/4 of it) to
+ * avoid flapping between the two modes around the threshold. Idle CPUs
+ * don't tick, so a CPU with no recent evaluations is considered not
+ * busy.
+ */
+#define BUSY_EVAL_NS	(10ULL * NSEC_PER_MSEC)
+#define BUSY_STALE_NS	(50ULL * NSEC_PER_MSEC)
+
+/*
+ * Charge the user time accumulated by @p (running on @cpu) since the
+ * last update and periodically refresh the CPU's busy state.
+ */
+static void update_cpu_busy(struct task_struct *p, s32 cpu)
+{
+	struct cpu_ctx *cctx;
+	struct task_ctx *tctx;
+	u64 now, delta_t, util;
+
+	if (!busy_threshold)
+		return;
+
+	cctx = try_lookup_cpu_ctx(cpu);
+	tctx = try_lookup_task_ctx(p);
+	if (!cctx || !tctx)
+		return;
+
+	cctx->acc_utime += p->utime - tctx->last_utime;
+	tctx->last_utime = p->utime;
+
+	now = bpf_ktime_get_ns();
+	delta_t = time_delta(now, cctx->busy_eval_at);
+	if (delta_t < BUSY_EVAL_NS)
+		return;
+
+	util = MIN(cctx->acc_utime * 1024 / delta_t, 1024);
+	cctx->busy_avg = calc_avg(cctx->busy_avg, util);
+	cctx->acc_utime = 0;
+	cctx->busy_eval_at = now;
+
+	if (!cctx->busy && cctx->busy_avg >= busy_threshold)
+		cctx->busy = true;
+	else if (cctx->busy && cctx->busy_avg < busy_threshold - busy_threshold / 4)
+		cctx->busy = false;
+}
+
+/*
+ * Return true if the given CPU is busy (running sustained user work),
+ * false otherwise.
  *
  * @cpu should be the CPU of interest: prev_cpu in select_cpu/enqueue, or
  * scx_bpf_task_cpu(p) in tick.
- *
- * This determines when the scheduler needs to switch to deadline-mode
- * (using a shared DSQ) vs round-robin mode (using per-CPU local DSQs).
  */
 static inline bool is_cpu_busy(s32 cpu)
 {
-	u64 *util;
-	u64 max_cpu = MIN(nr_cpu_ids, MAX_CPUS);
+	struct cpu_ctx *cctx;
 
-	if (cpu < 0 || cpu >= max_cpu)
+	/*
+	 * Utilization tracking disabled: always use deadline mode.
+	 */
+	if (!busy_threshold)
+		return true;
+
+	cctx = try_lookup_cpu_ctx(cpu);
+	if (!cctx)
+		return true;
+
+	/*
+	 * No recent evaluations: the CPU has been (mostly) idle, hence
+	 * not busy.
+	 */
+	if (time_delta(bpf_ktime_get_ns(), cctx->busy_eval_at) > BUSY_STALE_NS)
 		return false;
 
-	util = bpf_map_lookup_elem(&cpu_util_map, &cpu);
-	if (!util)
-		return false;
-
-	return *util >= busy_threshold;
+	return cctx->busy;
 }
 
 /*
@@ -791,6 +982,16 @@ static s32 pick_idle_cpu_flat(struct task_struct *p, s32 prev_cpu)
 		cpu = pick_idle_cpu_pref_smt(p, prev_cpu, is_prev_allowed, primary, NULL);
 		if (cpu >= 0)
 			goto out;
+
+		/*
+		 * Contain the task in the primary domain, unless the
+		 * domain is overloaded.
+		 */
+		if (primary && bpf_cpumask_intersects(p->cpus_ptr, primary) &&
+		    !is_primary_overloaded(cpu_node(prev_cpu))) {
+			cpu = -EBUSY;
+			goto out;
+		}
 	}
 
 	if (smt_enabled) {
@@ -891,10 +1092,17 @@ static s32 pick_idle_cpu(struct task_struct *p, s32 prev_cpu, s32 this_cpu,
 	 * If a primary domain is defined, try to pick an idle CPU from there
 	 * first.
 	 */
-	if (!primary_all && mask) {
+	if (!primary_all && mask && bpf_cpumask_intersects(p->cpus_ptr, mask)) {
 		cpu = scx_bpf_select_cpu_and(p, prev_cpu, wake_flags, mask, 0);
 		if (cpu >= 0)
 			return cpu;
+
+		/*
+		 * Contain the task in the primary domain, unless the
+		 * domain is overloaded.
+		 */
+		if (!is_primary_overloaded(cpu_node(prev_cpu)))
+			return -EBUSY;
 	}
 
 	/*
@@ -945,7 +1153,7 @@ static u64 task_dl(struct task_struct *p, struct task_ctx *tctx)
 	u64 vtime_min = vtime_now - vsleep_max;
 
 	if (time_before(p->scx.dsq_vtime, vtime_min))
-		p->scx.dsq_vtime = vtime_min;
+		scx_bpf_task_set_dsq_vtime(p, vtime_min);
 
 	return p->scx.dsq_vtime + scale_by_task_weight_inverse(p, tctx->exec_runtime);
 }
@@ -1033,6 +1241,62 @@ static bool task_should_migrate(struct task_struct *p, u64 enq_flags)
 }
 
 /*
+ * Return true if a task that only @cpu can run is waiting in @cpu's shared
+ * DSQ.
+ *
+ * The kernel skips ops.dispatch() entirely while a CPU's local DSQ is not
+ * empty (see dispatch_one()), so tasks stacked on a local DSQ silently
+ * outrank the whole deadline-ordered shared DSQ. A task pinned to @cpu can
+ * therefore wait in the shared DSQ forever: remote CPUs walk past it in
+ * scx_bpf_dsq_move_to_local() and @cpu never gets to ops.dispatch().
+ *
+ * The shared DSQ is ordered by deadline and the deadline of a task that is
+ * not running is fixed at insertion time, so a starving task climbs to the
+ * head as the queue drains: peeking at the head is enough to notice it.
+ */
+static bool shared_dsq_has_pinned_waiter(s32 cpu)
+{
+	const struct task_struct *p = __COMPAT_scx_bpf_dsq_peek(shared_dsq(cpu));
+
+	return p && is_pcpu_task(p) && scx_bpf_task_cpu(p) == cpu;
+}
+
+/*
+ * Direct dispatch @p to the local DSQ of @cpu from ops.select_cpu().
+ *
+ * Insert with SCX_ENQ_IMMED so that the kernel bounces @p back through
+ * ops.enqueue() (and from there into the shared DSQ, where the deadline
+ * ordering applies) whenever @p can't run on @cpu right away. This keeps
+ * the local DSQ a pure "run now" fast path instead of an unbounded queue
+ * that outranks the shared DSQ.
+ *
+ * On kernels without SCX_ENQ_IMMED the flag reads as 0, so fall back to
+ * skipping the direct dispatch when a task only @cpu can run is already
+ * waiting: @p then falls through to ops.enqueue() on its own.
+ */
+static void direct_dispatch_local(struct task_struct *p, s32 cpu)
+{
+	if (!SCX_ENQ_IMMED && shared_dsq_has_pinned_waiter(cpu))
+		return;
+
+	scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, task_slice(p), SCX_ENQ_IMMED);
+}
+
+/*
+ * Return true if a shared DSQ insertion needs an explicit CPU kick.
+ *
+ * ops.select_cpu() normally provides the wakeup side effect for unbound
+ * tasks. Affinity-constrained and migration-disabled tasks can otherwise end
+ * up waiting in a shared DSQ with no eligible CPU checking it, so always kick
+ * their previous CPU.
+ */
+static bool task_needs_shared_dsq_kick(struct task_struct *p, u64 enq_flags)
+{
+	return p->nr_cpus_allowed != nr_cpu_ids || is_migration_disabled(p) ||
+	       task_should_migrate(p, enq_flags);
+}
+
+/*
  * Return true if a task is waking up another task that share the same
  * address space, false otherwise.
  */
@@ -1073,20 +1337,20 @@ s32 BPF_STRUCT_OPS(cosmos_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 	 */
 	if (is_wake_affine(current, p) && !is_busy) {
 		if (this_cpu == prev_cpu) {
-			scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, task_slice(p), 0);
+			direct_dispatch_local(p, this_cpu);
 			return this_cpu;
 		}
 	}
 
 	/*
-	 * If GPU affinity is enabled and the task's pid is in gpu_pid_map
+	 * If GPU affinity is enabled and the task's TGID is in gpu_pid_map
 	 * but not on the GPU's node, try to pick a CPU on the GPU node.
 	 */
 	if (gpu_enabled && numa_enabled) {
 		cpu = pick_cpu_on_gpu_node(p, cpu_node(prev_cpu), tctx);
 		if (cpu >= 0) {
 			__sync_fetch_and_add(&nr_gpu_dispatches, 1);
-			scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, task_slice(p), 0);
+			direct_dispatch_local(p, cpu);
 			return cpu;
 		}
 	}
@@ -1102,7 +1366,7 @@ s32 BPF_STRUCT_OPS(cosmos_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 	cpu = pick_idle_cpu(p, prev_cpu, is_this_cpu_allowed ? this_cpu : -1,
 			    wake_flags, false);
 	if (cpu >= 0 || !is_busy)
-		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, task_slice(p), 0);
+		direct_dispatch_local(p, cpu >= 0 ? cpu : prev_cpu);
 
 	return cpu >= 0 ? cpu : prev_cpu;
 }
@@ -1110,6 +1374,13 @@ s32 BPF_STRUCT_OPS(cosmos_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 void BPF_STRUCT_OPS(cosmos_tick, struct task_struct *p)
 {
 	struct task_ctx *tctx;
+
+	/*
+	 * Refresh the CPU user utilization state (resolved to a no-op at
+	 * load time when utilization tracking is disabled).
+	 */
+	if (busy_threshold)
+		update_cpu_busy(p, scx_bpf_task_cpu(p));
 
 	if (!time_preemption)
 		return;
@@ -1133,7 +1404,7 @@ void BPF_STRUCT_OPS(cosmos_tick, struct task_struct *p)
 				scx_bpf_dsq_nr_queued(shared_dsq(cpu));
 
 		if (is_smt_contended(cpu) || (is_cpu_busy(cpu) && cpu_busy))
-			p->scx.slice = 0;
+			scx_bpf_task_set_slice(p, 0);
 	}
 }
 
@@ -1152,7 +1423,7 @@ void BPF_STRUCT_OPS(cosmos_enqueue, struct task_struct *p, u64 enq_flags)
 		return;
 
 	/*
-	 * If the task's pid is in gpu_pid_map (NVML GPU task), prefer the
+	 * If the task's TGID is in gpu_pid_map (GPU workload process), prefer the
 	 * GPU NUMA node. If we're on a different node, migrate to the GPU
 	 * node.
 	 */
@@ -1163,8 +1434,6 @@ void BPF_STRUCT_OPS(cosmos_enqueue, struct task_struct *p, u64 enq_flags)
 			__sync_fetch_and_add(&nr_gpu_dispatches, 1);
 			scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL_ON | cpu,
 					   task_slice(p), enq_flags);
-			if (cpu != prev_cpu || !scx_bpf_task_running(p))
-				scx_bpf_kick_cpu(cpu, SCX_KICK_IDLE);
 			return;
 		}
 	}
@@ -1185,9 +1454,6 @@ void BPF_STRUCT_OPS(cosmos_enqueue, struct task_struct *p, u64 enq_flags)
 		if (!q || q->nr_cpus_allowed > 1) {
 			scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, task_slice(p), enq_flags);
 			__sync_fetch_and_add(&nr_ev_sticky_dispatches, 1);
-
-			if (!scx_bpf_task_running(p))
-				scx_bpf_kick_cpu(prev_cpu, SCX_KICK_IDLE);
 			return;
 		}
 	}
@@ -1198,19 +1464,17 @@ void BPF_STRUCT_OPS(cosmos_enqueue, struct task_struct *p, u64 enq_flags)
 	 */
 	if (task_should_migrate(p, enq_flags) ||
 	    !is_cpu_idle(prev_cpu) ||
-	    is_smt_contended(prev_cpu) ||
+	    (!is_pcpu_task(p) && is_smt_contended(prev_cpu)) ||
 	    (!is_pcpu_task(p) && (is_event_heavy(tctx) || !is_primary_cpu(prev_cpu)))) {
 		if (is_pcpu_task(p))
 			cpu = test_cpu_idle(prev_cpu) ? prev_cpu : -EBUSY;
 		else
 			cpu = pick_idle_cpu(p, prev_cpu, -1, 0, true);
 		if (cpu >= 0) {
-			scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL_ON | cpu, task_slice(p), enq_flags);
+			scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL_ON | cpu,
+					   task_slice(p), enq_flags | SCX_ENQ_IMMED);
 			if (is_event_heavy(tctx) && cpu != prev_cpu)
 				__sync_fetch_and_add(&nr_event_dispatches, 1);
-
-			if (cpu != prev_cpu || !scx_bpf_task_running(p))
-				scx_bpf_kick_cpu(cpu, SCX_KICK_IDLE);
 			return;
 		}
 	}
@@ -1221,8 +1485,6 @@ void BPF_STRUCT_OPS(cosmos_enqueue, struct task_struct *p, u64 enq_flags)
 	if (!is_cpu_busy(prev_cpu) &&
 	    (is_primary_cpu(prev_cpu) || is_pcpu_task(p))) {
 		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL_ON | prev_cpu, task_slice(p), enq_flags);
-		if (task_should_migrate(p, enq_flags))
-			scx_bpf_kick_cpu(prev_cpu, SCX_KICK_IDLE);
 		return;
 	}
 
@@ -1232,8 +1494,14 @@ void BPF_STRUCT_OPS(cosmos_enqueue, struct task_struct *p, u64 enq_flags)
 	scx_bpf_dsq_insert_vtime(p, shared_dsq(prev_cpu),
 				 task_slice(p), task_dl(p, tctx), enq_flags);
 
-	if (task_should_migrate(p, enq_flags))
+	if (task_needs_shared_dsq_kick(p, enq_flags))
 		scx_bpf_kick_cpu(prev_cpu, SCX_KICK_IDLE);
+
+	/*
+	 * Detect a sustained backlog in the shared DSQ and, in that case,
+	 * allow tasks to spill to the non-primary CPUs.
+	 */
+	update_primary_overload(prev_cpu, node);
 }
 
 /*
@@ -1285,12 +1553,24 @@ void BPF_STRUCT_OPS(cosmos_dispatch, s32 cpu, struct task_struct *prev)
 		return;
 
 	/*
+	 * The shared DSQ is empty (or contains no task that can run
+	 * here): refresh the timestamp used to detect a sustained backlog
+	 * on this node.
+	 */
+	if (!primary_all && overload_thresh_ns) {
+		int node = cpu_node(cpu);
+
+		if (node >= 0 && node < MAX_NODES)
+			node_empty_ts[node] = bpf_ktime_get_ns();
+	}
+
+	/*
 	 * If the previous task expired its time slice, but no other task
 	 * wants to run on this CPU, give it another time slot if the CPU
 	 * is on the primary domain.
 	 */
 	if (prev && keep_running(prev, cpu))
-		prev->scx.slice = task_slice(prev);
+		scx_bpf_task_set_slice(prev, task_slice(prev));
 }
 
 void BPF_STRUCT_OPS(cosmos_runnable, struct task_struct *p, u64 enq_flags)
@@ -1332,6 +1612,13 @@ void BPF_STRUCT_OPS(cosmos_running, struct task_struct *p)
 	 * the used time slice).
 	 */
 	tctx->last_run_at = bpf_ktime_get_ns();
+
+	/*
+	 * Snapshot the task's user time, so that only the user time
+	 * accumulated on this CPU is charged to it.
+	 */
+	if (busy_threshold)
+		tctx->last_utime = p->utime;
 
 	/*
 	 * Update current system's vruntime.
@@ -1379,6 +1666,19 @@ void BPF_STRUCT_OPS(cosmos_stopping, struct task_struct *p, bool runnable)
 	}
 
 	/*
+	 * Charge the user time accumulated on this CPU before the task
+	 * releases it.
+	 */
+	if (busy_threshold) {
+		struct cpu_ctx *cctx = try_lookup_cpu_ctx(cpu);
+
+		if (cctx) {
+			cctx->acc_utime += p->utime - tctx->last_utime;
+			tctx->last_utime = p->utime;
+		}
+	}
+
+	/*
 	 * Evaluate the used time slice.
 	 */
 	slice = bpf_ktime_get_ns() - tctx->last_run_at;
@@ -1396,7 +1696,7 @@ void BPF_STRUCT_OPS(cosmos_stopping, struct task_struct *p, bool runnable)
 	 * Cap the maximum accumulated time since last sleep to @slice_lag,
 	 * to prevent starving CPU-intensive tasks.
 	 */
-	p->scx.dsq_vtime += scale_by_task_weight_inverse(p, slice);
+	scx_bpf_task_set_dsq_vtime(p, p->scx.dsq_vtime + (scale_by_task_weight_inverse(p, slice)));
 	tctx->exec_runtime = MIN(tctx->exec_runtime + slice, slice_lag);
 
 	/*
@@ -1407,7 +1707,7 @@ void BPF_STRUCT_OPS(cosmos_stopping, struct task_struct *p, bool runnable)
 
 void BPF_STRUCT_OPS(cosmos_enable, struct task_struct *p)
 {
-	p->scx.dsq_vtime = vtime_now;
+	scx_bpf_task_set_dsq_vtime(p, vtime_now);
 }
 
 s32 BPF_STRUCT_OPS(cosmos_init_task, struct task_struct *p,
@@ -1479,13 +1779,59 @@ out_unlock:
 	return has_cpus ? 0 : -ENODEV;
 }
 
+/*
+ * Initialize @nonprimary_cpumask as the complement of the primary domain.
+ */
+static int init_nonprimary_cpumask(void)
+{
+	const struct cpumask *primary;
+	struct bpf_cpumask *mask;
+	int err = 0, cpu;
+
+	err = init_cpumask(&nonprimary_cpumask);
+	if (err)
+		return err;
+
+	bpf_rcu_read_lock();
+	mask = nonprimary_cpumask;
+	primary = cast_mask(primary_cpumask);
+	if (!mask || !primary) {
+		err = -EINVAL;
+		goto out_unlock;
+	}
+	bpf_for(cpu, 0, nr_cpu_ids) {
+		if (!bpf_cpumask_test_cpu(cpu, primary))
+			bpf_cpumask_set_cpu(cpu, mask);
+	}
+out_unlock:
+	bpf_rcu_read_unlock();
+
+	return err;
+}
+
 s32 BPF_STRUCT_OPS_SLEEPABLE(cosmos_init)
 {
+	u64 now = bpf_ktime_get_ns();
 	int err;
 	int cpu;
 	struct cpu_ctx *cctx;
 
 	nr_cpu_ids = scx_bpf_nr_cpu_ids();
+
+	if (!primary_all) {
+		err = init_nonprimary_cpumask();
+		if (err) {
+			scx_bpf_error("failed to init non-primary cpumask: %d", err);
+			return err;
+		}
+	}
+
+	/*
+	 * Consider all the shared DSQs as just drained, so that the
+	 * overload detection starts from a clean state.
+	 */
+	bpf_for(cpu, 0, MAX_NODES)
+		node_empty_ts[cpu] = now;
 
 	/*
 	 * Create separate per-node DSQs if NUMA optimization is enabled,

@@ -15,14 +15,14 @@ pub use bpf_intf::*;
 mod cpu_order;
 use scx_utils::init_libbpf_logging;
 mod stats;
-use std::ffi::c_int;
 use std::ffi::CStr;
+use std::ffi::c_int;
 use std::mem;
 use std::mem::MaybeUninit;
 use std::str;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::thread::ThreadId;
 use std::time::Duration;
 
@@ -33,19 +33,24 @@ use clap_num::number_range;
 use cpu_order::CpuOrder;
 use cpu_order::PerfCpuOrder;
 use crossbeam::channel;
-use crossbeam::channel::Receiver;
 use crossbeam::channel::RecvTimeoutError;
 use crossbeam::channel::Sender;
 use crossbeam::channel::TrySendError;
-use libbpf_rs::skel::Skel;
+use libbpf_rs::AsRawLibbpf;
 use libbpf_rs::OpenObject;
 use libbpf_rs::PrintLevel;
 use libbpf_rs::ProgramInput;
+use libbpf_rs::skel::OpenSkel;
+use libbpf_rs::skel::Skel;
 use libc::c_char;
 use plain::Plain;
 use scx_arena::ArenaLib;
 use scx_stats::prelude::*;
-use scx_utils::autopower::{fetch_power_profile, PowerProfile};
+use scx_utils::EnergyModel;
+use scx_utils::NR_CPU_IDS;
+use scx_utils::TopologyArgs;
+use scx_utils::UserExitInfo;
+use scx_utils::autopower::{PowerProfile, fetch_power_profile};
 use scx_utils::build_id;
 use scx_utils::compat;
 use scx_utils::ksym_exists;
@@ -56,10 +61,6 @@ use scx_utils::scx_ops_open;
 use scx_utils::try_set_rlimit_infinity;
 use scx_utils::uei_exited;
 use scx_utils::uei_report;
-use scx_utils::EnergyModel;
-use scx_utils::TopologyArgs;
-use scx_utils::UserExitInfo;
-use scx_utils::NR_CPU_IDS;
 use stats::SchedSample;
 use stats::SchedSamples;
 use stats::StatsReq;
@@ -144,6 +145,14 @@ struct Opts {
     #[clap(long = "mig-delta-pct", default_value = "0", value_parser=Opts::mig_delta_pct_range)]
     mig_delta_pct: u8,
 
+    /// Warm-CPU wait. Maximum time, in microseconds, a waking latency-tolerant
+    /// task waits for its previous CPU to free up before migrating to an idle
+    /// one, queueing on that CPU's per-CPU DSQ meanwhile. The wait is predicted
+    /// from the previous CPU's estimated free time, and warm cache/TLB state on
+    /// that CPU extends the budget up to 2x. 0 disables (default).
+    #[clap(long = "warm-cpu-us", default_value = "0")]
+    warm_cpu_us: u64,
+
     /// Low utilization threshold percentage (0-100) for periodic load balancing.
     /// When set to a non-zero value, periodic load balancing is skipped when
     /// the maximum per-domain utilization is below this percentage.
@@ -200,6 +209,15 @@ struct Opts {
     #[clap(long = "no-fast-lb", action = clap::ArgAction::SetTrue)]
     no_fast_lb: bool,
 
+    /// Default: --no-ovrflw-extend is deactivated (overflow-set extension
+    /// on wake-up is on). Disable the proactive overflow-set extension in
+    /// ops.select_cpu() that absorbs bursty wake-ups by adding a fresh
+    /// LLC-anchored CPU to the overflow set when active+overflow has no
+    /// idle CPU.
+    /// Implied by --performance, where every CPU is already active.
+    #[clap(long = "no-ovrflw-extend", action = clap::ArgAction::SetTrue)]
+    no_ovrflw_extend: bool,
+
     /// Disable preemption.
     #[clap(long = "no-preemption", action = clap::ArgAction::SetTrue)]
     no_preemption: bool,
@@ -224,6 +242,18 @@ struct Opts {
     /// This is a highly experimental feature.
     #[clap(long = "enable-cpu-bw", action = clap::ArgAction::SetTrue)]
     enable_cpu_bw: bool,
+
+    /// Maximum number of cgroups CPU bandwidth control (cpu.max) can manage.
+    /// Cgroups beyond the cap run unmanaged. Only meaningful with
+    /// --enable-cpu-bw.
+    #[clap(long = "cpu-bw-max-cgroups", default_value = "2048", value_parser = Opts::cpu_bw_max_cgroups_range)]
+    cpu_bw_max_cgroups: u32,
+
+    /// Maximum cgroup nesting depth CPU bandwidth control (cpu.max) can manage.
+    /// Cgroups nested deeper run unmanaged. Only meaningful with
+    /// --enable-cpu-bw.
+    #[clap(long = "cpu-bw-max-tree-height", default_value = "32", value_parser = Opts::cpu_bw_max_tree_height_range)]
+    cpu_bw_max_tree_height: u32,
 
     /// If specified, only tasks which have their scheduling policy set to
     /// SCHED_EXT using sched_setscheduler(2) are switched. Otherwise, all
@@ -265,6 +295,13 @@ struct Opts {
     #[clap(long, default_value = "info")]
     log_level: String,
 
+    /// Exit debug dump buffer length in bytes. 0 selects the kernel default
+    /// of 32 KiB, which lavd overruns: ops.dump_task() adds three lines per
+    /// runnable task on top of the five lines and stack trace the kernel
+    /// already emits, so the dump grows with runqueue depth, not CPU count.
+    #[clap(long, default_value = "262144")]
+    exit_dump_len: u32,
+
     /// Print scheduler version and exit.
     #[clap(short = 'V', long, action = clap::ArgAction::SetTrue)]
     version: bool,
@@ -287,42 +324,39 @@ struct Opts {
 
 impl Opts {
     fn can_autopilot(&self) -> bool {
-        self.autopower == false
-            && self.performance == false
-            && self.powersave == false
-            && self.balanced == false
-            && self.no_core_compaction == false
+        !self.autopower
+            && !self.performance
+            && !self.powersave
+            && !self.balanced
+            && !self.no_core_compaction
     }
 
     fn can_autopower(&self) -> bool {
-        self.autopilot == false
-            && self.performance == false
-            && self.powersave == false
-            && self.balanced == false
-            && self.no_core_compaction == false
+        !self.autopilot
+            && !self.performance
+            && !self.powersave
+            && !self.balanced
+            && !self.no_core_compaction
     }
 
     fn can_performance(&self) -> bool {
-        self.autopilot == false
-            && self.autopower == false
-            && self.powersave == false
-            && self.balanced == false
+        !self.autopilot && !self.autopower && !self.powersave && !self.balanced
     }
 
     fn can_balanced(&self) -> bool {
-        self.autopilot == false
-            && self.autopower == false
-            && self.performance == false
-            && self.powersave == false
-            && self.no_core_compaction == false
+        !self.autopilot
+            && !self.autopower
+            && !self.performance
+            && !self.powersave
+            && !self.no_core_compaction
     }
 
     fn can_powersave(&self) -> bool {
-        self.autopilot == false
-            && self.autopower == false
-            && self.performance == false
-            && self.balanced == false
-            && self.no_core_compaction == false
+        !self.autopilot
+            && !self.autopower
+            && !self.performance
+            && !self.balanced
+            && !self.no_core_compaction
     }
 
     fn proc(&mut self) -> Option<&mut Self> {
@@ -353,6 +387,9 @@ impl Opts {
             }
             info!("Performance mode is enabled.");
             self.no_core_compaction = true;
+            // Every CPU is active in performance mode, so there is no
+            // overflow set left to extend.
+            self.no_ovrflw_extend = true;
         }
 
         if self.powersave {
@@ -391,9 +428,9 @@ impl Opts {
                 return None;
             } else {
                 info!(
-                "Pinned task slice mode is enabled ({} us). Pinned tasks will use per-CPU DSQs.",
-                pinned_slice
-            );
+                    "Pinned task slice mode is enabled ({} us). Pinned tasks will use per-CPU DSQs.",
+                    pinned_slice
+                );
             }
         }
 
@@ -402,6 +439,14 @@ impl Opts {
 
     fn preempt_shift_range(s: &str) -> Result<u8, String> {
         number_range(s, 0, 10)
+    }
+
+    fn cpu_bw_max_cgroups_range(s: &str) -> Result<u32, String> {
+        number_range(s, 1, u32::MAX)
+    }
+
+    fn cpu_bw_max_tree_height_range(s: &str) -> Result<u32, String> {
+        number_range(s, 1, u32::MAX)
     }
 
     fn lat_load_target_pct_range(s: &str) -> Result<u16, String> {
@@ -431,17 +476,15 @@ impl msg_task_ctx {
 
 impl introspec {
     fn new() -> Self {
-        let intrspc = unsafe { mem::MaybeUninit::<introspec>::zeroed().assume_init() };
-        intrspc
+        unsafe { mem::MaybeUninit::<introspec>::zeroed().assume_init() }
     }
 }
 
 struct Scheduler<'a> {
+    _arenalib: ArenaLib,
     skel: BpfSkel<'a>,
     struct_ops: Option<libbpf_rs::Link>,
-    rb_mgr: libbpf_rs::RingBuffer<'static>,
     intrspc: introspec,
-    intrspc_rx: Receiver<SchedSample>,
     monitor_tid: Option<ThreadId>,
     stats_server: StatsServer<StatsReq, StatsRes>,
     mseq_id: u64,
@@ -475,12 +518,10 @@ impl<'a> Scheduler<'a> {
 
         // Enable futex tracing using ftrace if available. If the ftrace is not
         // available, use tracepoint, which is known to be slower than ftrace.
-        if !opts.no_futex_boost {
-            if Self::attach_futex_ftraces(&mut skel)? == false {
-                info!("Fail to attach futex ftraces. Try with tracepoints.");
-                if Self::attach_futex_tracepoints(&mut skel)? == false {
-                    info!("Fail to attach futex tracepoints.");
-                }
+        if !opts.no_futex_boost && !Self::attach_futex_ftraces(&mut skel)? {
+            info!("Fail to attach futex ftraces. Try with tracepoints.");
+            if !Self::attach_futex_tracepoints(&mut skel)? {
+                info!("Fail to attach futex tracepoints.");
             }
         }
 
@@ -496,35 +537,38 @@ impl<'a> Scheduler<'a> {
         }
 
         // Initialize skel according to @opts.
-        Self::init_globals(&mut skel, &opts, &order, debug_level);
+        Self::init_globals(&mut skel, opts, &order, debug_level)?;
+
+        // Mirror the cpu.max caps into rodata so the BPF admission gates match
+        // the map sizes set just below.
+        if let Some(rodata) = skel.maps.rodata_data.as_mut() {
+            rodata.nr_cgrp_max = opts.cpu_bw_max_cgroups;
+            rodata.tree_height_max = opts.cpu_bw_max_tree_height;
+        }
+
+        // Size the cpu.max maps to this system before loading (a map's
+        // max_entries is fixed at load time).
+        scx_utils::resize_cgroup_bw(
+            skel.open_object_mut(),
+            opts.cpu_bw_max_cgroups,
+            opts.cpu_bw_max_tree_height,
+            order.nr_llcs,
+        )?;
 
         // Initialize arena
         let mut skel = scx_ops_load!(skel, lavd_ops, uei)?;
         let task_size = std::mem::size_of::<types::task_ctx>();
-        let arenalib = ArenaLib::init(skel.object_mut(), task_size, *NR_CPU_IDS)?;
-        arenalib.setup()?;
+        let arenalib = ArenaLib::setup(skel.object_mut(), task_size, 0, *NR_CPU_IDS)?;
 
         // Attach.
         let struct_ops = Some(scx_ops_attach!(skel, lavd_ops)?);
         let stats_server = StatsServer::new(stats::server_data(*NR_CPU_IDS as u64)).launch()?;
 
-        // Build a ring buffer for instrumentation
-        let (intrspc_tx, intrspc_rx) = channel::bounded(65536);
-        let rb_map = &mut skel.maps.introspec_msg;
-        let mut builder = libbpf_rs::RingBufferBuilder::new();
-        builder
-            .add(rb_map, move |data| {
-                Scheduler::relay_introspec(data, &intrspc_tx)
-            })
-            .unwrap();
-        let rb_mgr = builder.build().unwrap();
-
         Ok(Self {
+            _arenalib: arenalib,
             skel,
             struct_ops,
-            rb_mgr,
             intrspc: introspec::new(),
-            intrspc_rx,
             monitor_tid: None,
             stats_server,
             mseq_id: 0,
@@ -545,7 +589,7 @@ impl<'a> Scheduler<'a> {
             ("futex_unlock_pi", &skel.progs.fexit_futex_unlock_pi),
         ];
 
-        if compat::tracer_available("function")? == false {
+        if !compat::tracer_available("function")? {
             info!("Ftrace is not enabled in the kernel.");
             return Ok(false);
         }
@@ -604,18 +648,20 @@ impl<'a> Scheduler<'a> {
         // Initialize performance vs. CPU order table.
         let nr_pco_states: u8 = order.perf_cpu_order.len() as u8;
         if nr_pco_states > LAVD_PCO_STATE_MAX as u8 {
-            panic!("Generated performance vs. CPU order stats are too complex ({nr_pco_states}) to handle");
+            panic!(
+                "Generated performance vs. CPU order stats are too complex ({nr_pco_states}) to handle"
+            );
         }
 
         skel.maps.rodata_data.as_mut().unwrap().nr_pco_states = nr_pco_states;
         for (i, (_, pco)) in order.perf_cpu_order.iter().enumerate() {
-            Self::init_pco_tuple(skel, i, &pco);
+            Self::init_pco_tuple(skel, i, pco);
             info!("{:#}", pco);
         }
 
         let (_, last_pco) = order.perf_cpu_order.last_key_value().unwrap();
         for i in nr_pco_states..LAVD_PCO_STATE_MAX as u8 {
-            Self::init_pco_tuple(skel, i as usize, &last_pco);
+            Self::init_pco_tuple(skel, i as usize, last_pco);
         }
     }
 
@@ -674,7 +720,12 @@ impl<'a> Scheduler<'a> {
         }
     }
 
-    fn init_globals(skel: &mut OpenBpfSkel, opts: &Opts, order: &CpuOrder, debug_level: u8) {
+    fn init_globals(
+        skel: &mut OpenBpfSkel,
+        opts: &Opts,
+        order: &CpuOrder,
+        debug_level: u8,
+    ) -> Result<()> {
         let bss_data = skel.maps.bss_data.as_mut().unwrap();
         bss_data.no_preemption = opts.no_preemption;
         bss_data.no_core_compaction = opts.no_core_compaction;
@@ -692,18 +743,50 @@ impl<'a> Scheduler<'a> {
         rodata.preempt_shift = opts.preempt_shift;
         rodata.lat_load_target_pct = opts.lat_load_target_pct;
         rodata.mig_delta_pct = opts.mig_delta_pct;
+        rodata.warm_cpu_ns = opts.warm_cpu_us * 1000;
         rodata.lb_low_util_wall = ((opts.lb_low_util_pct as u64) << 10) / 100;
         rodata.lb_local_dsq_util_wall = ((opts.lb_local_dsq_util_pct as u64) << 10) / 100;
         rodata.no_use_em = opts.no_use_em as u8;
         rodata.no_fast_lb = opts.no_fast_lb as u8;
+        rodata.no_ovrflw_extend = opts.no_ovrflw_extend as u8;
+
         rodata.no_wake_sync = opts.no_wake_sync;
         rodata.no_slice_boost = opts.no_slice_boost;
         rodata.per_cpu_dsq = opts.per_cpu_dsq;
         rodata.enable_cpu_bw = opts.enable_cpu_bw;
+        // Replenishment wakes dispatch through the built-in idle tracking.
+        rodata.bw_kick_builtin_idle = true;
 
-        if !ksym_exists("scx_group_set_bandwidth").unwrap() {
-            skel.struct_ops.lavd_ops_mut().cgroup_set_bandwidth = std::ptr::null_mut();
-            warn!("Kernel does not support ops.cgroup_set_bandwidth(), so disable it.");
+        // Fail hard if cpu.max was explicitly requested but the kernel lacks
+        // ops.cgroup_set_bandwidth support; setup_cgroup_bw() otherwise disables
+        // the struct_ops callback for the unsupported tier.
+        let cgroup_bw =
+            scx_utils::setup_cgroup_bw(skel.open_object_mut(), "lavd_cgroup_set_bandwidth")?;
+        if opts.enable_cpu_bw && cgroup_bw == scx_utils::CgroupBwSupport::Unsupported {
+            anyhow::bail!(
+                "--enable-cpu-bw requires kernel cpu.max support (ops.cgroup_set_bandwidth), \
+                 which this kernel lacks"
+            );
+        }
+
+        /*
+         * Two-way selection for "drain the local DSQ when a
+         * higher-priority class takes the CPU":
+         *
+         *   kernel >= 6.19 (call-from-anywhere reenqueue):
+         *     -> drop ops.cpu_release; enable sched_switch hook.
+         *
+         *   kernel < 6.19 (cpu_release-restricted reenqueue only):
+         *     -> keep ops.cpu_release; sched_switch stays disabled.
+         */
+        if ksym_exists("scx_bpf_reenqueue_local___v2").unwrap() {
+            skel.struct_ops.lavd_ops_mut().cpu_release = std::ptr::null_mut();
+            unsafe {
+                libbpf_rs::libbpf_sys::bpf_program__set_autoload(
+                    skel.progs.lavd_sched_switch.as_libbpf_object().as_ptr(),
+                    true,
+                );
+            }
         }
 
         skel.struct_ops.lavd_ops_mut().flags = *compat::SCX_OPS_ENQ_EXITING
@@ -714,6 +797,10 @@ impl<'a> Scheduler<'a> {
         if opts.partial {
             skel.struct_ops.lavd_ops_mut().flags |= *compat::SCX_OPS_SWITCH_PARTIAL;
         }
+
+        skel.struct_ops.lavd_ops_mut().exit_dump_len = opts.exit_dump_len;
+
+        Ok(())
     }
 
     fn get_msg_seq_id() -> u64 {
@@ -783,6 +870,8 @@ impl<'a> Scheduler<'a> {
             vuln_thresh: tx.vuln_thresh,
             task_util_est: tx.task_util_est,
             norm_lat_cri: tx.norm_lat_cri,
+            cpu_heat: tx.cpu_heat,
+            warm_cpu_id: tx.warm_cpu_id,
             slice_used_wall: tx.last_slice_used_wall,
         }) {
             Ok(()) | Err(TrySendError::Full(_)) => 0,
@@ -803,7 +892,7 @@ impl<'a> Scheduler<'a> {
     }
 
     fn get_pc(x: u64, y: u64) -> f64 {
-        return 100. * x as f64 / y as f64;
+        100. * x as f64 / y as f64
     }
 
     fn get_power_mode(power_mode: i32) -> &'static str {
@@ -815,10 +904,36 @@ impl<'a> Scheduler<'a> {
         }
     }
 
+    /// Collect the scheduling samples the BPF side has queued, waiting up to
+    /// @timeout for them, or draining without waiting when it is None.
+    ///
+    /// Built per request rather than kept: crossbeam initializes every slot up
+    /// front, so a standing bounded(65536) channel cost 17.5MB resident. Unbounded
+    /// because the count depends on load, not on the request; intrspc.arg caps it.
+    fn drain_sched_samples(&mut self, timeout: Option<Duration>) -> Result<Vec<SchedSample>> {
+        let (intrspc_tx, intrspc_rx) = channel::unbounded();
+
+        {
+            let mut builder = libbpf_rs::RingBufferBuilder::new();
+            builder.add(&self.skel.maps.introspec_msg, move |data| {
+                Scheduler::relay_introspec(data, &intrspc_tx)
+            })?;
+            let rb_mgr = builder.build()?;
+
+            match timeout {
+                Some(timeout) => rb_mgr.poll(timeout)?,
+                None => rb_mgr.consume()?,
+            }
+        }
+
+        Ok(intrspc_rx.try_iter().collect())
+    }
+
     fn stats_req_to_res(&mut self, req: &StatsReq) -> Result<StatsRes> {
         Ok(match req {
             StatsReq::NewSampler(tid) => {
-                self.rb_mgr.consume().unwrap();
+                /* Discard whatever the BPF side queued before this client. */
+                self.drain_sched_samples(None)?;
                 self.monitor_tid = Some(*tid);
                 StatsRes::Ack
             }
@@ -884,12 +999,8 @@ impl<'a> Scheduler<'a> {
                 self.intrspc.arg = *nr_samples;
                 self.prep_introspec();
                 std::thread::sleep(Duration::from_millis(*interval_ms));
-                self.rb_mgr.poll(Duration::from_millis(100)).unwrap();
 
-                let mut samples = vec![];
-                while let Ok(ts) = self.intrspc_rx.try_recv() {
-                    samples.push(ts);
-                }
+                let samples = self.drain_sched_samples(Some(Duration::from_millis(100)))?;
 
                 self.cleanup_introspec();
 
@@ -985,7 +1096,6 @@ impl<'a> Scheduler<'a> {
             }
             self.cleanup_introspec();
         }
-        self.rb_mgr.consume().unwrap();
 
         bpf_streams::dump_bpf_streams(&mut self.skel);
         let _ = self.struct_ops.take();
@@ -1000,6 +1110,21 @@ impl Drop for Scheduler<'_> {
         if let Some(struct_ops) = self.struct_ops.take() {
             drop(struct_ops);
         }
+    }
+}
+
+/// Return heap freed during initialization to the OS.
+///
+/// libbpf drops its copy of the BPF object's sections and its BTF once loading
+/// finishes, and the CPU topology and energy model are dropped once the BPF side
+/// has been initialized from them. glibc holds those pages until asked.
+///
+/// glibc only: musl has no malloc_trim(), and needs none, since it returns freed
+/// memory to the kernel rather than parking it in per-arena free lists.
+fn trim_heap_after_init() {
+    #[cfg(target_env = "gnu")]
+    unsafe {
+        libc::malloc_trim(0);
     }
 }
 
@@ -1047,7 +1172,7 @@ fn main(mut opts: Opts) -> Result<()> {
             sys_stats_meta_name.as_str(),
             sched_sample_meta_name.as_str(),
         ];
-        stats::server_data(0).describe_meta(&mut std::io::stdout(), Some(&stats_meta_names))?;
+        stats::server_data(0).describe_meta(&mut std::io::stdout(), Some(stats_meta_names))?;
         return Ok(());
     }
 
@@ -1101,6 +1226,7 @@ fn main(mut opts: Opts) -> Result<()> {
             build_id::full_version(env!("CARGO_PKG_VERSION"))
         );
         info!("scx_lavd scheduler starts running.");
+        trim_heap_after_init();
         if !sched.run(&opts, shutdown.clone())?.should_restart() {
             break;
         }

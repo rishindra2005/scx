@@ -10,22 +10,22 @@ pub use bpf_skel::*;
 pub mod bpf_intf;
 pub use bpf_intf::*;
 
+mod cgroup;
+mod gpu;
 mod stats;
+use cgroup::CgroupReader;
+
 use std::collections::{HashMap, HashSet};
 use std::ffi::{c_int, c_ulong};
-use std::fs;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::mem::MaybeUninit;
-use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 use clap::Parser;
 use crossbeam::channel::RecvTimeoutError;
 use libbpf_rs::MapCore;
@@ -33,27 +33,27 @@ use libbpf_rs::MapFlags;
 use libbpf_rs::OpenObject;
 use libbpf_rs::ProgramInput;
 use log::{debug, info, warn};
-use nvml_wrapper::bitmasks::InitFlags;
 use nvml_wrapper::Nvml;
+use nvml_wrapper::bitmasks::InitFlags;
 use scx_stats::prelude::*;
+use scx_utils::GpuIndex;
+use scx_utils::NR_CPU_IDS;
+use scx_utils::Powermode;
+use scx_utils::Topology;
+use scx_utils::UserExitInfo;
 use scx_utils::build_id;
 use scx_utils::compat;
 use scx_utils::get_primary_cpus;
 use scx_utils::libbpf_clap_opts::LibbpfOpts;
+use scx_utils::perf::PerfEventSpec;
 use scx_utils::perf::parse_perf_event;
 use scx_utils::perf::setup_perf_events;
-use scx_utils::perf::PerfEventSpec;
 use scx_utils::scx_ops_attach;
 use scx_utils::scx_ops_load;
 use scx_utils::scx_ops_open;
 use scx_utils::try_set_rlimit_infinity;
 use scx_utils::uei_exited;
 use scx_utils::uei_report;
-use scx_utils::GpuIndex;
-use scx_utils::Powermode;
-use scx_utils::Topology;
-use scx_utils::UserExitInfo;
-use scx_utils::NR_CPU_IDS;
 use stats::Metrics;
 
 const SCHEDULER_NAME: &str = "scx_cosmos";
@@ -80,12 +80,15 @@ struct Opts {
 
     /// CPU busy threshold.
     ///
-    /// Specifies the CPU utilization percentage (0-100%) at which the scheduler considers the
-    /// system to be busy.
+    /// Specifies the user CPU utilization percentage (0-100%) at which the scheduler considers a
+    /// CPU to be busy. Only user time counts: sleep-intensive workloads burn most of their CPU
+    /// time in the kernel and their CPUs are deliberately not considered busy, so that tasks stay
+    /// on their CPU / local dispatch queue, reducing the scheduling overhead and the balancing
+    /// pressure in dispatch.
     ///
-    /// When the average CPU utilization reaches this threshold, the scheduler switches from using
-    /// multiple per-CPU round-robin dispatch queues (which favor locality and reduced locking
-    /// contention) to a global deadline-based dispatch queue (which improves load balancing).
+    /// When a CPU crosses this threshold, the scheduler switches it from using its per-CPU
+    /// round-robin dispatch queue (which favors locality and reduced locking contention) to the
+    /// global deadline-based dispatch queue (which improves load balancing).
     ///
     /// The global dispatch queue can increase task migrations and improve responsiveness for
     /// interactive tasks under heavy load. Lower values make the scheduler switch to deadline
@@ -95,15 +98,14 @@ struct Opts {
     ///
     /// A higher value is recommended for server-type workloads, while a lower value is recommended
     /// for interactive-type workloads.
+    ///
+    /// 0 = utilization tracking disabled: every CPU is always considered busy (pure deadline
+    /// mode) with no tracking overhead.
     #[clap(short = 'c', long, default_value = "0")]
     cpu_busy_thresh: u64,
 
-    /// Polling time (ms) to refresh the CPU utilization.
-    ///
-    /// This interval determines how often the scheduler refreshes the CPU utilization that is
-    /// compared with the CPU busy threshold (option -c) to decide if the system is busy or not
-    /// and trigger the switch between using multiple per-CPU dispatch queues or a single global
-    /// deadline-based dispatch queue.
+    /// Polling time (ms) to refresh the dynamic perf event thresholds (options -E / -Y in
+    /// dynamic mode).
     ///
     /// Value is clamped to the range [10 .. 1000].
     ///
@@ -124,6 +126,19 @@ struct Opts {
     /// By default "all" CPUs are used.
     #[clap(short = 'm', long)]
     primary_domain: Option<String>,
+
+    /// Maximum time (us) that tasks can wait in a shared DSQ before the primary domain is
+    /// considered overloaded, allowing tasks to spill to the non-primary CPUs.
+    ///
+    /// Tasks are normally contained in the primary domain (option -m). When the domain's shared
+    /// DSQ has been continuously backlogged for longer than this threshold, tasks are allowed to
+    /// run on the non-primary CPUs until the backlog drains.
+    ///
+    /// 0 = tasks are always contained in the primary domain, even when it is overloaded.
+    ///
+    /// This option is ignored when no primary domain is defined.
+    #[clap(long, default_value = "1000")]
+    primary_overload_us: u64,
 
     /// Hardware perf event to monitor (0x0 = disabled). Accepts hex (0xN) or symbolic names
     /// (e.g. cache-misses, LLC-load-misses, page-faults, branch-misses).
@@ -457,7 +472,7 @@ impl DynamicThresholdState {
             // Rate in stable band (considering hysteresis).
             if self.adjustment_direction.is_some() {
                 // We were adjusting; check if we should stop.
-                if rate >= DYNAMIC_THRESHOLD_RATE_LOW && rate <= DYNAMIC_THRESHOLD_RATE_HIGH {
+                if (DYNAMIC_THRESHOLD_RATE_LOW..=DYNAMIC_THRESHOLD_RATE_HIGH).contains(&rate) {
                     None // Back in target band, stop adjusting.
                 } else {
                     self.adjustment_direction // Continue current direction.
@@ -515,13 +530,6 @@ impl DynamicThresholdState {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct CpuTimes {
-    user: u64,
-    nice: u64,
-    total: u64,
-}
-
 struct Scheduler<'a> {
     skel: BpfSkel<'a>,
     opts: &'a Opts,
@@ -529,10 +537,12 @@ struct Scheduler<'a> {
     stats_server: StatsServer<(), Metrics>,
     /// GPU device index -> NUMA node (for NVML PID sync). Only set when --gpu and NUMA enabled.
     gpu_index_to_node: Option<HashMap<u32, u32>>,
-    /// Previous (pid, node) set so we can remove PIDs that stopped using the GPU.
+    /// Previous (TGID, node) set so we can remove processes that stopped using the GPU.
     previous_gpu_pids: Option<HashMap<u32, u32>>,
     /// Reused NVML handle to avoid re-initializing on every sync (expensive).
     nvml: Option<Nvml>,
+    /// Host cgroup v2 reader used to discover peer processes of NVML GPU processes.
+    gpu_cgroup_reader: Option<CgroupReader>,
     /// Dynamic threshold state for perf event migrations (when --perf-threshold is 0/dynamic).
     perf_threshold_state: Option<DynamicThresholdState>,
     /// Dynamic threshold state for sticky perf events (when --perf-sticky-threshold is 0/dynamic).
@@ -605,6 +615,9 @@ impl<'a> Scheduler<'a> {
         // Normalize CPU busy threshold in the range [0 .. 1024].
         rodata.busy_threshold = opts.cpu_busy_thresh * 1024 / 100;
 
+        // Maximum shared DSQ backlog before spilling outside the primary domain.
+        rodata.overload_thresh_ns = opts.primary_overload_us * 1000;
+
         // Generate the list of available CPUs sorted by capacity in descending order.
         let mut cpus: Vec<_> = topo.all_cpus.values().collect();
         cpus.sort_by_key(|cpu| std::cmp::Reverse(cpu.cpu_capacity));
@@ -663,6 +676,28 @@ impl<'a> Scheduler<'a> {
         } else {
             rodata.gpu_enabled = false;
             (None, None, None)
+        };
+
+        let gpu_cgroup_reader = if nvml.is_some() && opts.gpu_util_threshold == 0 {
+            match CgroupReader::discover() {
+                Ok(reader) => {
+                    info!("NVIDIA GPU workload discovery enabled (cgroup v2)");
+                    Some(reader)
+                }
+                Err(error) => {
+                    warn!(
+                        "GPU workload discovery unavailable, using NVML process scope: {error:#}"
+                    );
+                    None
+                }
+            }
+        } else if nvml.is_some() {
+            info!(
+                "NVIDIA GPU workload discovery requires --gpu-util-threshold=0; using NVML process scope"
+            );
+            None
+        } else {
+            None
         };
 
         // Set scheduler flags.
@@ -724,42 +759,45 @@ impl<'a> Scheduler<'a> {
         let mut perf_available = true;
         let sticky_counter_idx = if opts.perf_config.event_id > 0 { 1 } else { 0 };
         for cpu in 0..nr_cpus {
-            if opts.perf_config.event_id > 0 {
-                if let Err(e) =
+            if opts.perf_config.event_id > 0
+                && let Err(e) =
                     setup_perf_events(&skel.maps.scx_pmu_map, cpu as i32, &opts.perf_config, 0)
-                {
-                    if cpu == 0 {
-                        let err_str = e.to_string();
-                        if err_str.contains("errno 2") || err_str.contains("os error 2") {
-                            warn!("Performance counters not available on this CPU architecture");
-                            warn!("PMU event '{}' not supported - scheduler will run without perf monitoring", opts.perf_config.display_name);
-                        } else {
-                            warn!("Failed to setup perf events: {}", e);
-                        }
-                        perf_available = false;
-                        break;
-                    }
+                && cpu == 0
+            {
+                let err_str = e.to_string();
+                if err_str.contains("errno 2") || err_str.contains("os error 2") {
+                    warn!("Performance counters not available on this CPU architecture");
+                    warn!(
+                        "PMU event '{}' not supported - scheduler will run without perf monitoring",
+                        opts.perf_config.display_name
+                    );
+                } else {
+                    warn!("Failed to setup perf events: {}", e);
                 }
+                perf_available = false;
+                break;
             }
-            if opts.perf_sticky.event_id > 0 {
-                if let Err(e) = setup_perf_events(
+            if opts.perf_sticky.event_id > 0
+                && let Err(e) = setup_perf_events(
                     &skel.maps.scx_pmu_map,
                     cpu as i32,
                     &opts.perf_sticky,
                     sticky_counter_idx,
-                ) {
-                    if cpu == 0 {
-                        let err_str = e.to_string();
-                        if err_str.contains("errno 2") || err_str.contains("os error 2") {
-                            warn!("Performance counters not available on this CPU architecture");
-                            warn!("PMU event '{}' not supported - scheduler will run without perf monitoring", opts.perf_sticky.display_name);
-                        } else {
-                            warn!("Failed to setup perf events: {}", e);
-                        }
-                        perf_available = false;
-                        break;
-                    }
+                )
+                && cpu == 0
+            {
+                let err_str = e.to_string();
+                if err_str.contains("errno 2") || err_str.contains("os error 2") {
+                    warn!("Performance counters not available on this CPU architecture");
+                    warn!(
+                        "PMU event '{}' not supported - scheduler will run without perf monitoring",
+                        opts.perf_sticky.display_name
+                    );
+                } else {
+                    warn!("Failed to setup perf events: {}", e);
                 }
+                perf_available = false;
+                break;
             }
         }
         if perf_available {
@@ -774,7 +812,7 @@ impl<'a> Scheduler<'a> {
                     info!("GPU{} -> node{}", nvml_id, gpu.node_id);
                 }
                 skel.maps.gpu_node_map.update(
-                    &(nvml_id as u32).to_ne_bytes(),
+                    &nvml_id.to_ne_bytes(),
                     &(gpu.node_id as u32).to_ne_bytes(),
                     MapFlags::ANY,
                 )?;
@@ -820,14 +858,16 @@ impl<'a> Scheduler<'a> {
             gpu_index_to_node,
             previous_gpu_pids,
             nvml,
+            gpu_cgroup_reader,
             perf_threshold_state,
             perf_sticky_threshold_state,
         })
     }
 
-    /// Sync PID -> GPU (node) map from NVML. When gpu_util_threshold > 0, only PIDs with
-    /// GPU utilization (SM or memory) >= threshold are added. Map is keyed by task pid.
-    /// Only processes using a single GPU are added; multi-GPU processes are excluded.
+    /// Sync process TGID -> GPU (node) hints from NVML. Peer processes in the same exact,
+    /// non-root cgroup inherit the hint when all observed GPUs resolve to one NUMA node.
+    /// gpu_util_threshold > 0 retains process-only behavior because its NVML snapshot is
+    /// intentionally filtered.
     fn sync_gpu_pids(&mut self) -> Result<()> {
         let gpu_index_to_node = match &self.gpu_index_to_node {
             Some(m) => m,
@@ -838,17 +878,28 @@ impl<'a> Scheduler<'a> {
             None => return Ok(()),
         };
         let threshold = self.opts.gpu_util_threshold;
-        let previous = self.previous_gpu_pids.as_ref().unwrap();
-        // First collect pid -> set of nodes (GPUs) per process.
+        // First collect TGID -> set of nodes (GPUs) per process.
         let mut pid_to_nodes: HashMap<u32, HashSet<u32>> = HashMap::new();
+        let mut snapshot_complete = true;
 
+        // A failed NVML query is not an empty snapshot. Keep the last applied
+        // hints instead of deleting processes we simply failed to observe.
         let count = nvml.device_count().context("NVML device count")?;
         for i in 0..count {
             let node = match gpu_index_to_node.get(&i) {
                 Some(&n) => n,
-                None => continue,
+                None => {
+                    snapshot_complete = false;
+                    continue;
+                }
             };
-            let device = nvml.device_by_index(i).context("NVML device_by_index")?;
+            let device = match nvml.device_by_index(i) {
+                Ok(device) => device,
+                Err(error) => {
+                    debug!("NVML device {i} lookup failed: {error:#}");
+                    return Err(error).context(format!("NVML device {i} lookup failed"));
+                }
+            };
 
             if threshold > 0 {
                 // Use process utilization; only add PIDs above threshold.
@@ -863,66 +914,132 @@ impl<'a> Scheduler<'a> {
                     }
                     Err(_) => {
                         // NotSupported or other: fall back to all running processes.
-                        Self::add_running_gpu_processes_to_set(&device, node, &mut pid_to_nodes);
+                        Self::add_running_gpu_processes_to_set(&device, node, &mut pid_to_nodes)
+                            .with_context(|| {
+                                format!("NVML device {i} process snapshot is incomplete")
+                            })?;
                     }
                 }
             } else {
-                Self::add_running_gpu_processes_to_set(&device, node, &mut pid_to_nodes);
+                Self::add_running_gpu_processes_to_set(&device, node, &mut pid_to_nodes)
+                    .with_context(|| format!("NVML device {i} process snapshot is incomplete"))?;
             }
         }
 
-        // Only add PIDs that use exactly one GPU to the map.
-        let mut current: HashMap<u32, u32> = HashMap::new();
-        for (tgid, nodes) in pid_to_nodes {
-            if nodes.len() == 1 {
-                let node = nodes.into_iter().next().unwrap();
-                current.insert(tgid, node);
-                for tid in Self::task_tids(tgid) {
-                    current.insert(tid, node);
+        let mut direct = gpu::direct_gpu_processes(&pid_to_nodes);
+        direct.remove(&std::process::id());
+        let mut current = if snapshot_complete {
+            self.gpu_cgroup_reader
+                .as_ref()
+                .map(|reader| gpu::expand_gpu_processes(&pid_to_nodes, reader))
+                .unwrap_or_else(|| direct.clone())
+        } else {
+            direct.clone()
+        };
+        current.remove(&std::process::id());
+        let max_entries = self.skel.maps.gpu_pid_map.max_entries() as usize;
+
+        // Workload discovery can include many peer processes. Fall back to
+        // direct NVML processes rather than partially populating the map.
+        if current.len() > max_entries {
+            warn!(
+                "GPU workload has {} processes, exceeding gpu_pid_map capacity {}; using {} direct NVML processes",
+                current.len(),
+                max_entries,
+                direct.len()
+            );
+        }
+        if direct.len() > max_entries {
+            warn!(
+                "{} direct NVML processes exceed gpu_pid_map capacity {}; clearing GPU process hints",
+                direct.len(),
+                max_entries
+            );
+        }
+        current = gpu::fit_gpu_processes(current, &direct, max_entries);
+
+        self.reconcile_gpu_pid_hints(&current)
+    }
+
+    /// Reconcile the desired GPU workload hints with the BPF map.
+    fn reconcile_gpu_pid_hints(&mut self, desired: &HashMap<u32, u32>) -> Result<()> {
+        let previous = self.previous_gpu_pids.as_ref().unwrap().clone();
+        let map = &self.skel.maps.gpu_pid_map;
+
+        // Track the state actually applied to BPF so a partial map operation
+        // is retried and cleaned up on the next synchronization.
+        let mut applied = previous.clone();
+        let mut first_error = None;
+
+        // Delete stale entries first so replacements cannot temporarily run
+        // out of map capacity.
+        for pid in previous.keys() {
+            if desired.contains_key(pid) {
+                continue;
+            }
+            match map.delete(&pid.to_ne_bytes()).context("gpu_pid_map delete") {
+                Ok(()) => {
+                    applied.remove(pid);
+                }
+                Err(error) => {
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    }
                 }
             }
         }
-
-        let map = &self.skel.maps.gpu_pid_map;
-        for (pid, node) in &current {
-            map.update(&pid.to_ne_bytes(), &node.to_ne_bytes(), MapFlags::ANY)
-                .context("gpu_pid_map update")?;
-        }
-        for pid in previous.keys() {
-            if !current.contains_key(pid) {
-                let _ = map.delete(&pid.to_ne_bytes());
+        for (pid, node) in desired {
+            match map
+                .update(&pid.to_ne_bytes(), &node.to_ne_bytes(), MapFlags::ANY)
+                .context("gpu_pid_map update")
+            {
+                Ok(()) => {
+                    applied.insert(*pid, *node);
+                }
+                Err(error) => {
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    }
+                }
             }
         }
-        *self.previous_gpu_pids.as_mut().unwrap() = current;
+        *self.previous_gpu_pids.as_mut().unwrap() = applied;
+        if let Some(error) = first_error {
+            return Err(error);
+        }
         Ok(())
     }
 
-    /// Record running compute/graphics process PIDs and the GPU node in pid_to_nodes.
+    /// Record running compute/graphics process TGIDs and the GPU node in pid_to_nodes.
     fn add_running_gpu_processes_to_set(
         device: &nvml_wrapper::Device<'_>,
         node: u32,
         pid_to_nodes: &mut HashMap<u32, HashSet<u32>>,
-    ) {
-        for proc in device
-            .running_compute_processes()
-            .unwrap_or_default()
-            .into_iter()
-            .chain(device.running_graphics_processes().unwrap_or_default())
-        {
-            pid_to_nodes.entry(proc.pid).or_default().insert(node);
-        }
-    }
+    ) -> Result<()> {
+        let mut errors = Vec::new();
 
-    /// Return all thread IDs (tids) of the process with the given pid (tgid).
-    fn task_tids(pid: u32) -> Vec<u32> {
-        let task_dir = format!("/proc/{}/task", pid);
-        let Ok(entries) = fs::read_dir(Path::new(&task_dir)) else {
-            return Vec::new();
-        };
-        entries
-            .filter_map(|e| e.ok())
-            .filter_map(|e| e.file_name().to_str().and_then(|s| s.parse::<u32>().ok()))
-            .collect()
+        match device.running_compute_processes() {
+            Ok(processes) => {
+                for process in processes {
+                    pid_to_nodes.entry(process.pid).or_default().insert(node);
+                }
+            }
+            Err(error) => errors.push(format!("compute process query failed: {error}")),
+        }
+        match device.running_graphics_processes() {
+            Ok(processes) => {
+                for process in processes {
+                    pid_to_nodes.entry(process.pid).or_default().insert(node);
+                }
+            }
+            Err(error) => errors.push(format!("graphics process query failed: {error}")),
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            bail!(errors.join("; "))
+        }
     }
 
     fn enable_primary_cpu(skel: &mut BpfSkel<'_>, cpu: i32) -> Result<(), u32> {
@@ -991,6 +1108,7 @@ impl<'a> Scheduler<'a> {
             nr_event_dispatches: bss_data.nr_event_dispatches,
             nr_ev_sticky_dispatches: bss_data.nr_ev_sticky_dispatches,
             nr_gpu_dispatches: bss_data.nr_gpu_dispatches,
+            nr_overload_events: bss_data.nr_overload_events,
         }
     }
 
@@ -998,104 +1116,16 @@ impl<'a> Scheduler<'a> {
         uei_exited!(&self.skel, uei)
     }
 
-    fn compute_user_cpu_pct(prev: &CpuTimes, curr: &CpuTimes) -> Option<u64> {
-        // Evaluate total user CPU time as user + nice.
-        let user_diff = (curr.user + curr.nice).saturating_sub(prev.user + prev.nice);
-        let total_diff = curr.total.saturating_sub(prev.total);
-
-        if total_diff > 0 {
-            let user_ratio = user_diff as f64 / total_diff as f64;
-            Some((user_ratio * 1024.0).round() as u64)
-        } else {
-            None
-        }
-    }
-
-    /// Parse per-CPU times from /proc/stat (lines "cpu0", "cpu1", ...).
-    /// Returns entries indexed by CPU id. Offline CPUs may be absent.
-    fn parse_per_cpu_cpu_times<R: BufRead>(
-        reader: R,
-        nr_cpus: usize,
-    ) -> Option<Vec<Option<CpuTimes>>> {
-        let mut result = vec![None; nr_cpus];
-
-        for line in reader.lines() {
-            let line = line.ok()?;
-            let line = line.trim();
-            if !line.starts_with("cpu") {
-                continue;
-            }
-            let rest = line.strip_prefix("cpu")?;
-            if rest.starts_with(' ') {
-                // Aggregate line "cpu " - skip.
-                continue;
-            }
-            let cpu_id: usize = rest.split_whitespace().next()?.parse().ok()?;
-            if cpu_id >= nr_cpus {
-                continue;
-            }
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            if fields.len() < 5 {
-                return None;
-            }
-            let user: u64 = fields[1].parse().ok()?;
-            let nice: u64 = fields[2].parse().ok()?;
-            let total: u64 = fields
-                .iter()
-                .skip(1)
-                .take(8)
-                .filter_map(|v| v.parse::<u64>().ok())
-                .sum();
-            result[cpu_id] = Some(CpuTimes { user, nice, total });
-        }
-
-        result.iter().any(Option::is_some).then_some(result)
-    }
-
-    /// Read per-CPU times from /proc/stat.
-    fn read_per_cpu_cpu_times(nr_cpus: usize) -> Option<Vec<Option<CpuTimes>>> {
-        let file = File::open("/proc/stat").ok()?;
-        Self::parse_per_cpu_cpu_times(BufReader::new(file), nr_cpus)
-    }
-
     fn run(&mut self, shutdown: Arc<AtomicBool>) -> Result<UserExitInfo> {
         let (res_ch, req_ch) = self.stats_server.channels();
 
-        // Periodically evaluate per-CPU user utilization from userspace and update the
-        // cpu_util_map in BPF. The scheduler uses is_cpu_busy(cpu) with prev_cpu or
-        // scx_bpf_task_cpu(p) to decide per-CPU whether to use local DSQs (round-robin)
-        // or deadline-based shared DSQ.
+        // Periodic (option -p) updates of the dynamic perf thresholds.
         let polling_time = Duration::from_millis(self.opts.polling_ms).min(Duration::from_secs(1));
-        let nr_cpus = *NR_CPU_IDS as usize;
-        let mut prev_cputime = Self::read_per_cpu_cpu_times(nr_cpus).unwrap_or_else(|| {
-            warn!("Failed to read initial per-CPU stats; starting with zero CPU utilization");
-            vec![None; nr_cpus]
-        });
         let mut last_update = Instant::now();
         let mut last_gpu_sync = Instant::now();
 
         while !shutdown.load(Ordering::Relaxed) && !self.exited() {
-            // Update per-CPU utilization and GPU PID -> node map (NVML).
             if !polling_time.is_zero() && last_update.elapsed() >= polling_time {
-                if let Some(curr_cputime) = Self::read_per_cpu_cpu_times(nr_cpus) {
-                    let map = &self.skel.maps.cpu_util_map;
-                    for cpu in 0..nr_cpus {
-                        let util = match (&prev_cputime[cpu], &curr_cputime[cpu]) {
-                            (Some(prev), Some(curr)) => Self::compute_user_cpu_pct(prev, curr),
-                            _ => Some(0),
-                        };
-
-                        if let Some(util) = util {
-                            let _ = map.update(
-                                &(cpu as u32).to_ne_bytes(),
-                                &util.to_ne_bytes(),
-                                MapFlags::ANY,
-                            );
-                        }
-                    }
-                    prev_cputime = curr_cputime;
-                }
-
                 // Update dynamic perf thresholds using EMA + hysteresis.
                 let elapsed_secs = last_update.elapsed().as_secs_f64();
 
@@ -1139,16 +1169,15 @@ impl<'a> Scheduler<'a> {
                     }
                 }
 
-                // GPU PID sync is throttled to GPU_SYNC_INTERVAL (NVML is expensive).
-                if self.gpu_index_to_node.is_some() && last_gpu_sync.elapsed() >= GPU_SYNC_INTERVAL
-                {
-                    if let Err(e) = self.sync_gpu_pids() {
-                        debug!("GPU PID sync: {}", e);
-                    }
-                    last_gpu_sync = Instant::now();
-                }
-
                 last_update = Instant::now();
+            }
+
+            // GPU PID sync is throttled to GPU_SYNC_INTERVAL.
+            if self.gpu_index_to_node.is_some() && last_gpu_sync.elapsed() >= GPU_SYNC_INTERVAL {
+                if let Err(e) = self.sync_gpu_pids() {
+                    debug!("GPU PID sync: {}", e);
+                }
+                last_gpu_sync = Instant::now();
             }
 
             // Update statistics and check for exit condition.
