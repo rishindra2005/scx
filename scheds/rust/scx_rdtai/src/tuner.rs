@@ -14,7 +14,6 @@ use log::info;
 use libbpf_rs::MapCore;
 use scx_utils::Cpumask;
 
-use crate::bpf_intf;
 use crate::sub_or_zero;
 use crate::BpfSkel;
 use crate::DomainGroup;
