@@ -1,181 +1,81 @@
-08:37:45 [0m[34m[INFO] [0mRunning scx_rdtai (build ID: 1.1.0 x86_64-unknown-linux-gnu)
-08:37:45 [0m[34m[INFO] [0mNODE[00] mask= ffffff
-08:37:45 [0m[34m[INFO] [0m DOM[00] mask= 00f00f
-08:37:45 [0m[34m[INFO] [0m DOM[01] mask= ff0ff0
-08:37:45 [0m[34m[INFO] [0mlibbpf: struct_ops rdtai: member cgroup_set_idle not found in kernel, skipping it as it's set to zero
+10:26:20 [INFO] Running scx_rdtai (build ID: 1.1.3 x86_64-unknown-linux-gnu)
+10:26:20 [INFO] kernel features: arena_fetch_bitops=no prog_stream_fds=no
+10:26:20 [INFO] NODE[00] mask= ffffff
+10:26:20 [INFO]  DOM[00] mask= 00f00f
+10:26:20 [INFO]  DOM[01] mask= ff0ff0
+10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_attach not found in kernel, skipping it as it's set to zero
 
-08:37:45 [0m[34m[INFO] [0mlibbpf: struct_ops rdtai: member sub_attach not found in kernel, skipping it as it's set to zero
+10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_detach not found in kernel, skipping it as it's set to zero
 
-08:37:45 [0m[34m[INFO] [0mlibbpf: struct_ops rdtai: member sub_detach not found in kernel, skipping it as it's set to zero
+10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_caps_updated not found in kernel, skipping it as it's set to zero
 
-08:37:45 [0m[34m[INFO] [0mlibbpf: struct_ops rdtai: member sub_cgroup_id not found in kernel, skipping it as it's set to zero
+10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_ecaps_updated not found in kernel, skipping it as it's set to zero
 
-08:37:46 [0m[34m[INFO] [0mDefault RL Q-Table initialized and pushed to kernel!
-08:37:46 [0m[33m[WARN] [0mlibbpf: map 'rdtai': BPF map skeleton link is uninitialized
+10:26:20 [INFO] libbpf: struct_ops rdtai: member init_cids not found in kernel, skipping it as it's set to zero
 
-08:37:46 [0m[34m[INFO] [0mRusty scheduler started! Run `scx_rdtai --monitor` for metrics.
-08:37:46 [0m[34m[INFO] [0mRL Q-Table successfully loaded from /var/lib/scx_rdtai_qtable.bin
-08:37:48 [0m[34m[INFO] [0mRL Optimizer: Processed 197 state-action rewards and updated Q-Table.
-08:37:50 [0m[34m[INFO] [0mRL Optimizer: Processed 243 state-action rewards and updated Q-Table.
-08:37:52 [0m[34m[INFO] [0mRL Optimizer: Processed 256 state-action rewards and updated Q-Table.
-08:37:54 [0m[34m[INFO] [0mRL Optimizer: Processed 173 state-action rewards and updated Q-Table.
-08:37:56 [0m[34m[INFO] [0mRL Optimizer: Processed 220 state-action rewards and updated Q-Table.
-08:37:58 [0m[34m[INFO] [0mRL Optimizer: Processed 188 state-action rewards and updated Q-Table.
-08:38:00 [0m[34m[INFO] [0mRL Optimizer: Processed 199 state-action rewards and updated Q-Table.
-08:38:02 [0m[34m[INFO] [0mRL Optimizer: Processed 215 state-action rewards and updated Q-Table.
-08:38:04 [0m[34m[INFO] [0mRL Optimizer: Processed 194 state-action rewards and updated Q-Table.
-08:38:06 [0m[34m[INFO] [0mRL Optimizer: Processed 231 state-action rewards and updated Q-Table.
-08:38:08 [0m[34m[INFO] [0mRL Optimizer: Processed 200 state-action rewards and updated Q-Table.
-08:38:10 [0m[34m[INFO] [0mRL Optimizer: Processed 214 state-action rewards and updated Q-Table.
-08:38:12 [0m[34m[INFO] [0mRL Optimizer: Processed 223 state-action rewards and updated Q-Table.
-08:38:14 [0m[34m[INFO] [0mRL Optimizer: Processed 189 state-action rewards and updated Q-Table.
-08:38:16 [0m[34m[INFO] [0mRL Optimizer: Processed 239 state-action rewards and updated Q-Table.
-08:38:18 [0m[34m[INFO] [0mRL Optimizer: Processed 249 state-action rewards and updated Q-Table.
-08:38:20 [0m[34m[INFO] [0mRL Optimizer: Processed 176 state-action rewards and updated Q-Table.
-08:38:22 [0m[34m[INFO] [0mRL Optimizer: Processed 451 state-action rewards and updated Q-Table.
-08:38:24 [0m[34m[INFO] [0mRL Optimizer: Processed 408 state-action rewards and updated Q-Table.
-08:38:26 [0m[34m[INFO] [0mRL Optimizer: Processed 426 state-action rewards and updated Q-Table.
-08:38:28 [0m[34m[INFO] [0mRL Optimizer: Processed 462 state-action rewards and updated Q-Table.
-08:38:30 [0m[34m[INFO] [0mRL Optimizer: Processed 466 state-action rewards and updated Q-Table.
-08:38:32 [0m[34m[INFO] [0mRL Optimizer: Processed 446 state-action rewards and updated Q-Table.
-08:38:34 [0m[34m[INFO] [0mRL Optimizer: Processed 460 state-action rewards and updated Q-Table.
-08:38:36 [0m[34m[INFO] [0mRL Optimizer: Processed 465 state-action rewards and updated Q-Table.
-08:38:38 [0m[34m[INFO] [0mRL Optimizer: Processed 496 state-action rewards and updated Q-Table.
-08:38:40 [0m[34m[INFO] [0mRL Optimizer: Processed 469 state-action rewards and updated Q-Table.
-08:38:42 [0m[34m[INFO] [0mRL Optimizer: Processed 489 state-action rewards and updated Q-Table.
-08:38:44 [0m[34m[INFO] [0mRL Optimizer: Processed 487 state-action rewards and updated Q-Table.
-08:38:46 [0m[34m[INFO] [0mRL Optimizer: Processed 474 state-action rewards and updated Q-Table.
-08:38:48 [0m[34m[INFO] [0mRL Optimizer: Processed 459 state-action rewards and updated Q-Table.
-08:38:50 [0m[34m[INFO] [0mRL Optimizer: Processed 482 state-action rewards and updated Q-Table.
-08:38:52 [0m[34m[INFO] [0mRL Optimizer: Processed 521 state-action rewards and updated Q-Table.
-08:38:54 [0m[34m[INFO] [0mRL Optimizer: Processed 504 state-action rewards and updated Q-Table.
-08:38:56 [0m[34m[INFO] [0mRL Optimizer: Processed 498 state-action rewards and updated Q-Table.
-08:38:58 [0m[34m[INFO] [0mRL Optimizer: Processed 468 state-action rewards and updated Q-Table.
-08:39:00 [0m[34m[INFO] [0mRL Optimizer: Processed 499 state-action rewards and updated Q-Table.
-08:39:02 [0m[34m[INFO] [0mRL Optimizer: Processed 477 state-action rewards and updated Q-Table.
-08:39:04 [0m[34m[INFO] [0mRL Optimizer: Processed 485 state-action rewards and updated Q-Table.
-08:39:06 [0m[34m[INFO] [0mRL Optimizer: Processed 515 state-action rewards and updated Q-Table.
-08:39:08 [0m[34m[INFO] [0mRL Optimizer: Processed 456 state-action rewards and updated Q-Table.
-08:39:10 [0m[34m[INFO] [0mRL Optimizer: Processed 533 state-action rewards and updated Q-Table.
-08:39:12 [0m[34m[INFO] [0mRL Optimizer: Processed 491 state-action rewards and updated Q-Table.
-08:39:14 [0m[34m[INFO] [0mRL Optimizer: Processed 484 state-action rewards and updated Q-Table.
-08:39:16 [0m[34m[INFO] [0mRL Optimizer: Processed 541 state-action rewards and updated Q-Table.
-08:39:18 [0m[34m[INFO] [0mRL Optimizer: Processed 501 state-action rewards and updated Q-Table.
-08:39:20 [0m[34m[INFO] [0mRL Optimizer: Processed 503 state-action rewards and updated Q-Table.
-08:39:22 [0m[34m[INFO] [0mRL Optimizer: Processed 917 state-action rewards and updated Q-Table.
-08:39:24 [0m[34m[INFO] [0mRL Optimizer: Processed 854 state-action rewards and updated Q-Table.
-08:39:26 [0m[34m[INFO] [0mRL Optimizer: Processed 365 state-action rewards and updated Q-Table.
-08:39:28 [0m[34m[INFO] [0mRL Optimizer: Processed 331 state-action rewards and updated Q-Table.
-08:39:30 [0m[34m[INFO] [0mRL Optimizer: Processed 442 state-action rewards and updated Q-Table.
-08:39:32 [0m[34m[INFO] [0mRL Optimizer: Processed 372 state-action rewards and updated Q-Table.
-08:39:34 [0m[34m[INFO] [0mRL Optimizer: Processed 242 state-action rewards and updated Q-Table.
-08:39:36 [0m[34m[INFO] [0mRL Optimizer: Processed 263 state-action rewards and updated Q-Table.
-08:39:38 [0m[34m[INFO] [0mRL Optimizer: Processed 255 state-action rewards and updated Q-Table.
-08:39:40 [0m[34m[INFO] [0mRL Optimizer: Processed 249 state-action rewards and updated Q-Table.
-08:39:42 [0m[34m[INFO] [0mRL Optimizer: Processed 289 state-action rewards and updated Q-Table.
-08:39:44 [0m[34m[INFO] [0mRL Optimizer: Processed 249 state-action rewards and updated Q-Table.
-08:39:46 [0m[34m[INFO] [0mRL Optimizer: Processed 221 state-action rewards and updated Q-Table.
-08:39:48 [0m[34m[INFO] [0mRL Optimizer: Processed 268 state-action rewards and updated Q-Table.
-08:39:50 [0m[34m[INFO] [0mRL Optimizer: Processed 255 state-action rewards and updated Q-Table.
-08:39:52 [0m[34m[INFO] [0mRL Optimizer: Processed 257 state-action rewards and updated Q-Table.
-08:39:54 [0m[34m[INFO] [0mRL Optimizer: Processed 211 state-action rewards and updated Q-Table.
-08:39:56 [0m[34m[INFO] [0mRL Optimizer: Processed 226 state-action rewards and updated Q-Table.
-08:39:58 [0m[34m[INFO] [0mRL Optimizer: Processed 224 state-action rewards and updated Q-Table.
-08:40:00 [0m[34m[INFO] [0mRL Optimizer: Processed 222 state-action rewards and updated Q-Table.
-08:40:02 [0m[34m[INFO] [0mRL Optimizer: Processed 258 state-action rewards and updated Q-Table.
-08:40:04 [0m[34m[INFO] [0mRL Optimizer: Processed 208 state-action rewards and updated Q-Table.
-08:40:06 [0m[34m[INFO] [0mRL Optimizer: Processed 203 state-action rewards and updated Q-Table.
-08:40:08 [0m[34m[INFO] [0mRL Optimizer: Processed 218 state-action rewards and updated Q-Table.
-08:40:10 [0m[34m[INFO] [0mRL Optimizer: Processed 246 state-action rewards and updated Q-Table.
-08:40:12 [0m[34m[INFO] [0mRL Optimizer: Processed 217 state-action rewards and updated Q-Table.
-08:40:14 [0m[34m[INFO] [0mRL Optimizer: Processed 190 state-action rewards and updated Q-Table.
-08:40:16 [0m[34m[INFO] [0mRL Optimizer: Processed 252 state-action rewards and updated Q-Table.
-08:40:18 [0m[34m[INFO] [0mRL Optimizer: Processed 258 state-action rewards and updated Q-Table.
-08:40:20 [0m[34m[INFO] [0mRL Optimizer: Processed 208 state-action rewards and updated Q-Table.
-08:40:22 [0m[34m[INFO] [0mRL Optimizer: Processed 191 state-action rewards and updated Q-Table.
-08:40:24 [0m[34m[INFO] [0mRL Optimizer: Processed 249 state-action rewards and updated Q-Table.
-08:40:26 [0m[34m[INFO] [0mRL Optimizer: Processed 222 state-action rewards and updated Q-Table.
-08:40:28 [0m[34m[INFO] [0mRL Optimizer: Processed 214 state-action rewards and updated Q-Table.
-08:40:30 [0m[34m[INFO] [0mRL Optimizer: Processed 218 state-action rewards and updated Q-Table.
-08:40:32 [0m[34m[INFO] [0mRL Optimizer: Processed 203 state-action rewards and updated Q-Table.
-08:40:34 [0m[34m[INFO] [0mRL Optimizer: Processed 232 state-action rewards and updated Q-Table.
-08:40:36 [0m[34m[INFO] [0mRL Optimizer: Processed 179 state-action rewards and updated Q-Table.
-08:40:38 [0m[34m[INFO] [0mRL Optimizer: Processed 202 state-action rewards and updated Q-Table.
-08:40:40 [0m[34m[INFO] [0mRL Optimizer: Processed 212 state-action rewards and updated Q-Table.
-08:40:42 [0m[34m[INFO] [0mRL Optimizer: Processed 212 state-action rewards and updated Q-Table.
-08:40:44 [0m[34m[INFO] [0mRL Optimizer: Processed 235 state-action rewards and updated Q-Table.
-08:40:46 [0m[34m[INFO] [0mRL Optimizer: Processed 263 state-action rewards and updated Q-Table.
-08:40:48 [0m[34m[INFO] [0mRL Optimizer: Processed 196 state-action rewards and updated Q-Table.
-08:40:50 [0m[34m[INFO] [0mRL Optimizer: Processed 223 state-action rewards and updated Q-Table.
-08:40:52 [0m[34m[INFO] [0mRL Optimizer: Processed 198 state-action rewards and updated Q-Table.
-08:40:54 [0m[34m[INFO] [0mRL Optimizer: Processed 199 state-action rewards and updated Q-Table.
-08:40:56 [0m[34m[INFO] [0mRL Optimizer: Processed 182 state-action rewards and updated Q-Table.
-08:40:58 [0m[34m[INFO] [0mRL Optimizer: Processed 170 state-action rewards and updated Q-Table.
-08:41:00 [0m[34m[INFO] [0mRL Optimizer: Processed 204 state-action rewards and updated Q-Table.
-08:41:02 [0m[34m[INFO] [0mRL Optimizer: Processed 324 state-action rewards and updated Q-Table.
-08:41:04 [0m[34m[INFO] [0mRL Optimizer: Processed 243 state-action rewards and updated Q-Table.
-08:41:06 [0m[34m[INFO] [0mRL Optimizer: Processed 280 state-action rewards and updated Q-Table.
-08:41:08 [0m[34m[INFO] [0mRL Optimizer: Processed 373 state-action rewards and updated Q-Table.
-08:41:10 [0m[34m[INFO] [0mRL Optimizer: Processed 284 state-action rewards and updated Q-Table.
-08:41:12 [0m[34m[INFO] [0mRL Optimizer: Processed 331 state-action rewards and updated Q-Table.
-08:41:14 [0m[34m[INFO] [0mRL Optimizer: Processed 270 state-action rewards and updated Q-Table.
-08:41:16 [0m[34m[INFO] [0mRL Optimizer: Processed 383 state-action rewards and updated Q-Table.
-08:41:18 [0m[34m[INFO] [0mRL Optimizer: Processed 247 state-action rewards and updated Q-Table.
-08:41:20 [0m[34m[INFO] [0mRL Optimizer: Processed 393 state-action rewards and updated Q-Table.
-08:41:22 [0m[34m[INFO] [0mRL Optimizer: Processed 318 state-action rewards and updated Q-Table.
-08:41:24 [0m[34m[INFO] [0mRL Optimizer: Processed 403 state-action rewards and updated Q-Table.
-08:41:26 [0m[34m[INFO] [0mRL Optimizer: Processed 332 state-action rewards and updated Q-Table.
-08:41:28 [0m[34m[INFO] [0mRL Optimizer: Processed 216 state-action rewards and updated Q-Table.
-08:41:30 [0m[34m[INFO] [0mRL Optimizer: Processed 235 state-action rewards and updated Q-Table.
-08:41:32 [0m[34m[INFO] [0mRL Optimizer: Processed 290 state-action rewards and updated Q-Table.
-08:41:34 [0m[34m[INFO] [0mRL Optimizer: Processed 237 state-action rewards and updated Q-Table.
-08:41:36 [0m[34m[INFO] [0mRL Optimizer: Processed 246 state-action rewards and updated Q-Table.
-08:41:38 [0m[34m[INFO] [0mRL Optimizer: Processed 212 state-action rewards and updated Q-Table.
-08:41:40 [0m[34m[INFO] [0mRL Optimizer: Processed 227 state-action rewards and updated Q-Table.
-08:41:42 [0m[34m[INFO] [0mRL Optimizer: Processed 253 state-action rewards and updated Q-Table.
-08:41:44 [0m[34m[INFO] [0mRL Optimizer: Processed 242 state-action rewards and updated Q-Table.
-08:41:46 [0m[34m[INFO] [0mRL Optimizer: Processed 254 state-action rewards and updated Q-Table.
-08:41:48 [0m[34m[INFO] [0mRL Optimizer: Processed 228 state-action rewards and updated Q-Table.
-08:41:50 [0m[34m[INFO] [0mRL Optimizer: Processed 232 state-action rewards and updated Q-Table.
-08:41:52 [0m[34m[INFO] [0mRL Optimizer: Processed 221 state-action rewards and updated Q-Table.
-08:41:54 [0m[34m[INFO] [0mRL Optimizer: Processed 219 state-action rewards and updated Q-Table.
-08:41:56 [0m[34m[INFO] [0mRL Optimizer: Processed 237 state-action rewards and updated Q-Table.
-08:41:58 [0m[34m[INFO] [0mRL Optimizer: Processed 208 state-action rewards and updated Q-Table.
-08:42:00 [0m[34m[INFO] [0mRL Optimizer: Processed 257 state-action rewards and updated Q-Table.
-08:42:02 [0m[34m[INFO] [0mRL Optimizer: Processed 269 state-action rewards and updated Q-Table.
-08:42:04 [0m[34m[INFO] [0mRL Optimizer: Processed 252 state-action rewards and updated Q-Table.
-08:42:06 [0m[34m[INFO] [0mRL Optimizer: Processed 283 state-action rewards and updated Q-Table.
-08:42:08 [0m[34m[INFO] [0mRL Optimizer: Processed 261 state-action rewards and updated Q-Table.
-08:42:10 [0m[34m[INFO] [0mRL Optimizer: Processed 222 state-action rewards and updated Q-Table.
-08:42:12 [0m[34m[INFO] [0mRL Optimizer: Processed 208 state-action rewards and updated Q-Table.
-08:42:14 [0m[34m[INFO] [0mRL Optimizer: Processed 241 state-action rewards and updated Q-Table.
-08:42:16 [0m[34m[INFO] [0mRL Optimizer: Processed 237 state-action rewards and updated Q-Table.
-08:42:18 [0m[34m[INFO] [0mRL Optimizer: Processed 226 state-action rewards and updated Q-Table.
-08:42:20 [0m[34m[INFO] [0mRL Optimizer: Processed 225 state-action rewards and updated Q-Table.
-08:42:22 [0m[34m[INFO] [0mRL Optimizer: Processed 219 state-action rewards and updated Q-Table.
-08:42:24 [0m[34m[INFO] [0mRL Optimizer: Processed 214 state-action rewards and updated Q-Table.
-08:42:26 [0m[34m[INFO] [0mRL Optimizer: Processed 236 state-action rewards and updated Q-Table.
-08:42:28 [0m[34m[INFO] [0mRL Optimizer: Processed 201 state-action rewards and updated Q-Table.
-08:42:30 [0m[34m[INFO] [0mRL Optimizer: Processed 229 state-action rewards and updated Q-Table.
-08:42:32 [0m[34m[INFO] [0mRL Optimizer: Processed 212 state-action rewards and updated Q-Table.
-08:42:34 [0m[34m[INFO] [0mRL Optimizer: Processed 217 state-action rewards and updated Q-Table.
-08:42:36 [0m[34m[INFO] [0mRL Optimizer: Processed 214 state-action rewards and updated Q-Table.
-08:42:38 [0m[34m[INFO] [0mRL Optimizer: Processed 223 state-action rewards and updated Q-Table.
-08:42:40 [0m[34m[INFO] [0mRL Optimizer: Processed 223 state-action rewards and updated Q-Table.
-08:42:42 [0m[34m[INFO] [0mRL Optimizer: Processed 218 state-action rewards and updated Q-Table.
-08:42:44 [0m[34m[INFO] [0mRL Optimizer: Processed 208 state-action rewards and updated Q-Table.
-08:42:46 [0m[34m[INFO] [0mRL Optimizer: Processed 193 state-action rewards and updated Q-Table.
-08:42:48 [0m[34m[INFO] [0mRL Optimizer: Processed 194 state-action rewards and updated Q-Table.
-08:42:50 [0m[34m[INFO] [0mRL Optimizer: Processed 195 state-action rewards and updated Q-Table.
-08:42:52 [0m[34m[INFO] [0mRL Optimizer: Processed 199 state-action rewards and updated Q-Table.
-08:42:54 [0m[34m[INFO] [0mRL Optimizer: Processed 297 state-action rewards and updated Q-Table.
-08:42:56 [0m[34m[INFO] [0mRL Optimizer: Processed 362 state-action rewards and updated Q-Table.
-08:42:58 [0m[34m[INFO] [0mRL Optimizer: Processed 309 state-action rewards and updated Q-Table.
-08:43:00 [0m[34m[INFO] [0mRL Optimizer: Processed 336 state-action rewards and updated Q-Table.
-08:43:02 [0m[34m[INFO] [0mRL Optimizer: Processed 246 state-action rewards and updated Q-Table.
-08:43:04 [0m[34m[INFO] [0mRL Optimizer: Processed 307 state-action rewards and updated Q-Table.
-08:43:06 [0m[34m[INFO] [0mRL Optimizer: Processed 352 state-action rewards and updated Q-Table.
-08:43:08 [0m[34m[INFO] [0mRL Optimizer: Processed 349 state-action rewards and updated Q-Table.
-EXIT: unregistered from user space
-08:43:10 [0m[34m[INFO] [0mUnregister scx_rdtai scheduler
-08:43:10 [0m[34m[INFO] [0mRL Q-Table successfully persisted to /var/lib/scx_rdtai_qtable.bin
+10:26:20 [INFO] libbpf: struct_ops rdtai: member cid_shard_size not found in kernel, skipping it as it's set to zero
+
+10:26:20 [INFO] libbpf: struct_ops rdtai: member rescue_bandwidth_ppt not found in kernel, skipping it as it's set to zero
+
+10:26:20 [INFO] libbpf: struct_ops rdtai: member rescue_quantum_us not found in kernel, skipping it as it's set to zero
+
+10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_cgroup_id not found in kernel, skipping it as it's set to zero
+
+10:26:20 [INFO] Default RL Q-Table initialized and pushed to kernel!
+10:26:20 [WARN] libbpf: map 'rdtai': BPF map skeleton link is uninitialized
+
+10:26:20 [INFO] Rusty scheduler started! Run `scx_rdtai --monitor` for metrics.
+10:26:20 [INFO] RL Q-Table successfully loaded from /var/lib/scx_rdtai_qtable.bin
+10:26:22 [INFO] RL Optimizer: Processed 318 state-action rewards and updated Q-Table.
+10:26:24 [INFO] RL Optimizer: Processed 232 state-action rewards and updated Q-Table.
+10:26:26 [INFO] RL Optimizer: Processed 253 state-action rewards and updated Q-Table.
+10:26:28 [INFO] RL Optimizer: Processed 264 state-action rewards and updated Q-Table.
+10:26:30 [INFO] RL Optimizer: Processed 285 state-action rewards and updated Q-Table.
+10:26:32 [INFO] RL Optimizer: Processed 196 state-action rewards and updated Q-Table.
+10:26:34 [INFO] RL Optimizer: Processed 239 state-action rewards and updated Q-Table.
+10:26:36 [INFO] RL Optimizer: Processed 225 state-action rewards and updated Q-Table.
+10:26:38 [INFO] RL Optimizer: Processed 241 state-action rewards and updated Q-Table.
+10:26:40 [INFO] RL Optimizer: Processed 192 state-action rewards and updated Q-Table.
+10:26:42 [INFO] RL Optimizer: Processed 172 state-action rewards and updated Q-Table.
+10:26:44 [INFO] RL Optimizer: Processed 161 state-action rewards and updated Q-Table.
+10:26:46 [INFO] RL Optimizer: Processed 143 state-action rewards and updated Q-Table.
+10:26:48 [INFO] RL Optimizer: Processed 159 state-action rewards and updated Q-Table.
+10:26:50 [INFO] RL Optimizer: Processed 203 state-action rewards and updated Q-Table.
+10:26:52 [INFO] RL Optimizer: Processed 166 state-action rewards and updated Q-Table.
+10:26:54 [INFO] RL Optimizer: Processed 185 state-action rewards and updated Q-Table.
+10:26:56 [INFO] RL Optimizer: Processed 388 state-action rewards and updated Q-Table.
+10:26:58 [INFO] RL Optimizer: Processed 425 state-action rewards and updated Q-Table.
+10:27:00 [INFO] RL Optimizer: Processed 431 state-action rewards and updated Q-Table.
+10:27:02 [INFO] RL Optimizer: Processed 452 state-action rewards and updated Q-Table.
+10:27:04 [INFO] RL Optimizer: Processed 432 state-action rewards and updated Q-Table.
+10:27:06 [INFO] RL Optimizer: Processed 428 state-action rewards and updated Q-Table.
+10:27:08 [INFO] RL Optimizer: Processed 487 state-action rewards and updated Q-Table.
+10:27:10 [INFO] RL Optimizer: Processed 532 state-action rewards and updated Q-Table.
+10:27:12 [INFO] RL Optimizer: Processed 474 state-action rewards and updated Q-Table.
+10:27:14 [INFO] RL Optimizer: Processed 487 state-action rewards and updated Q-Table.
+10:27:16 [INFO] RL Optimizer: Processed 454 state-action rewards and updated Q-Table.
+10:27:18 [INFO] RL Optimizer: Processed 398 state-action rewards and updated Q-Table.
+10:27:20 [INFO] RL Optimizer: Processed 411 state-action rewards and updated Q-Table.
+10:27:22 [INFO] RL Optimizer: Processed 397 state-action rewards and updated Q-Table.
+10:27:24 [INFO] RL Optimizer: Processed 422 state-action rewards and updated Q-Table.
+10:27:26 [INFO] RL Optimizer: Processed 494 state-action rewards and updated Q-Table.
+10:27:28 [INFO] RL Optimizer: Processed 577 state-action rewards and updated Q-Table.
+10:27:30 [INFO] RL Optimizer: Processed 537 state-action rewards and updated Q-Table.
+10:27:32 [INFO] RL Optimizer: Processed 530 state-action rewards and updated Q-Table.
+10:27:34 [INFO] RL Optimizer: Processed 486 state-action rewards and updated Q-Table.
+10:27:36 [INFO] RL Optimizer: Processed 416 state-action rewards and updated Q-Table.
+10:27:38 [INFO] RL Optimizer: Processed 456 state-action rewards and updated Q-Table.
+10:27:40 [INFO] RL Optimizer: Processed 493 state-action rewards and updated Q-Table.
+10:27:42 [INFO] RL Optimizer: Processed 493 state-action rewards and updated Q-Table.
+10:27:44 [INFO] RL Optimizer: Processed 406 state-action rewards and updated Q-Table.
+10:27:46 [INFO] RL Optimizer: Processed 453 state-action rewards and updated Q-Table.
+10:27:48 [INFO] RL Optimizer: Processed 424 state-action rewards and updated Q-Table.
+10:27:50 [INFO] RL Optimizer: Processed 429 state-action rewards and updated Q-Table.
+10:27:52 [INFO] RL Optimizer: Processed 445 state-action rewards and updated Q-Table.
+10:27:54 [INFO] RL Optimizer: Processed 423 state-action rewards and updated Q-Table.
+10:27:56 [INFO] RL Optimizer: Processed 893 state-action rewards and updated Q-Table.
+10:27:58 [INFO] RL Optimizer: Processed 769 state-action rewards and updated Q-Table.
+10:28:00 [INFO] RL Optimizer: Processed 289 state-action rewards and updated Q-Table.
+10:28:00 [INFO] Unregister scx_rdtai scheduler
+10:28:00 [INFO] RL Q-Table successfully persisted to /var/lib/scx_rdtai_qtable.bin
+Error: Expected nonzero load transfer

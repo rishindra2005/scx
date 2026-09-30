@@ -84,8 +84,12 @@ for SCHED in "${SCHEDULERS[@]}"; do
             # Record detailed perf metrics during the second run
             PERF_OUT=$(perf stat -e instructions,cycles,cache-misses,cache-references -- sysbench cpu --cpu-max-prime=30000 --time=20 --threads=$(nproc) run 2>&1)
             EPS=$(echo "$PERF_OUT" | grep "events per second:" | awk '{print $4}')
-            IPC=$(echo "$PERF_OUT" | grep "insn per cycle" | awk '{print $4}')
-            CACHE_PCT=$(echo "$PERF_OUT" | grep "cache-misses" | awk '{print $4}' | tr -d '%')
+            INSTR=$(echo "$PERF_OUT" | grep "instructions" | awk '{print $1}' | tr -d ',')
+            CYCLES=$(echo "$PERF_OUT" | grep "cycles" | awk '{print $1}' | tr -d ',')
+            MISSES=$(echo "$PERF_OUT" | grep "cache-misses" | awk '{print $1}' | tr -d ',')
+            REFS=$(echo "$PERF_OUT" | grep "cache-references" | awk '{print $1}' | tr -d ',')
+            IPC=$(awk -v i="$INSTR" -v c="$CYCLES" 'BEGIN {if(c>0) printf "%.2f", i/c; else print "N/A"}')
+            CACHE_PCT=$(awk -v m="$MISSES" -v r="$REFS" 'BEGIN {if(r>0) printf "%.2f", (m*100)/r; else print "N/A"}')
             echo "     Result: $EPS events/s, IPC: $IPC, Cache Misses: ${CACHE_PCT:-N/A}%" | tee -a "$LOG_FILE"
         else
             sysbench cpu --cpu-max-prime=30000 --time=10 --threads=$(nproc) run > /dev/null

@@ -45,7 +45,9 @@ echo ""
 # 3. Perf (Cache Efficiency under load)
 echo "--> [3/4] Running Perf (Cache Misses)..."
 PERF_OUT=$(perf stat -e cache-misses,cache-references -- sysbench cpu --cpu-max-prime=10000 --threads=$(nproc) run 2>&1)
-CACHE_PCT=$(echo "$PERF_OUT" | grep "cache-misses" | awk '{print $4}' | tr -d '%')
+MISSES=$(echo "$PERF_OUT" | grep "cache-misses" | awk '{print $1}' | tr -d ',')
+REFS=$(echo "$PERF_OUT" | grep "cache-references" | awk '{print $1}' | tr -d ',')
+CACHE_PCT=$(awk -v m="$MISSES" -v r="$REFS" 'BEGIN {if(r>0) printf "%.2f", (m*100)/r; else print "N/A"}')
 echo "    RESULT: ${CACHE_PCT:-N/A}% misses"
 echo ""
 
