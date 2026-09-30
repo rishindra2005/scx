@@ -505,7 +505,7 @@ impl<'a> Scheduler<'a> {
         let q_table_map = &mut skel.maps.q_table;
         
         for state in 0..8192u32 {
-            // Bits: wait(3) | cache(2) | blocked(2) | avg_run(2) | burst(2) | waker(2)
+            // Bits: wait(3) | cache(3) | blocked(2) | avg_run(2) | burst(2) | waker(1)
             let wait_bucket = (state >> 10) & 0b111;
             
             // Baseline Heuristic: If wait bucket is high (>= 4, i.e., > 2ms), try to run immediately.

@@ -110,7 +110,7 @@ struct {
 } q_table SEC(".maps");
 
 struct {
-	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__type(key, u32);
 	__type(value, struct q_record);
 	__uint(max_entries, 24576); // 8192 states * 3 actions
@@ -128,10 +128,14 @@ static inline u32 bucket_wait(u64 wait_ns) {
 }
 
 static inline u32 bucket_cache(u64 misses) {
-	if (misses < 10) return 0;
-	if (misses < 50) return 1;
-	if (misses < 200) return 2;
-	return 3;
+	if (misses < 100) return 0;
+	if (misses < 500) return 1;
+	if (misses < 1500) return 2;
+	if (misses < 4000) return 3;
+	if (misses < 10000) return 4;
+	if (misses < 25000) return 5;
+	if (misses < 60000) return 6;
+	return 7;
 }
 
 static inline u32 bucket_run(u64 ns) {
@@ -146,6 +150,10 @@ static inline u32 bucket_freq(u64 freq) {
 	if (freq < 5000) return 1;
 	if (freq < 20000) return 2;
 	return 3;
+}
+
+static inline u32 bucket_waker(u64 freq) {
+	return freq >= 5000 ? 1 : 0;
 }
 
 struct {
@@ -994,18 +1002,24 @@ s32 BPF_STRUCT_OPS(rdtai_select_cpu, struct task_struct *p, s32 prev_cpu,
 		u32 blocked = bucket_freq(taskc->blocked_freq);
 		u32 avg_run = bucket_run(taskc->avg_runtime);
 		u32 burst = bucket_run(taskc->last_burst);
-		u32 waker = bucket_freq(taskc->waker_freq);
+		u32 waker = bucket_waker(taskc->waker_freq);
 
-		u32 state_index = (wait << 10) | (cache << 8) | (blocked << 6) | (avg_run << 4) | (burst << 2) | waker;
+		u32 state_index = (wait << 10) | (cache << 7) | (blocked << 5) | (avg_run << 3) | (burst << 1) | waker;
 		taskc->last_state_index = state_index;
 
-		if (bpf_get_prandom_u32() % 100 < 5) {
-			// 5% Exploration
+		u32 eps = (avg_run <= 1) ? 0 : (epsilon_pm ? epsilon_pm : 50);
+		if (eps > 0 && (bpf_get_prandom_u32() % 1000) < eps) {
+			// Exploration (compute/batch only)
 			action = bpf_get_prandom_u32() % 3;
 		} else {
-			// 95% Exploitation
+			// Exploitation (deterministic for interactive)
 			u32 *act = bpf_map_lookup_elem(&q_table, &state_index);
 			action = act ? *act : 0;
+		}
+
+		// Cache-Gated Migration: Veto Action 1 (Migrate) for memory-sensitive tasks
+		if (action == 1 && cache >= 3) {
+			action = 0; // Force Keep Local to preserve warm cache lines
 		}
 	}
 	taskc->last_action = action;
@@ -1019,6 +1033,11 @@ s32 BPF_STRUCT_OPS(rdtai_select_cpu, struct task_struct *p, s32 prev_cpu,
 	if (action == 2) { // RDTAI_ACTION_RUN_IMMEDIATELY
 		if (scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
 			cpu = prev_cpu;
+			goto direct;
+		}
+		s32 idle_cpu = scx_bpf_pick_idle_cpu(cast_mask(p_cpumask), 0);
+		if (idle_cpu >= 0) {
+			cpu = idle_cpu;
 			goto direct;
 		}
 	}
@@ -1113,7 +1132,7 @@ s32 BPF_STRUCT_OPS(rdtai_select_cpu, struct task_struct *p, s32 prev_cpu,
 	 * under-utilized, ignore domain boundaries (while still respecting NUMA
 	 * boundaries) and push the task there. Try to find an idle core first.
 	 */
-	if (taskc->all_cpus && direct_greedy_cpumask &&
+	if (action != 0 && taskc->all_cpus && direct_greedy_cpumask &&
 	    !bpf_cpumask_empty(cast_mask(direct_greedy_cpumask))) {
 		u32 dom_id = cpu_to_dom_id(prev_cpu);
 		dom_ptr domc;
@@ -1316,7 +1335,7 @@ dom_queue:
 	 * CPUs are highly loaded while KICK_GREEDY doesn't. Even under fairly
 	 * high utilization, KICK_GREEDY can slightly improve work-conservation.
 	 */
-	if (taskc->all_cpus) {
+	if (taskc->last_action != 0 && taskc->all_cpus) {
 		const struct cpumask *idle_cpumask;
 
 		idle_cpumask = scx_bpf_get_idle_cpumask();
@@ -1664,8 +1683,8 @@ void BPF_STRUCT_OPS(rdtai_stopping, struct task_struct *p, bool runnable)
 	u32 key = (taskc->last_state_index * 3) + taskc->last_action;
 	struct q_record *rec = bpf_map_lookup_elem(&q_rewards, &key);
 	if (rec) {
-		__sync_fetch_and_add(&rec->total_reward, reward);
-		__sync_fetch_and_add(&rec->count, 1);
+		rec->total_reward += reward;
+		rec->count += 1;
 	}
 
 	if (!runnable) {

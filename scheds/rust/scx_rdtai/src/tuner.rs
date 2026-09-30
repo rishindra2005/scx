@@ -83,6 +83,7 @@ pub struct Tuner {
     
     // Q-Learning Parameters
     q_matrix: Vec<[f64; 3]>,
+    cached_actions: Vec<u32>,
     epsilon: f64,
 }
 
@@ -110,6 +111,28 @@ impl Tuner {
             }
         };
 
+        let cached_actions: Vec<u32> = (0..8192u32)
+            .map(|state| {
+                let mut best_action = if (state >> 10) & 0b111 >= 4 { 2 } else { 0 };
+                let mut best_val = f64::NEG_INFINITY;
+                let mut found_non_zero = false;
+                for action in 0..3 {
+                    if q_matrix[state as usize][action] > best_val {
+                        best_val = q_matrix[state as usize][action];
+                        best_action = action as u32;
+                    }
+                    if q_matrix[state as usize][action] != 0.0 {
+                        found_non_zero = true;
+                    }
+                }
+                if found_non_zero {
+                    best_action
+                } else {
+                    if (state >> 10) & 0b111 >= 4 { 2 } else { 0 }
+                }
+            })
+            .collect();
+
         Ok(Self {
             direct_greedy_mask: Cpumask::new(),
             kick_greedy_mask: Cpumask::new(),
@@ -123,6 +146,7 @@ impl Tuner {
             overutil_slice_ns,
             dom_group,
             q_matrix,
+            cached_actions,
             epsilon: 0.05,
         })
     }
@@ -159,56 +183,74 @@ impl Tuner {
         let q_table_map = &mut skel.maps.q_table;
         
         let mut total_updates = 0;
+        let mut actions_pushed = 0;
         
         // Temporary buffer to clear elements
-        let zero_record = [0u8; 16]; // s64 + u32 + 4 bytes padding
+        let num_cpus = libbpf_rs::num_possible_cpus()?;
+        let zero_record = vec![vec![0u8; 16]; num_cpus];
         
         for state in 0..8192 {
+            let mut state_reward_observed = false;
             for action in 0..3 {
                 let key: u32 = (state * 3) + action;
                 let key_bytes = key.to_ne_bytes();
                 
-                if let Ok(Some(val)) = q_rewards_map.lookup(&key_bytes, libbpf_rs::MapFlags::ANY) {
-                    // val is 16 bytes: 8 bytes total_reward (s64), 4 bytes count (u32), 4 bytes padding
-                    let mut tr_bytes = [0u8; 8];
-                    tr_bytes.copy_from_slice(&val[0..8]);
-                    let total_reward = i64::from_ne_bytes(tr_bytes);
+                if let Ok(Some(percpu_vals)) = q_rewards_map.lookup_percpu(&key_bytes, libbpf_rs::MapFlags::ANY) {
+                    let mut total_reward: i64 = 0;
+                    let mut total_count: u32 = 0;
+                    for cpu_val in &percpu_vals {
+                        if cpu_val.len() >= 12 {
+                            let mut tr_bytes = [0u8; 8];
+                            tr_bytes.copy_from_slice(&cpu_val[0..8]);
+                            let tr = i64::from_ne_bytes(tr_bytes);
+
+                            let mut count_bytes = [0u8; 4];
+                            count_bytes.copy_from_slice(&cpu_val[8..12]);
+                            let count = u32::from_ne_bytes(count_bytes);
+
+                            total_reward += tr;
+                            total_count += count;
+                        }
+                    }
                     
-                    let mut count_bytes = [0u8; 4];
-                    count_bytes.copy_from_slice(&val[8..12]);
-                    let count = u32::from_ne_bytes(count_bytes);
-                    
-                    if count > 0 {
-                        let avg_reward = (total_reward as f64) / (count as f64);
+                    if total_count > 0 {
+                        let avg_reward = (total_reward as f64) / (total_count as f64);
                         
                         // Exponential Moving Average (Alpha = 0.1)
                         self.q_matrix[state as usize][action as usize] = 
                             0.9 * self.q_matrix[state as usize][action as usize] + 0.1 * avg_reward;
                         
                         // Clear it so kernel starts fresh counts
-                        let _ = q_rewards_map.update(&key_bytes, &zero_record, libbpf_rs::MapFlags::ANY);
+                        let _ = q_rewards_map.update_percpu(&key_bytes, &zero_record, libbpf_rs::MapFlags::ANY);
                         total_updates += 1;
+                        state_reward_observed = true;
                     }
                 }
             }
             
-            // Find best action
-            let mut best_action = 0;
-            let mut best_val = f64::NEG_INFINITY;
-            for action in 0..3 {
-                if self.q_matrix[state as usize][action] > best_val {
-                    best_val = self.q_matrix[state as usize][action];
-                    best_action = action as u32;
+            // Only update kernel BPF map if rewards were observed AND the best action actually flipped
+            if state_reward_observed {
+                let mut best_action = 0;
+                let mut best_val = f64::NEG_INFINITY;
+                for action in 0..3 {
+                    if self.q_matrix[state as usize][action] > best_val {
+                        best_val = self.q_matrix[state as usize][action];
+                        best_action = action as u32;
+                    }
+                }
+                
+                if self.cached_actions[state as usize] != best_action {
+                    self.cached_actions[state as usize] = best_action;
+                    let state_bytes = (state as u32).to_ne_bytes();
+                    let action_bytes = best_action.to_ne_bytes();
+                    let _ = q_table_map.update(&state_bytes, &action_bytes, libbpf_rs::MapFlags::ANY);
+                    actions_pushed += 1;
                 }
             }
-            
-            let state_bytes = (state as u32).to_ne_bytes();
-            let action_bytes = best_action.to_ne_bytes();
-            let _ = q_table_map.update(&state_bytes, &action_bytes, libbpf_rs::MapFlags::ANY);
         }
         
         if total_updates > 0 {
-            info!("RL Optimizer: Processed {} state-action rewards and updated Q-Table.", total_updates);
+            info!("RL Optimizer: Processed {} state-action rewards, updated {} kernel actions.", total_updates, actions_pushed);
         }
         
         Ok(())

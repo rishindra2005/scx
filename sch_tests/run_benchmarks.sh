@@ -8,9 +8,9 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-BASE_DIR=$(pwd)
+TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$TEST_DIR/.." && pwd)"
 SCH_DIR="$BASE_DIR/target/release"
-TEST_DIR="$BASE_DIR/sch_tests"
 LINUX_DIR="$TEST_DIR/linux"
 RESULT_FILE="$TEST_DIR/benchmark_report.md"
 LOG_FILE="$TEST_DIR/benchmark_details.log"
