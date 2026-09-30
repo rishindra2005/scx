@@ -28,7 +28,7 @@ get_cyclictest_percentile() {
     local total=$(awk '{sum+=$2} END {print sum}' "$file")
     if [ "$total" -eq 0 ]; then echo "0"; return; fi
     local target=$(echo "$p * $total / 100" | bc)
-    awk -v target="$target" '{count+=$2; if (count >= target) {print $1; exit}}' "$file"
+    awk -v target="$target" '{count+=$2; if (count >= target) {print $1 + 0; exit}}' "$file"
 }
 
 # Setup Report Header
@@ -131,8 +131,8 @@ for SCHED in "${SCHEDULERS[@]}"; do
     CYC_OUT=$(cyclictest --smp -p 95 -m -l 100000 -q --duration=15s --histogram=5000 > "$HIST_FILE")
     
     # Parse Max and Avg
-    MAX_VAL=$(grep -o "Max:.*" "$HIST_FILE" | awk '{print $2}' | sort -rn | head -1)
-    AVG_VAL=$(grep -o "Avg:.*" "$HIST_FILE" | awk '{print $2}' | awk '{sum+=$1} END {print sum/NR}')
+    MAX_VAL=$(grep "Max Latencies:" "$HIST_FILE" | sed 's/.*Max Latencies://' | tr ' ' '\n' | grep -v '^$' | sort -rn | head -1 | awk '{print $1+0}')
+    AVG_VAL=$(grep "Avg Latencies:" "$HIST_FILE" | sed 's/.*Avg Latencies://' | tr ' ' '\n' | grep -v '^$' | awk '{sum+=$1; count++} END {if (count>0) printf "%.1f", sum/count; else print "N/A"}')
     
     # Clean histogram for parsing (keep only the data lines)
     CLEAN_HIST=$(mktemp)
