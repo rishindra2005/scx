@@ -110,7 +110,7 @@ static inline u32 evaluate_dp_partition(struct task_ctx *tctx)
 	 * Stage 3: Fine-Grained Interactive & I/O-Bound Workloads
 	 * Redis I/O and command parsing (< 500us), API Gateway Nginx/Uvicorn (< 500us),
 	 * and HFT packet processing.
-	 * Dynamically load-balanced across ALL 12 physical/logical cores via DSQ_SHARED.
+	 * Dynamically load-balanced across domestic CCX queues (DSQ_SHARED_P, DSQ_SHARED_E).
 	 */
 	stat_add(OPTIMA_STAT_DP_SHARED, 1);
 	return CORE_TYPE_SHARED;
@@ -222,16 +222,28 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 		return prev_cpu;
 	}
 
-	/* CASE B: Shared Interactive / I/O Tasks (Redis, Gateway, HFT, Hackbench) */
+	/* CASE B: Shared Interactive / I/O Tasks (Redis, Gateway, HFT, Hackbench, iperf3) */
 	if (target_core_type == CORE_TYPE_SHARED) {
-		/* Fast-path 1: Previous CPU idle? Keep L1/L2 cache warmth! */
-		if (scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
+		/* Fast-path 1: SCX_WAKE_SYNC cache-warm handoff (e.g. SoftIRQ, iperf3, RPC) */
+		if (wake_flags & SCX_WAKE_SYNC) {
+			s32 this_cpu = bpf_get_smp_processor_id();
+			if (bpf_cpumask_test_cpu(this_cpu, p->cpus_ptr)) {
+				if (scx_bpf_test_and_clear_cpu_idle(this_cpu)) {
+					stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+					tctx->dispatch_local = true;
+					return this_cpu;
+				}
+			}
+		}
+
+		/* Fast-path 2: Previous CPU idle? Keep L1/L2 cache warmth! */
+		if (bpf_cpumask_test_cpu(prev_cpu, p->cpus_ptr) && scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
 			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
 			tctx->dispatch_local = true;
 			return prev_cpu;
 		}
 
-		/* Fast-path 2: Kernel SMT sibling, cache warmth & WAKE_SYNC idle selection */
+		/* Fast-path 3: Kernel SMT sibling, cache warmth & WAKE_SYNC idle selection */
 		bool is_idle = false;
 		s32 dfl_cpu = scx_bpf_select_cpu_dfl(p, prev_cpu, wake_flags, &is_idle);
 		if (is_idle) {
@@ -240,15 +252,39 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 			return dfl_cpu;
 		}
 
-		/* Fast-path 3: O(1) kernel-level idle core selection across all allowed cores */
-		s32 idle_cpu = scx_bpf_pick_idle_cpu(p->cpus_ptr, 0);
-		if (idle_cpu >= 0) {
-			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-			tctx->dispatch_local = true;
-			return idle_cpu;
+		/* Fast-path 4: Look for an idle core within the SAME CCX domain first */
+		const struct cpumask *idle_mask = scx_bpf_get_idle_cpumask();
+		bool prev_is_perf = is_perf_core(prev_cpu);
+		s32 cpu;
+
+		/* 4a. Search domestic CCX domain */
+		bpf_for(cpu, 0, nr_cpu_ids) {
+			if (bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
+				if (prev_is_perf == is_perf_core(cpu)) {
+					if (scx_bpf_test_and_clear_cpu_idle(cpu)) {
+						scx_bpf_put_idle_cpumask(idle_mask);
+						stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+						tctx->dispatch_local = true;
+						return cpu;
+					}
+				}
+			}
 		}
 
-		/* All cores busy: fallback to DSQ_SHARED */
+		/* 4b. If domestic CCX busy, search foreign CCX domain */
+		bpf_for(cpu, 0, nr_cpu_ids) {
+			if (bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
+				if (scx_bpf_test_and_clear_cpu_idle(cpu)) {
+					scx_bpf_put_idle_cpumask(idle_mask);
+					stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+					tctx->dispatch_local = true;
+					return cpu;
+				}
+			}
+		}
+		scx_bpf_put_idle_cpumask(idle_mask);
+
+		/* All cores busy: fallback to domestic CCX DSQ in enqueue */
 		stat_add(OPTIMA_STAT_FALLBACK, 1);
 		return prev_cpu;
 	}
@@ -282,10 +318,22 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 	if (!tctx)
 		return;
 
-	u64 speed_scale = (tctx->core_type == CORE_TYPE_PERF) ? P_CORE_SPEED_SCALE : E_CORE_SPEED_SCALE;
+	s32 task_cpu = scx_bpf_task_cpu(p);
+	bool perf = is_perf_core(task_cpu);
+	u64 speed_scale = perf ? P_CORE_SPEED_SCALE : E_CORE_SPEED_SCALE;
 	u32 weight = tctx->weight ? tctx->weight : 100;
 
-	u64 slice_scaled = (default_slice_ns * 1024ULL) / ((u64)weight * speed_scale / 100ULL);
+	/*
+	 * Base scheduling quantum scaled by weight and core speed.
+	 * Default: 20ms base (SCX_SLICE_DFL) for high sustained throughput.
+	 * For fine-grained interactive waking tasks (avg_runtime < 1ms),
+	 * adaptively grant a 4ms responsive quantum to prevent queuing latency spikes.
+	 */
+	u64 base_ns = default_slice_ns;
+	if (tctx->avg_runtime < 1000000ULL && tctx->core_type == CORE_TYPE_SHARED)
+		base_ns = 4000000ULL;
+
+	u64 slice_scaled = (base_ns * 1024ULL) / ((u64)weight * speed_scale / 100ULL);
 	if (slice_scaled < MIN_SLICE_NS)
 		slice_scaled = MIN_SLICE_NS;
 	if (slice_scaled > MAX_SLICE_NS)
@@ -308,12 +356,13 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 	stat_add(OPTIMA_STAT_GREEDY_WSPT, 1);
 
 	u64 target_dsq;
-	if (tctx->core_type == CORE_TYPE_PERF)
+	if (tctx->core_type == CORE_TYPE_PERF) {
 		target_dsq = DSQ_PERF;
-	else if (tctx->core_type == CORE_TYPE_SHARED)
-		target_dsq = DSQ_SHARED;
-	else
+	} else if (tctx->core_type == CORE_TYPE_SHARED) {
+		target_dsq = perf ? DSQ_SHARED_P : DSQ_SHARED_E;
+	} else {
 		target_dsq = DSQ_EFF;
+	}
 
 	scx_bpf_dsq_insert_vtime(p, target_dsq, slice_scaled, tctx->deadline, enq_flags);
 }
@@ -332,23 +381,33 @@ void BPF_STRUCT_OPS(optima_dispatch, s32 cpu, struct task_struct *prev)
 			stat_add(OPTIMA_STAT_DSQ_PERF, 1);
 			return;
 		}
-		/* 2. P-cores consume from DSQ_SHARED (Redis, API Gateway, HFT, interactive I/O) */
-		if (scx_bpf_dsq_move_to_local(DSQ_SHARED, 0)) {
+		/* 2. P-cores consume from domestic CCX shared queue DSQ_SHARED_P */
+		if (scx_bpf_dsq_move_to_local(DSQ_SHARED_P, 0)) {
+			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+			return;
+		}
+		/* 3. P-cores steal across CCX from DSQ_SHARED_E if idle */
+		if (scx_bpf_dsq_move_to_local(DSQ_SHARED_E, 0)) {
 			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
 			return;
 		}
-		/* 3. P-cores steal from DSQ_EFF if completely idle */
+		/* 4. P-cores steal from batch DSQ_EFF if completely idle */
 		if (scx_bpf_dsq_move_to_local(DSQ_EFF, 0)) {
 			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
 			return;
 		}
 	} else {
-		/* 1. E-cores consume from DSQ_SHARED (Redis, API Gateway, HFT, interactive I/O) */
-		if (scx_bpf_dsq_move_to_local(DSQ_SHARED, 0)) {
+		/* 1. E-cores consume from domestic CCX shared queue DSQ_SHARED_E */
+		if (scx_bpf_dsq_move_to_local(DSQ_SHARED_E, 0)) {
 			stat_add(OPTIMA_STAT_DSQ_EFF, 1);
 			return;
 		}
-		/* 2. E-cores consume from throughput DSQ_EFF */
+		/* 2. E-cores steal across CCX from DSQ_SHARED_P if idle */
+		if (scx_bpf_dsq_move_to_local(DSQ_SHARED_P, 0)) {
+			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
+			return;
+		}
+		/* 3. E-cores consume from throughput DSQ_EFF */
 		if (scx_bpf_dsq_move_to_local(DSQ_EFF, 0)) {
 			stat_add(OPTIMA_STAT_DSQ_EFF, 1);
 			return;
@@ -422,7 +481,11 @@ s32 BPF_STRUCT_OPS_SLEEPABLE(optima_init)
 	if (ret)
 		return ret;
 
-	ret = scx_bpf_create_dsq(DSQ_SHARED, -1);
+	ret = scx_bpf_create_dsq(DSQ_SHARED_P, -1);
+	if (ret)
+		return ret;
+
+	ret = scx_bpf_create_dsq(DSQ_SHARED_E, -1);
 	if (ret)
 		return ret;
 
@@ -430,7 +493,8 @@ s32 BPF_STRUCT_OPS_SLEEPABLE(optima_init)
 	if (ret)
 		return ret;
 
-	bpf_printk("scx_optima: Initialized DSQ_PERF (%d), DSQ_SHARED (%d), DSQ_EFF (%d)", DSQ_PERF, DSQ_SHARED, DSQ_EFF);
+	bpf_printk("scx_optima: Initialized DSQ_PERF (%d), DSQ_SHARED_P (%d), DSQ_SHARED_E (%d), DSQ_EFF (%d)",
+		   DSQ_PERF, DSQ_SHARED_P, DSQ_SHARED_E, DSQ_EFF);
 	return 0;
 }
 

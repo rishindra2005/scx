@@ -31,8 +31,9 @@ enum consts {
 
 	/* DSQ Definitions */
 	DSQ_PERF		= 0,	/* High-density / deadline-critical on P-Cores only */
-	DSQ_SHARED		= 1,	/* High-throughput / fine-grained I/O for all cores */
-	DSQ_EFF			= 2,	/* Batch / background on E-Cores */
+	DSQ_SHARED_P		= 1,	/* High-throughput shared interactive on CCX 0 (P-cores) */
+	DSQ_SHARED_E		= 2,	/* High-throughput shared interactive on CCX 1 (E-cores) */
+	DSQ_EFF			= 3,	/* Batch / background on E-Cores */
 
 	/* Core Types for Heterogeneous Scheduling */
 	CORE_TYPE_PERF		= 0,	/* Zen 5 Big Core (5.16 GHz, 16MB L3) */
