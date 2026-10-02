@@ -95,18 +95,8 @@ static inline u32 evaluate_dp_partition(struct task_ctx *tctx)
 	}
 
 	/*
-	 * Stage 2: Heavy Sustained Batch Tasks
-	 * Long-running background compute tasks offloaded to E-cores to preserve
-	 * P-core responsiveness.
-	 */
-	if (tctx->avg_runtime >= 10000000ULL && tctx->density < dp_density_threshold) {
-		stat_add(OPTIMA_STAT_DP_ECORE, 1);
-		return CORE_TYPE_EFF;
-	}
-
-	/*
-	 * Stage 3: Fine-Grained Interactive, I/O-Bound & General Compute Workloads
-	 * Redis I/O, API Gateway, HFT, Hackbench, Compile, and general compute.
+	 * Stage 2: Fine-Grained Interactive, I/O-Bound & General Compute Workloads
+	 * Redis I/O, API Gateway, HFT, Hackbench, Compile, and Sysbench.
 	 * Dynamically load-balanced across domestic CCX queues (DSQ_SHARED_P, DSQ_SHARED_E).
 	 */
 	stat_add(OPTIMA_STAT_DP_SHARED, 1);
@@ -307,10 +297,8 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 	u64 target_dsq;
 	if (tctx->core_type == CORE_TYPE_PERF) {
 		target_dsq = DSQ_PERF;
-	} else if (tctx->core_type == CORE_TYPE_SHARED) {
-		target_dsq = perf ? DSQ_SHARED_P : DSQ_SHARED_E;
 	} else {
-		target_dsq = DSQ_EFF;
+		target_dsq = perf ? DSQ_SHARED_P : DSQ_SHARED_E;
 	}
 
 	scx_bpf_dsq_insert_vtime(p, target_dsq, slice_scaled, tctx->deadline, enq_flags);
