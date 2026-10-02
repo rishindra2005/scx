@@ -233,6 +233,11 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 					tctx->dispatch_local = true;
 					return this_cpu;
 				}
+				if (scx_bpf_dsq_nr_queued(SCX_DSQ_LOCAL_ON | this_cpu) == 0) {
+					stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+					tctx->dispatch_local = true;
+					return this_cpu;
+				}
 			}
 		}
 
@@ -333,7 +338,7 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 	if (tctx->avg_runtime < 1000000ULL && tctx->core_type == CORE_TYPE_SHARED)
 		base_ns = 4000000ULL;
 
-	u64 slice_scaled = (base_ns * 1024ULL) / ((u64)weight * speed_scale / 100ULL);
+	u64 slice_scaled = (base_ns * 10000ULL) / ((u64)weight * speed_scale);
 	if (slice_scaled < MIN_SLICE_NS)
 		slice_scaled = MIN_SLICE_NS;
 	if (slice_scaled > MAX_SLICE_NS)
