@@ -30,21 +30,23 @@ enum consts {
 	CACHELINE_SIZE		= 64,
 
 	/* DSQ Definitions */
-	DSQ_PERF		= 0,	/* High-density / deadline-critical on P-Cores */
-	DSQ_EFF			= 1,	/* High-throughput / batch on E-Cores */
+	DSQ_PERF		= 0,	/* High-density / deadline-critical on P-Cores only */
+	DSQ_SHARED		= 1,	/* High-throughput / fine-grained I/O for all cores */
+	DSQ_EFF			= 2,	/* Batch / background on E-Cores */
 
 	/* Core Types for Heterogeneous Scheduling */
 	CORE_TYPE_PERF		= 0,	/* Zen 5 Big Core (5.16 GHz, 16MB L3) */
-	CORE_TYPE_EFF		= 1,	/* Zen 5c Dense Core (3.29 GHz, 8MB L3) */
+	CORE_TYPE_SHARED	= 1,	/* Work-sharing between P-cores and E-cores */
+	CORE_TYPE_EFF		= 2,	/* Zen 5c Dense Core (3.29 GHz, 8MB L3) */
 
 	/* Heterogeneous Core Speed Scales (100 = 1.00x) */
 	P_CORE_SPEED_SCALE	= 157,	/* 5.16 GHz / 3.29 GHz = ~1.57x */
 	E_CORE_SPEED_SCALE	= 100,
 
 	/* Default Algorithmic Parameters */
-	DEFAULT_SLICE_NS	= 2000000ULL,	/* 2ms base time slice */
-	MIN_SLICE_NS		= 500000ULL,	/* 0.5ms minimum time slice */
-	MAX_SLICE_NS		= 10000000ULL,	/* 10ms maximum time slice */
+	DEFAULT_SLICE_NS	= 20000000ULL,	/* 20ms base time slice (SCX_SLICE_DFL) */
+	MIN_SLICE_NS		= 2000000ULL,	/* 2ms minimum time slice */
+	MAX_SLICE_NS		= 50000000ULL,	/* 50ms maximum time slice */
 
 	/* Real-Time Priority Inversion Threshold */
 	RT_WEIGHT_THRESHOLD	= 500,		/* High-priority task threshold */
@@ -55,7 +57,7 @@ enum consts {
  */
 struct task_ctx {
 	u32 weight;		/* Task weight w_i (derived from nice) */
-	u32 core_type;		/* Assigned core tier (CORE_TYPE_PERF or CORE_TYPE_EFF) */
+	u32 core_type;		/* Assigned core tier (CORE_TYPE_PERF, CORE_TYPE_SHARED, CORE_TYPE_EFF) */
 	u64 avg_runtime;	/* Exponential moving average runtime p_i (ns) */
 	u64 deadline;		/* Virtual deadline d_i (vtime-based EDF) */
 	u64 last_run_at;	/* Timestamp when task started last slice */
@@ -79,6 +81,7 @@ struct dp_tuning {
 enum stat_idx {
 	OPTIMA_STAT_GREEDY_WSPT,	/* Tasks ordered and dispatched via Greedy WSPT */
 	OPTIMA_STAT_DP_PCORE,		/* Tasks partitioned to P-core domain via DP */
+	OPTIMA_STAT_DP_SHARED,		/* Tasks partitioned to shared domain via DP */
 	OPTIMA_STAT_DP_ECORE,		/* Tasks partitioned to E-core domain via DP */
 	OPTIMA_STAT_BB_PRUNED,		/* B&B candidate branches safely pruned */
 	OPTIMA_STAT_BB_PREEMPT,		/* Priority inversions resolved via B&B preemption */

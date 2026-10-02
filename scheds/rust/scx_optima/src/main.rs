@@ -41,7 +41,7 @@ pub const SCHEDULER_NAME: &str = "scx_optima";
 )]
 struct Opts {
     /// Base time slice in microseconds.
-    #[clap(short = 's', long, default_value = "2000")]
+    #[clap(short = 's', long, default_value = "20000")]
     slice_us: u64,
 
     /// Task density threshold for Dynamic Programming P-core partitioning.
@@ -137,6 +137,7 @@ fn read_aggregated_stats(skel: &BpfSkel) -> Result<OptimaStats> {
             match idx {
                 bpf_intf::stat_idx_OPTIMA_STAT_GREEDY_WSPT => res.greedy_wspt = sum,
                 bpf_intf::stat_idx_OPTIMA_STAT_DP_PCORE => res.dp_pcore = sum,
+                bpf_intf::stat_idx_OPTIMA_STAT_DP_SHARED => res.dp_shared = sum,
                 bpf_intf::stat_idx_OPTIMA_STAT_DP_ECORE => res.dp_ecore = sum,
                 bpf_intf::stat_idx_OPTIMA_STAT_BB_PRUNED => res.bb_pruned = sum,
                 bpf_intf::stat_idx_OPTIMA_STAT_BB_PREEMPT => res.bb_preempt = sum,

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct OptimaStats {
     pub greedy_wspt: u64,
     pub dp_pcore: u64,
+    pub dp_shared: u64,
     pub dp_ecore: u64,
     pub bb_pruned: u64,
     pub bb_preempt: u64,
@@ -26,9 +27,10 @@ impl OptimaStats {
     pub fn format<W: Write>(&self, w: &mut W) -> Result<()> {
         writeln!(
             w,
-            "[scx_optima] WSPT: {:<8} | DP (P: {:<6} E: {:<6}) | B&B (Pruned: {:<6} Preempt: {:<4}) | Steal: {:<5}",
+            "[scx_optima] WSPT: {:<8} | DP (P: {:<5} S: {:<5} E: {:<5}) | B&B (Pruned: {:<5} Preempt: {:<3}) | Steal: {:<5}",
             self.greedy_wspt,
             self.dp_pcore,
+            self.dp_shared,
             self.dp_ecore,
             self.bb_pruned,
             self.bb_preempt,
@@ -41,6 +43,7 @@ impl OptimaStats {
         Self {
             greedy_wspt: self.greedy_wspt.saturating_sub(prev.greedy_wspt),
             dp_pcore: self.dp_pcore.saturating_sub(prev.dp_pcore),
+            dp_shared: self.dp_shared.saturating_sub(prev.dp_shared),
             dp_ecore: self.dp_ecore.saturating_sub(prev.dp_ecore),
             bb_pruned: self.bb_pruned.saturating_sub(prev.bb_pruned),
             bb_preempt: self.bb_preempt.saturating_sub(prev.bb_preempt),

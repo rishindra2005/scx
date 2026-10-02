@@ -84,23 +84,36 @@ static inline bool is_eff_core(s32 cpu)
 static inline u32 evaluate_dp_partition(struct task_ctx *tctx)
 {
 	u64 density = tctx->density;
-	s32 perf_queued = scx_bpf_dsq_nr_queued(DSQ_PERF);
 
 	/*
-	 * DP Recurrence Policy:
-	 * Interactive UI threads (runtime < 1ms or density >= threshold):
-	 * Assign to P-core cluster to guarantee zero UI stutter.
-	 * Only sustained batch threads (accumulated high avg_runtime) move to E-core cluster.
+	 * Stage 1: Real-Time & Performance-Critical Compute Tasks
+	 * Authoritative Game Simulation loop (~4ms) and RT Audio DSP require
+	 * the full 5.16 GHz Zen 5 execution engine and 16MB L3 cache.
+	 * Pinned strictly to P-cores to guarantee 0 dropped frames and 0 Xruns.
 	 */
-	if (tctx->avg_runtime < 1000000ULL || density >= dp_density_threshold) {
-		if (perf_queued < (s32)dp_pcore_capacity || tctx->avg_runtime < 500000ULL) {
-			stat_add(OPTIMA_STAT_DP_PCORE, 1);
-			return CORE_TYPE_PERF;
-		}
+	if (tctx->weight >= RT_WEIGHT_THRESHOLD || tctx->avg_runtime >= 1500000ULL) {
+		stat_add(OPTIMA_STAT_DP_PCORE, 1);
+		return CORE_TYPE_PERF;
 	}
 
-	stat_add(OPTIMA_STAT_DP_ECORE, 1);
-	return CORE_TYPE_EFF;
+	/*
+	 * Stage 2: Heavy Sustained Batch Tasks
+	 * Long-running background compute tasks offloaded to E-cores to preserve
+	 * P-core responsiveness.
+	 */
+	if (tctx->avg_runtime >= 10000000ULL && density < dp_density_threshold) {
+		stat_add(OPTIMA_STAT_DP_ECORE, 1);
+		return CORE_TYPE_EFF;
+	}
+
+	/*
+	 * Stage 3: Fine-Grained Interactive & I/O-Bound Workloads
+	 * Redis I/O and command parsing (< 500us), API Gateway Nginx/Uvicorn (< 500us),
+	 * and HFT packet processing.
+	 * Dynamically load-balanced across ALL 12 physical/logical cores via DSQ_SHARED.
+	 */
+	stat_add(OPTIMA_STAT_DP_SHARED, 1);
+	return CORE_TYPE_SHARED;
 }
 
 /*
@@ -167,23 +180,22 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 		return prev_cpu;
 	}
 
-	/* Fast-path 1: If previous CPU is idle, take it immediately!
-	 * Preserves L1/L2 cache and guarantees zero queue delay for active threads. */
-	if (scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
-		stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-		tctx->dispatch_local = true;
-		return prev_cpu;
-	}
-
 	/* 1. Dynamic Programming Partitioning: Determine target core tier */
 	u32 target_core_type = evaluate_dp_partition(tctx);
 	tctx->core_type = target_core_type;
 
-	const struct cpumask *idle_mask = scx_bpf_get_idle_cpumask();
-	s32 cpu;
+	/* CASE A: Performance-Critical (Game tick, RT Audio, high weight, avg_runtime >= 1.5ms) */
+	if (target_core_type == CORE_TYPE_PERF) {
+		/* Fast-path: If previous CPU was a P-core and is idle, keep it! */
+		if (is_perf_core(prev_cpu) && scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
+			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+			tctx->dispatch_local = true;
+			return prev_cpu;
+		}
 
-	/* Fast-path 2: If interactive (runtime < 1ms), grab ANY idle P-core first */
-	if (target_core_type == CORE_TYPE_PERF || tctx->avg_runtime < 1000000ULL) {
+		/* Look for ANY idle P-core */
+		const struct cpumask *idle_mask = scx_bpf_get_idle_cpumask();
+		s32 cpu;
 		bpf_for(cpu, 0, nr_cpu_ids) {
 			if (is_perf_core(cpu) && bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
 				if (scx_bpf_test_and_clear_cpu_idle(cpu)) {
@@ -194,24 +206,58 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 				}
 			}
 		}
-	}
+		scx_bpf_put_idle_cpumask(idle_mask);
 
-	/* 2. Check any idle core in the assigned target tier */
-	bpf_for(cpu, 0, nr_cpu_ids) {
-		bool in_tier = (target_core_type == CORE_TYPE_PERF) ? is_perf_core(cpu) : is_eff_core(cpu);
-		if (in_tier && bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
-			if (scx_bpf_test_and_clear_cpu_idle(cpu)) {
-				scx_bpf_put_idle_cpumask(idle_mask);
-				stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+		/* Branch & Bound: If RT task, preempt a P-core to resolve priority inversion */
+		if (tctx->weight >= RT_WEIGHT_THRESHOLD) {
+			s32 bb_cpu = branch_and_bound_preempt_target(p, tctx);
+			if (bb_cpu >= 0) {
 				tctx->dispatch_local = true;
-				return cpu;
+				return bb_cpu;
 			}
 		}
+
+		/* Fallback for P-core task: queue into DSQ_PERF (only P-cores service this!) */
+		stat_add(OPTIMA_STAT_FALLBACK, 1);
+		return prev_cpu;
 	}
 
-	/* 3. Global idle pickup: any idle CPU is better than waiting in queue! */
+	/* CASE B: Shared Interactive / I/O Tasks (Redis, Gateway, HFT, Hackbench) */
+	if (target_core_type == CORE_TYPE_SHARED) {
+		/* Fast-path 1: Previous CPU idle? Keep L1/L2 cache warmth! */
+		if (scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
+			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+			tctx->dispatch_local = true;
+			return prev_cpu;
+		}
+
+		/* Fast-path 2: Kernel SMT sibling, cache warmth & WAKE_SYNC idle selection */
+		bool is_idle = false;
+		s32 dfl_cpu = scx_bpf_select_cpu_dfl(p, prev_cpu, wake_flags, &is_idle);
+		if (is_idle) {
+			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+			tctx->dispatch_local = true;
+			return dfl_cpu;
+		}
+
+		/* Fast-path 3: O(1) kernel-level idle core selection across all allowed cores */
+		s32 idle_cpu = scx_bpf_pick_idle_cpu(p->cpus_ptr, 0);
+		if (idle_cpu >= 0) {
+			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+			tctx->dispatch_local = true;
+			return idle_cpu;
+		}
+
+		/* All cores busy: fallback to DSQ_SHARED */
+		stat_add(OPTIMA_STAT_FALLBACK, 1);
+		return prev_cpu;
+	}
+
+	/* CASE C: CORE_TYPE_EFF (Background batch tasks) */
+	const struct cpumask *idle_mask = scx_bpf_get_idle_cpumask();
+	s32 cpu;
 	bpf_for(cpu, 0, nr_cpu_ids) {
-		if (bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
+		if (is_eff_core(cpu) && bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
 			if (scx_bpf_test_and_clear_cpu_idle(cpu)) {
 				scx_bpf_put_idle_cpumask(idle_mask);
 				stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
@@ -222,17 +268,6 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 	}
 	scx_bpf_put_idle_cpumask(idle_mask);
 
-	/* 4. Branch & Bound Priority Inversion Preemption:
-	 * If waking task is high priority (RT), resolve priority inversion */
-	if (tctx->weight >= RT_WEIGHT_THRESHOLD) {
-		s32 bb_cpu = branch_and_bound_preempt_target(p, tctx);
-		if (bb_cpu >= 0) {
-			tctx->dispatch_local = true;
-			return bb_cpu;
-		}
-	}
-
-	/* 5. Fallback: Queue into domain DSQ */
 	stat_add(OPTIMA_STAT_FALLBACK, 1);
 	return prev_cpu;
 }
@@ -247,23 +282,6 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 	if (!tctx)
 		return;
 
-	if (tctx->dispatch_local) {
-		tctx->dispatch_local = false;
-		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, default_slice_ns, enq_flags);
-		return;
-	}
-
-	u64 now = scx_bpf_now();
-	u64 vtime = p->scx.dsq_vtime;
-	if (!vtime)
-		vtime = now;
-
-	/*
-	 * Greedy WSPT + EDF Deadline Computation:
-	 * Core acceleration factor: mu_P = 1.57, mu_E = 1.00
-	 * Effective processing rate: mu_c * w_i
-	 * Virtual deadline: d_i = vtime + slice / (w_i * mu_c)
-	 */
 	u64 speed_scale = (tctx->core_type == CORE_TYPE_PERF) ? P_CORE_SPEED_SCALE : E_CORE_SPEED_SCALE;
 	u32 weight = tctx->weight ? tctx->weight : 100;
 
@@ -273,17 +291,35 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 	if (slice_scaled > MAX_SLICE_NS)
 		slice_scaled = MAX_SLICE_NS;
 
+	if (tctx->dispatch_local) {
+		tctx->dispatch_local = false;
+		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, slice_scaled, enq_flags);
+		return;
+	}
+
+	u64 now = scx_bpf_now();
+	u64 vtime = p->scx.dsq_vtime;
+	if (!vtime)
+		vtime = now;
+
 	tctx->deadline = vtime + slice_scaled;
 	p->scx.dsq_vtime = tctx->deadline;
 
 	stat_add(OPTIMA_STAT_GREEDY_WSPT, 1);
 
-	u64 target_dsq = (tctx->core_type == CORE_TYPE_PERF) ? DSQ_PERF : DSQ_EFF;
+	u64 target_dsq;
+	if (tctx->core_type == CORE_TYPE_PERF)
+		target_dsq = DSQ_PERF;
+	else if (tctx->core_type == CORE_TYPE_SHARED)
+		target_dsq = DSQ_SHARED;
+	else
+		target_dsq = DSQ_EFF;
+
 	scx_bpf_dsq_insert_vtime(p, target_dsq, slice_scaled, tctx->deadline, enq_flags);
 }
 
 /*
- * dispatch: Work-Conserving Two-Tier Core Dispatch
+ * dispatch: Work-Conserving Heterogeneous Core Dispatch
  * Time Complexity: O(1)
  */
 void BPF_STRUCT_OPS(optima_dispatch, s32 cpu, struct task_struct *prev)
@@ -291,27 +327,34 @@ void BPF_STRUCT_OPS(optima_dispatch, s32 cpu, struct task_struct *prev)
 	bool perf = is_perf_core(cpu);
 
 	if (perf) {
-		/* P-cores consume from prioritized DSQ_PERF first */
+		/* 1. P-cores prioritize exclusive DSQ_PERF (Game tick, RT Audio, heavy compute) */
 		if (scx_bpf_dsq_move_to_local(DSQ_PERF, 0)) {
 			stat_add(OPTIMA_STAT_DSQ_PERF, 1);
 			return;
 		}
-		/* Work conservation: steal from DSQ_EFF if P-core DSQ is empty */
+		/* 2. P-cores consume from DSQ_SHARED (Redis, API Gateway, HFT, interactive I/O) */
+		if (scx_bpf_dsq_move_to_local(DSQ_SHARED, 0)) {
+			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
+			return;
+		}
+		/* 3. P-cores steal from DSQ_EFF if completely idle */
 		if (scx_bpf_dsq_move_to_local(DSQ_EFF, 0)) {
 			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
 			return;
 		}
 	} else {
-		/* E-cores consume from throughput DSQ_EFF first */
+		/* 1. E-cores consume from DSQ_SHARED (Redis, API Gateway, HFT, interactive I/O) */
+		if (scx_bpf_dsq_move_to_local(DSQ_SHARED, 0)) {
+			stat_add(OPTIMA_STAT_DSQ_EFF, 1);
+			return;
+		}
+		/* 2. E-cores consume from throughput DSQ_EFF */
 		if (scx_bpf_dsq_move_to_local(DSQ_EFF, 0)) {
 			stat_add(OPTIMA_STAT_DSQ_EFF, 1);
 			return;
 		}
-		/* If E-core is idle and DSQ_PERF has tasks waiting, assist immediately! */
-		if (scx_bpf_dsq_move_to_local(DSQ_PERF, 0)) {
-			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
-			return;
-		}
+		/* CRITICAL GUARANTEE: E-cores NEVER touch DSQ_PERF!
+		 * Heavy compute & game physics tick remain strictly isolated to 5.16 GHz Zen 5 P-cores! */
 	}
 }
 
@@ -361,7 +404,7 @@ s32 BPF_STRUCT_OPS(optima_init_task, struct task_struct *p, struct scx_init_task
 
 	tctx->weight = p->scx.weight ? p->scx.weight : 100;
 	tctx->avg_runtime = 100000ULL; /* Start optimistic: 100us */
-	tctx->core_type = CORE_TYPE_PERF; /* Default to P-core tier so UI threads start fast */
+	tctx->core_type = CORE_TYPE_SHARED; /* Default to shared so all cores can pick it up immediately */
 	tctx->density = 1000000ULL;
 	tctx->total_runtime = 0;
 	tctx->dispatch_local = false;
@@ -379,11 +422,15 @@ s32 BPF_STRUCT_OPS_SLEEPABLE(optima_init)
 	if (ret)
 		return ret;
 
+	ret = scx_bpf_create_dsq(DSQ_SHARED, -1);
+	if (ret)
+		return ret;
+
 	ret = scx_bpf_create_dsq(DSQ_EFF, -1);
 	if (ret)
 		return ret;
 
-	bpf_printk("scx_optima: Initialized DSQ_PERF (%d) and DSQ_EFF (%d)", DSQ_PERF, DSQ_EFF);
+	bpf_printk("scx_optima: Initialized DSQ_PERF (%d), DSQ_SHARED (%d), DSQ_EFF (%d)", DSQ_PERF, DSQ_SHARED, DSQ_EFF);
 	return 0;
 }
 
