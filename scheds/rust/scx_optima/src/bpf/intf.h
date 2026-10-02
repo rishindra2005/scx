@@ -45,9 +45,9 @@ enum consts {
 	E_CORE_SPEED_SCALE	= 100,
 
 	/* Default Algorithmic Parameters */
-	DEFAULT_SLICE_NS	= 20000000ULL,	/* 20ms base time slice (SCX_SLICE_DFL) */
-	MIN_SLICE_NS		= 2000000ULL,	/* 2ms minimum time slice */
-	MAX_SLICE_NS		= 50000000ULL,	/* 50ms maximum time slice */
+	DEFAULT_SLICE_NS	= 5000000ULL,	/* 5ms base time slice */
+	MIN_SLICE_NS		= 1000000ULL,	/* 1ms minimum time slice */
+	MAX_SLICE_NS		= 20000000ULL,	/* 20ms maximum time slice */
 
 	/* Real-Time Priority Inversion Threshold */
 	RT_WEIGHT_THRESHOLD	= 500,		/* High-priority task threshold */

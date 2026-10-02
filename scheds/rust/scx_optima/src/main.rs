@@ -41,7 +41,7 @@ pub const SCHEDULER_NAME: &str = "scx_optima";
 )]
 struct Opts {
     /// Base time slice in microseconds.
-    #[clap(short = 's', long, default_value = "20000")]
+    #[clap(short = 's', long, default_value = "5000")]
     slice_us: u64,
 
     /// Task density threshold for Dynamic Programming P-core partitioning.
