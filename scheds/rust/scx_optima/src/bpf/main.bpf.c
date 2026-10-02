@@ -69,7 +69,7 @@ static inline bool is_perf_core(s32 cpu)
 	return (p_core_mask[cpu / 64] & (1ULL << (cpu % 64))) != 0;
 }
 
-static inline bool is_eff_core(s32 cpu)
+static inline bool __maybe_unused is_eff_core(s32 cpu)
 {
 	if (cpu < 0 || cpu >= MAX_CPUS)
 		return false;
@@ -83,15 +83,13 @@ static inline bool is_eff_core(s32 cpu)
  */
 static inline u32 evaluate_dp_partition(struct task_ctx *tctx)
 {
-	u64 density = tctx->density;
-
 	/*
-	 * Stage 1: Real-Time & Performance-Critical Compute Tasks
-	 * Authoritative Game Simulation loop (~4ms) and RT Audio DSP require
+	 * Stage 1: Real-Time & High-Priority Tasks
+	 * Authoritative Game Simulation loop and RT Audio DSP require
 	 * the full 5.16 GHz Zen 5 execution engine and 16MB L3 cache.
 	 * Pinned strictly to P-cores to guarantee 0 dropped frames and 0 Xruns.
 	 */
-	if (tctx->weight >= RT_WEIGHT_THRESHOLD || tctx->avg_runtime >= 1500000ULL) {
+	if (tctx->weight >= RT_WEIGHT_THRESHOLD) {
 		stat_add(OPTIMA_STAT_DP_PCORE, 1);
 		return CORE_TYPE_PERF;
 	}
@@ -101,15 +99,14 @@ static inline u32 evaluate_dp_partition(struct task_ctx *tctx)
 	 * Long-running background compute tasks offloaded to E-cores to preserve
 	 * P-core responsiveness.
 	 */
-	if (tctx->avg_runtime >= 10000000ULL && density < dp_density_threshold) {
+	if (tctx->avg_runtime >= 10000000ULL && tctx->density < dp_density_threshold) {
 		stat_add(OPTIMA_STAT_DP_ECORE, 1);
 		return CORE_TYPE_EFF;
 	}
 
 	/*
-	 * Stage 3: Fine-Grained Interactive & I/O-Bound Workloads
-	 * Redis I/O and command parsing (< 500us), API Gateway Nginx/Uvicorn (< 500us),
-	 * and HFT packet processing.
+	 * Stage 3: Fine-Grained Interactive, I/O-Bound & General Compute Workloads
+	 * Redis I/O, API Gateway, HFT, Hackbench, Compile, and general compute.
 	 * Dynamically load-balanced across domestic CCX queues (DSQ_SHARED_P, DSQ_SHARED_E).
 	 */
 	stat_add(OPTIMA_STAT_DP_SHARED, 1);
@@ -222,93 +219,40 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 		return prev_cpu;
 	}
 
-	/* CASE B: Shared Interactive / I/O Tasks (Redis, Gateway, HFT, Hackbench, iperf3) */
-	if (target_core_type == CORE_TYPE_SHARED) {
-		/* Fast-path 1: SCX_WAKE_SYNC cache-warm handoff (e.g. SoftIRQ, iperf3, RPC) */
-		if (wake_flags & SCX_WAKE_SYNC) {
-			s32 this_cpu = bpf_get_smp_processor_id();
-			if (bpf_cpumask_test_cpu(this_cpu, p->cpus_ptr)) {
-				if (scx_bpf_test_and_clear_cpu_idle(this_cpu)) {
-					stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-					tctx->dispatch_local = true;
-					return this_cpu;
-				}
-				if (scx_bpf_dsq_nr_queued(SCX_DSQ_LOCAL_ON | this_cpu) == 0) {
-					stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-					tctx->dispatch_local = true;
-					return this_cpu;
-				}
-			}
-		}
+	/* CASE B & C: Shared Interactive, I/O Tasks, and General Compute */
+	/* Fast-path 1: Kernel default topology-aware idle selection (handles WAKE_SYNC, SMT, LLC) */
+	bool is_idle = false;
+	s32 dfl_cpu = scx_bpf_select_cpu_dfl(p, prev_cpu, wake_flags, &is_idle);
+	if (is_idle) {
+		stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+		tctx->dispatch_local = true;
+		return dfl_cpu;
+	}
 
-		/* Fast-path 2: Previous CPU idle? Keep L1/L2 cache warmth! */
-		if (bpf_cpumask_test_cpu(prev_cpu, p->cpus_ptr) && scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
-			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-			tctx->dispatch_local = true;
-			return prev_cpu;
-		}
-
-		/* Fast-path 3: Kernel SMT sibling, cache warmth & WAKE_SYNC idle selection */
-		bool is_idle = false;
-		s32 dfl_cpu = scx_bpf_select_cpu_dfl(p, prev_cpu, wake_flags, &is_idle);
-		if (is_idle) {
-			stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-			tctx->dispatch_local = true;
-			return dfl_cpu;
-		}
-
-		/* Fast-path 4: Look for an idle core within the SAME CCX domain first */
-		const struct cpumask *idle_mask = scx_bpf_get_idle_cpumask();
-		bool prev_is_perf = is_perf_core(prev_cpu);
-		s32 cpu;
-
-		/* 4a. Search domestic CCX domain */
-		bpf_for(cpu, 0, nr_cpu_ids) {
-			if (bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
-				if (prev_is_perf == is_perf_core(cpu)) {
-					if (scx_bpf_test_and_clear_cpu_idle(cpu)) {
-						scx_bpf_put_idle_cpumask(idle_mask);
-						stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-						tctx->dispatch_local = true;
-						return cpu;
-					}
-				}
-			}
-		}
-
-		/* 4b. If domestic CCX busy, search foreign CCX domain */
-		bpf_for(cpu, 0, nr_cpu_ids) {
-			if (bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
-				if (scx_bpf_test_and_clear_cpu_idle(cpu)) {
-					scx_bpf_put_idle_cpumask(idle_mask);
-					stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-					tctx->dispatch_local = true;
-					return cpu;
-				}
-			}
-		}
-		scx_bpf_put_idle_cpumask(idle_mask);
-
-		/* All cores busy: fallback to domestic CCX DSQ in enqueue */
-		stat_add(OPTIMA_STAT_FALLBACK, 1);
+	/* Fast-path 2: Previous CPU idle? Keep L1/L2 cache warmth! */
+	if (bpf_cpumask_test_cpu(prev_cpu, p->cpus_ptr) && scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
+		stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+		tctx->dispatch_local = true;
 		return prev_cpu;
 	}
 
-	/* CASE C: CORE_TYPE_EFF (Background batch tasks) */
-	const struct cpumask *idle_mask = scx_bpf_get_idle_cpumask();
-	s32 cpu;
-	bpf_for(cpu, 0, nr_cpu_ids) {
-		if (is_eff_core(cpu) && bpf_cpumask_test_cpu(cpu, p->cpus_ptr) && bpf_cpumask_test_cpu(cpu, idle_mask)) {
-			if (scx_bpf_test_and_clear_cpu_idle(cpu)) {
-				scx_bpf_put_idle_cpumask(idle_mask);
-				stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
-				tctx->dispatch_local = true;
-				return cpu;
-			}
-		}
+	/* Fast-path 3: O(1) hardware bitops idle core pick (wholly idle core first) */
+	s32 idle_cpu = scx_bpf_pick_idle_cpu(p->cpus_ptr, SCX_PICK_IDLE_CORE);
+	if (idle_cpu >= 0) {
+		stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+		tctx->dispatch_local = true;
+		return idle_cpu;
 	}
-	scx_bpf_put_idle_cpumask(idle_mask);
 
+	/* Fast-path 4: O(1) any idle logical CPU */
+	idle_cpu = scx_bpf_pick_idle_cpu(p->cpus_ptr, 0);
+	if (idle_cpu >= 0) {
+		stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
+		tctx->dispatch_local = true;
+		return idle_cpu;
+	}
+
+	/* All cores busy: fallback to domestic CCX DSQ in enqueue */
 	stat_add(OPTIMA_STAT_FALLBACK, 1);
 	return prev_cpu;
 }
@@ -407,18 +351,23 @@ void BPF_STRUCT_OPS(optima_dispatch, s32 cpu, struct task_struct *prev)
 			stat_add(OPTIMA_STAT_DSQ_EFF, 1);
 			return;
 		}
-		/* 2. E-cores steal across CCX from DSQ_SHARED_P if idle */
-		if (scx_bpf_dsq_move_to_local(DSQ_SHARED_P, 0)) {
-			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
-			return;
-		}
-		/* 3. E-cores consume from throughput DSQ_EFF */
+		/* 2. E-cores consume from throughput DSQ_EFF */
 		if (scx_bpf_dsq_move_to_local(DSQ_EFF, 0)) {
 			stat_add(OPTIMA_STAT_DSQ_EFF, 1);
 			return;
 		}
-		/* CRITICAL GUARANTEE: E-cores NEVER touch DSQ_PERF!
-		 * Heavy compute & game physics tick remain strictly isolated to 5.16 GHz Zen 5 P-cores! */
+		/* 3. E-cores steal across CCX from DSQ_SHARED_P if idle */
+		if (scx_bpf_dsq_move_to_local(DSQ_SHARED_P, 0)) {
+			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
+			return;
+		}
+		/* 4. Safety work-conserving overflow: if DSQ_PERF exceeds P-core capacity */
+		if (scx_bpf_dsq_nr_queued(DSQ_PERF) > dp_pcore_capacity) {
+			if (scx_bpf_dsq_move_to_local(DSQ_PERF, 0)) {
+				stat_add(OPTIMA_STAT_WORK_STEAL, 1);
+				return;
+			}
+		}
 	}
 }
 
