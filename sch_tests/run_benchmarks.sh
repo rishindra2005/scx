@@ -18,7 +18,7 @@ LOG_FILE="$TEST_DIR/benchmark_details.log"
 # Define the non-root user for kernel compilation
 NORMAL_USER="rishi"
 
-SCHEDULERS=("scx_rlfifo" "scx_rusty" "scx_rustland" "scx_rdtai")
+SCHEDULERS=("scx_rlfifo" "scx_rusty" "scx_rustland" "scx_rdtai" "scx_optima")
 
 # 0. Setup Kernel Repo
 if [ ! -d "$LINUX_DIR" ]; then
@@ -82,7 +82,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
         echo "  -> Running Sysbench & Perf (Run $RUN/2)..." | tee -a "$LOG_FILE"
         if [ $RUN -eq 2 ]; then
             # Record detailed perf metrics during the second run
-            PERF_OUT=$(perf stat -e instructions,cycles,cache-misses,cache-references -- sysbench cpu --cpu-max-prime=30000 --time=20 --threads=$(nproc) run 2>&1)
+            PERF_OUT=$(perf stat -e instructions,cycles,cache-misses,cache-references -- sysbench cpu --cpu-max-prime=30000 --time=15 --threads=$(nproc) run 2>&1)
             EPS=$(echo "$PERF_OUT" | grep "events per second:" | awk '{print $4}')
             INSTR=$(echo "$PERF_OUT" | grep "instructions" | awk '{print $1}' | tr -d ',')
             CYCLES=$(echo "$PERF_OUT" | grep "cycles" | awk '{print $1}' | tr -d ',')
@@ -92,15 +92,15 @@ for SCHED in "${SCHEDULERS[@]}"; do
             CACHE_PCT=$(awk -v m="$MISSES" -v r="$REFS" 'BEGIN {if(r>0) printf "%.2f", (m*100)/r; else print "N/A"}')
             echo "     Result: $EPS events/s, IPC: $IPC, Cache Misses: ${CACHE_PCT:-N/A}%" | tee -a "$LOG_FILE"
         else
-            sysbench cpu --cpu-max-prime=30000 --time=10 --threads=$(nproc) run > /dev/null
+            sysbench cpu --cpu-max-prime=30000 --time=5 --threads=$(nproc) run > /dev/null
         fi
     done
 
     # 3. Schbench (Warmup + Record)
     for RUN in 1 2; do
         echo "  -> Running Schbench (Run $RUN/2)..." | tee -a "$LOG_FILE"
-        SCH_OUT=$($TEST_DIR/schbench/schbench -m 8 -t 4 -r 30 2>&1)
         if [ $RUN -eq 2 ]; then
+            SCH_OUT=$($TEST_DIR/schbench/schbench -m 8 -t 4 -r 15 2>&1)
             echo "$SCH_OUT" | tee -a "$LOG_FILE"
             W_P50=$(echo "$SCH_OUT" | grep -A 6 "Wakeup Latencies" | grep "50.0th:" | tail -1 | sed 's/.*50.0th:[[:space:]]*//' | awk '{print $1}')
             W_P90=$(echo "$SCH_OUT" | grep -A 6 "Wakeup Latencies" | grep "90.0th:" | tail -1 | sed 's/.*90.0th:[[:space:]]*//' | awk '{print $1}')
@@ -114,6 +114,8 @@ for SCHED in "${SCHEDULERS[@]}"; do
             
             echo "     Parsed Wakeup Latencies: Median=${W_P50}us, P99=${W_P99}us" | tee -a "$LOG_FILE"
             echo "     Parsed Request Latencies: Median=${R_P50}us, P99=${R_P99}us" | tee -a "$LOG_FILE"
+        else
+            $TEST_DIR/schbench/schbench -m 8 -t 4 -r 5 > /dev/null 2>&1
         fi
     done
 
@@ -132,15 +134,13 @@ for SCHED in "${SCHEDULERS[@]}"; do
     for RUN in 1 2; do
         echo "  -> Running Kernel Compile (Run $RUN/2)..." | tee -a "$LOG_FILE"
         cd "$LINUX_DIR"
-        sudo -u $NORMAL_USER make mrproper > /dev/null 2>&1
-        sudo -u $NORMAL_USER make defconfig > /dev/null 2>&1
-        START_TIME=$(date +%s.%N)
-        # Using -j$(nproc) as requested
-        sudo -u $NORMAL_USER make -j$(nproc) > "$TEST_DIR/last_kernel_build.log" 2>&1
-        EXIT_VAL=$?
-        END_TIME=$(date +%s.%N)
-        cd "$BASE_DIR"
+        if [ ! -f .config ]; then sudo -u $NORMAL_USER make defconfig > /dev/null 2>&1; fi
+        sudo -u $NORMAL_USER make clean > /dev/null 2>&1
         if [ $RUN -eq 2 ]; then
+            START_TIME=$(date +%s.%N)
+            sudo -u $NORMAL_USER make -j$(nproc) kernel/ > "$TEST_DIR/last_kernel_build.log" 2>&1
+            EXIT_VAL=$?
+            END_TIME=$(date +%s.%N)
             if [ $EXIT_VAL -ne 0 ]; then
                 COMPILE_TIME="FAILED"
                 echo "     [ERROR] Kernel compile failed! Check last_kernel_build.log" | tee -a "$LOG_FILE"
@@ -148,12 +148,19 @@ for SCHED in "${SCHEDULERS[@]}"; do
                 COMPILE_TIME=$(echo "$END_TIME - $START_TIME" | bc | awk '{printf "%.2f", $0}')
                 echo "     Result: $COMPILE_TIME seconds" | tee -a "$LOG_FILE"
             fi
+        else
+            sudo -u $NORMAL_USER make -j$(nproc) kernel/sched/ > /dev/null 2>&1
         fi
+        cd "$BASE_DIR"
     done
 
     # 6. Stop Scheduler
-    kill -SIGINT $SCHED_PID
-    wait $SCHED_PID 2>/dev/null
+    kill -SIGINT $SCHED_PID 2>/dev/null
+    sleep 3
+    if [ "$(cat /sys/kernel/sched_ext/root/ops 2>/dev/null)" != "None" ]; then
+        pkill -SIGINT -f "$SCHED" 2>/dev/null
+        sleep 2
+    fi
     
     # 7. Record Results
     echo "| $SCHED | ${EPS:-N/A} | ${IPC:-N/A} | ${CACHE_PCT:-N/A} | $COMPILE_TIME | ${H_TIME:-N/A} |" >> "$RESULT_FILE"

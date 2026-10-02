@@ -15,7 +15,7 @@ SCH_DIR="$BASE_DIR/target/release"
 RESULT_FILE="$TEST_DIR/latency_report.md"
 LOG_FILE="$TEST_DIR/latency_details.log"
 
-SCHEDULERS=("scx_rlfifo" "scx_rusty" "scx_rustland" "scx_rdtai")
+SCHEDULERS=("scx_rlfifo" "scx_rusty" "scx_rustland" "scx_rdtai" "scx_optima")
 
 # Ensure dependencies
 if ! command -v jq &> /dev/null; then apt-get install -y jq; fi
@@ -30,6 +30,21 @@ get_cyclictest_percentile() {
     local target=$(echo "$p * $total / 100" | bc)
     awk -v target="$target" '{count+=$2; if (count >= target) {print $1 + 0; exit}}' "$file"
 }
+
+stop_scheduler() {
+    local pid=$1
+    local name=$2
+    kill -SIGINT $pid 2>/dev/null
+    for i in {1..20}; do
+        if [ "$(cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo None)" = "None" ]; then return 0; fi
+        sleep 0.2
+    done
+    pkill -SIGINT -f "$name" 2>/dev/null
+    sleep 1
+}
+
+pkill -SIGINT -f scx_ 2>/dev/null
+sleep 1
 
 # Setup Report Header
 cat <<EOF > "$RESULT_FILE"
@@ -65,9 +80,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
     H2=$(hackbench -g 20 -l 1000 | grep "Time:" | awk '{print $2}')
     echo "| $SCHED | $H1 | $H2 |" >> "$RESULT_FILE"
 
-    kill -SIGINT $SCHED_PID
-    wait $SCHED_PID 2>/dev/null
-    sleep 2
+    stop_scheduler $SCHED_PID $SCHED
 done
 
 # --- 2. Redis Latency ---
@@ -105,9 +118,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
     
     echo "| $SCHED | $G_P50 | $G_P95 | $G_P99 | $S_P50 | $S_P95 | $S_P99 |" >> "$RESULT_FILE"
 
-    kill -SIGINT $SCHED_PID
-    wait $SCHED_PID 2>/dev/null
-    sleep 2
+    stop_scheduler $SCHED_PID $SCHED
 done
 
 killall redis-server 2>/dev/null
@@ -145,9 +156,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
     echo "| $SCHED | $AVG_VAL | $P50 | $P90 | $P99 | $MAX_VAL |" >> "$RESULT_FILE"
 
     rm "$HIST_FILE" "$CLEAN_HIST"
-    kill -SIGINT $SCHED_PID
-    wait $SCHED_PID 2>/dev/null
-    sleep 2
+    stop_scheduler $SCHED_PID $SCHED
 done
 
 # --- 4. Network Throughput (iperf3 local) ---
@@ -176,9 +185,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
     echo "| $SCHED | $GBPS |" >> "$RESULT_FILE"
 
     killall iperf3 2>/dev/null
-    kill -SIGINT $SCHED_PID
-    wait $SCHED_PID 2>/dev/null
-    sleep 2
+    stop_scheduler $SCHED_PID $SCHED
 done
 
 echo "Benchmarking Complete!" | tee -a "$LOG_FILE"

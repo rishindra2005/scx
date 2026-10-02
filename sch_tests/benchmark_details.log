@@ -1342,3 +1342,286 @@ Time: 1.244
      [ERROR] Kernel compile failed! Check last_kernel_build.log
 --------------------------------------------------------
 Benchmarking Complete!
+Starting Benchmarking Suite (Warmup + Recording Runs)...
+--------------------------------------------------------
+Testing Scheduler: scx_rlfifo
+  -> Running Sysbench & Perf (Run 1/2)...
+  -> Running Sysbench & Perf (Run 2/2)...
+     Result: 6333.21 events/s, IPC: 0.83, Cache Misses: 17.81%
+  -> Running Schbench (Run 1/2)...
+  -> Running Schbench (Run 2/2)...
+Wakeup Latencies percentiles (usec) runtime 10 (s) (14023 total samples)
+	  50.0th: 987        (4403 samples)
+	  90.0th: 1706       (5409 samples)
+	* 99.0th: 2052       (1262 samples)
+	  99.9th: 3004       (127 samples)
+	  min=2, max=6996
+Request Latencies percentiles (usec) runtime 10 (s) (13995 total samples)
+	  50.0th: 17184      (4191 samples)
+	  90.0th: 35776      (5585 samples)
+	* 99.0th: 63040      (1254 samples)
+	  99.9th: 91008      (126 samples)
+	  min=7463, max=146729
+RPS percentiles (requests) runtime 10 (s) (11 total samples)
+	  20.0th: 1394       (3 samples)
+	* 50.0th: 1402       (4 samples)
+	  90.0th: 1406       (3 samples)
+	  min=1338, max=1422
+sched delay: message 768 (usec) worker 824 (usec)
+current rps: 1403.20
+Wakeup Latencies percentiles (usec) runtime 15 (s) (21064 total samples)
+	  50.0th: 987        (6716 samples)
+	  90.0th: 1670       (8013 samples)
+	* 99.0th: 2068       (1896 samples)
+	  99.9th: 3020       (185 samples)
+	  min=1, max=7968
+Request Latencies percentiles (usec) runtime 15 (s) (21067 total samples)
+	  50.0th: 17184      (6321 samples)
+	  90.0th: 35776      (8426 samples)
+	* 99.0th: 62528      (1886 samples)
+	  99.9th: 89472      (187 samples)
+	  min=7463, max=146729
+RPS percentiles (requests) runtime 15 (s) (16 total samples)
+	  20.0th: 1394       (4 samples)
+	* 50.0th: 1402       (6 samples)
+	  90.0th: 1422       (6 samples)
+	  min=1338, max=1422
+average rps: 1404.47
+sched delay: message 0 (usec) worker 0 (usec)
+     Parsed Wakeup Latencies: Median=987us, P99=2068us
+     Parsed Request Latencies: Median=17184us, P99=62528us
+  -> Running Hackbench (Run 1/2)...
+  -> Running Hackbench (Run 2/2)...
+Running in process mode with 20 groups using 40 file descriptors each (== 800 tasks)
+Each sender will pass 1000 messages of 100 bytes
+Time: 1.000
+     Result: 1.000 seconds
+  -> Running Kernel Compile (Run 1/2)...
+  -> Running Kernel Compile (Run 2/2)...
+     Result: 15.65 seconds
+--------------------------------------------------------
+Testing Scheduler: scx_rusty
+  -> Running Sysbench & Perf (Run 1/2)...
+  -> Running Sysbench & Perf (Run 2/2)...
+     Result: 6317.62 events/s, IPC: 0.84, Cache Misses: 22.88%
+  -> Running Schbench (Run 1/2)...
+  -> Running Schbench (Run 2/2)...
+Wakeup Latencies percentiles (usec) runtime 10 (s) (14657 total samples)
+	  50.0th: 667        (4394 samples)
+	  90.0th: 2002       (5973 samples)
+	* 99.0th: 7000       (1200 samples)
+	  99.9th: 16800      (133 samples)
+	  min=1, max=38126
+Request Latencies percentiles (usec) runtime 10 (s) (14630 total samples)
+	  50.0th: 15472      (4369 samples)
+	  90.0th: 35648      (5837 samples)
+	* 99.0th: 79232      (1313 samples)
+	  99.9th: 133376     (130 samples)
+	  min=7278, max=201975
+RPS percentiles (requests) runtime 10 (s) (11 total samples)
+	  20.0th: 1422       (3 samples)
+	* 50.0th: 1442       (3 samples)
+	  90.0th: 1506       (4 samples)
+	  min=1411, max=1518
+sched delay: message 323 (usec) worker 775 (usec)
+current rps: 1518.98
+Wakeup Latencies percentiles (usec) runtime 15 (s) (21824 total samples)
+	  50.0th: 691        (6523 samples)
+	  90.0th: 2002       (8997 samples)
+	* 99.0th: 6184       (1682 samples)
+	  99.9th: 16272      (197 samples)
+	  min=1, max=38126
+Request Latencies percentiles (usec) runtime 15 (s) (21825 total samples)
+	  50.0th: 15664      (6548 samples)
+	  90.0th: 36160      (8734 samples)
+	* 99.0th: 78720      (1939 samples)
+	  99.9th: 135424     (196 samples)
+	  min=7011, max=222660
+RPS percentiles (requests) runtime 15 (s) (16 total samples)
+	  20.0th: 1414       (4 samples)
+	* 50.0th: 1434       (5 samples)
+	  90.0th: 1506       (6 samples)
+	  min=1398, max=1518
+average rps: 1455.00
+sched delay: message 0 (usec) worker 0 (usec)
+     Parsed Wakeup Latencies: Median=691us, P99=6184us
+     Parsed Request Latencies: Median=15664us, P99=78720us
+  -> Running Hackbench (Run 1/2)...
+  -> Running Hackbench (Run 2/2)...
+Running in process mode with 20 groups using 40 file descriptors each (== 800 tasks)
+Each sender will pass 1000 messages of 100 bytes
+Time: 1.710
+     Result: 1.710 seconds
+  -> Running Kernel Compile (Run 1/2)...
+  -> Running Kernel Compile (Run 2/2)...
+     Result: 18.48 seconds
+--------------------------------------------------------
+Testing Scheduler: scx_rustland
+  -> Running Sysbench & Perf (Run 1/2)...
+  -> Running Sysbench & Perf (Run 2/2)...
+     Result: 6286.68 events/s, IPC: 0.83, Cache Misses: 19.41%
+  -> Running Schbench (Run 1/2)...
+  -> Running Schbench (Run 2/2)...
+Wakeup Latencies percentiles (usec) runtime 10 (s) (15911 total samples)
+	  50.0th: 1278       (4780 samples)
+	  90.0th: 2356       (6353 samples)
+	* 99.0th: 3692       (1425 samples)
+	  99.9th: 4792       (144 samples)
+	  min=1, max=6455
+Request Latencies percentiles (usec) runtime 10 (s) (15883 total samples)
+	  50.0th: 15056      (4768 samples)
+	  90.0th: 26976      (6337 samples)
+	* 99.0th: 49856      (1425 samples)
+	  99.9th: 70784      (141 samples)
+	  min=7295, max=99399
+RPS percentiles (requests) runtime 10 (s) (11 total samples)
+	  20.0th: 1574       (3 samples)
+	* 50.0th: 1582       (4 samples)
+	  90.0th: 1606       (3 samples)
+	  min=1556, max=1609
+sched delay: message 1272 (usec) worker 1523 (usec)
+current rps: 1580.78
+Wakeup Latencies percentiles (usec) runtime 15 (s) (23880 total samples)
+	  50.0th: 1282       (7165 samples)
+	  90.0th: 2364       (9554 samples)
+	* 99.0th: 3756       (2130 samples)
+	  99.9th: 4824       (214 samples)
+	  min=1, max=6455
+Request Latencies percentiles (usec) runtime 15 (s) (23881 total samples)
+	  50.0th: 15024      (7187 samples)
+	  90.0th: 26848      (9524 samples)
+	* 99.0th: 49856      (2148 samples)
+	  99.9th: 72064      (211 samples)
+	  min=7295, max=99399
+RPS percentiles (requests) runtime 15 (s) (16 total samples)
+	  20.0th: 1574       (4 samples)
+	* 50.0th: 1582       (5 samples)
+	  90.0th: 1610       (6 samples)
+	  min=1556, max=1612
+average rps: 1592.07
+sched delay: message 0 (usec) worker 0 (usec)
+     Parsed Wakeup Latencies: Median=1282us, P99=3756us
+     Parsed Request Latencies: Median=15024us, P99=49856us
+  -> Running Hackbench (Run 1/2)...
+  -> Running Hackbench (Run 2/2)...
+Running in process mode with 20 groups using 40 file descriptors each (== 800 tasks)
+Each sender will pass 1000 messages of 100 bytes
+Time: 1.005
+     Result: 1.005 seconds
+  -> Running Kernel Compile (Run 1/2)...
+  -> Running Kernel Compile (Run 2/2)...
+     Result: 16.50 seconds
+--------------------------------------------------------
+Testing Scheduler: scx_rdtai
+  -> Running Sysbench & Perf (Run 1/2)...
+  -> Running Sysbench & Perf (Run 2/2)...
+     Result: 6339.78 events/s, IPC: 0.83, Cache Misses: 18.07%
+  -> Running Schbench (Run 1/2)...
+  -> Running Schbench (Run 2/2)...
+Wakeup Latencies percentiles (usec) runtime 10 (s) (19028 total samples)
+	  50.0th: 248        (5528 samples)
+	  90.0th: 5160       (7615 samples)
+	* 99.0th: 12752      (1705 samples)
+	  99.9th: 23968      (170 samples)
+	  min=1, max=40760
+Request Latencies percentiles (usec) runtime 10 (s) (19003 total samples)
+	  50.0th: 13360      (5412 samples)
+	  90.0th: 18848      (7558 samples)
+	* 99.0th: 27616      (1693 samples)
+	  99.9th: 39104      (171 samples)
+	  min=8732, max=54737
+RPS percentiles (requests) runtime 10 (s) (11 total samples)
+	  20.0th: 1886       (3 samples)
+	* 50.0th: 1898       (4 samples)
+	  90.0th: 1910       (3 samples)
+	  min=1880, max=1914
+sched delay: message 574 (usec) worker 2105 (usec)
+current rps: 1914.33
+Wakeup Latencies percentiles (usec) runtime 15 (s) (28585 total samples)
+	  50.0th: 245        (8133 samples)
+	  90.0th: 5080       (11434 samples)
+	* 99.0th: 12688      (2568 samples)
+	  99.9th: 23840      (256 samples)
+	  min=1, max=40760
+Request Latencies percentiles (usec) runtime 15 (s) (28586 total samples)
+	  50.0th: 13360      (8251 samples)
+	  90.0th: 18912      (11365 samples)
+	* 99.0th: 27872      (2556 samples)
+	  99.9th: 39488      (256 samples)
+	  min=8732, max=54737
+RPS percentiles (requests) runtime 15 (s) (16 total samples)
+	  20.0th: 1894       (4 samples)
+	* 50.0th: 1898       (4 samples)
+	  90.0th: 1914       (8 samples)
+	  min=1880, max=1914
+average rps: 1905.73
+sched delay: message 0 (usec) worker 0 (usec)
+     Parsed Wakeup Latencies: Median=245us, P99=12688us
+     Parsed Request Latencies: Median=13360us, P99=27872us
+  -> Running Hackbench (Run 1/2)...
+  -> Running Hackbench (Run 2/2)...
+Running in process mode with 20 groups using 40 file descriptors each (== 800 tasks)
+Each sender will pass 1000 messages of 100 bytes
+Time: 1.641
+     Result: 1.641 seconds
+  -> Running Kernel Compile (Run 1/2)...
+  -> Running Kernel Compile (Run 2/2)...
+     Result: 16.90 seconds
+--------------------------------------------------------
+Testing Scheduler: scx_optima
+  -> Running Sysbench & Perf (Run 1/2)...
+  -> Running Sysbench & Perf (Run 2/2)...
+     Result: 6394.51 events/s, IPC: 0.80, Cache Misses: 11.94%
+  -> Running Schbench (Run 1/2)...
+  -> Running Schbench (Run 2/2)...
+Wakeup Latencies percentiles (usec) runtime 10 (s) (18166 total samples)
+	  50.0th: 60         (5352 samples)
+	  90.0th: 1374       (7229 samples)
+	* 99.0th: 4728       (1629 samples)
+	  99.9th: 8024       (163 samples)
+	  min=1, max=10274
+Request Latencies percentiles (usec) runtime 10 (s) (18137 total samples)
+	  50.0th: 15248      (5441 samples)
+	  90.0th: 23392      (7271 samples)
+	* 99.0th: 32736      (1617 samples)
+	  99.9th: 58688      (161 samples)
+	  min=7239, max=115187
+RPS percentiles (requests) runtime 10 (s) (11 total samples)
+	  20.0th: 1794       (3 samples)
+	* 50.0th: 1802       (3 samples)
+	  90.0th: 1834       (5 samples)
+	  min=1786, max=1834
+sched delay: message 527 (usec) worker 1264 (usec)
+current rps: 1799.12
+Wakeup Latencies percentiles (usec) runtime 15 (s) (27279 total samples)
+	  50.0th: 59         (7922 samples)
+	  90.0th: 1366       (10876 samples)
+	* 99.0th: 4760       (2456 samples)
+	  99.9th: 7976       (241 samples)
+	  min=1, max=10274
+Request Latencies percentiles (usec) runtime 15 (s) (27280 total samples)
+	  50.0th: 15216      (8182 samples)
+	  90.0th: 23392      (10878 samples)
+	* 99.0th: 32672      (2419 samples)
+	  99.9th: 58688      (245 samples)
+	  min=7033, max=115187
+RPS percentiles (requests) runtime 15 (s) (16 total samples)
+	  20.0th: 1798       (5 samples)
+	* 50.0th: 1814       (4 samples)
+	  90.0th: 1834       (7 samples)
+	  min=1786, max=1834
+average rps: 1818.67
+sched delay: message 0 (usec) worker 0 (usec)
+     Parsed Wakeup Latencies: Median=59us, P99=4760us
+     Parsed Request Latencies: Median=15216us, P99=32672us
+  -> Running Hackbench (Run 1/2)...
+  -> Running Hackbench (Run 2/2)...
+Running in process mode with 20 groups using 40 file descriptors each (== 800 tasks)
+Each sender will pass 1000 messages of 100 bytes
+Time: 0.956
+     Result: 0.956 seconds
+  -> Running Kernel Compile (Run 1/2)...
+  -> Running Kernel Compile (Run 2/2)...
+     Result: 16.29 seconds
+--------------------------------------------------------
+Benchmarking Complete!

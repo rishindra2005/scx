@@ -1,81 +1,70 @@
-10:26:20 [INFO] Running scx_rdtai (build ID: 1.1.3 x86_64-unknown-linux-gnu)
-10:26:20 [INFO] kernel features: arena_fetch_bitops=no prog_stream_fds=no
-10:26:20 [INFO] NODE[00] mask= ffffff
-10:26:20 [INFO]  DOM[00] mask= 00f00f
-10:26:20 [INFO]  DOM[01] mask= ff0ff0
-10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_attach not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] Running scx_rdtai (build ID: 1.1.3 x86_64-unknown-linux-gnu)
+15:16:30 [INFO] kernel features: arena_fetch_bitops=no prog_stream_fds=no
+15:16:30 [INFO] NODE[00] mask= ffffff
+15:16:30 [INFO]  DOM[00] mask= 00f00f
+15:16:30 [INFO]  DOM[01] mask= ff0ff0
+15:16:30 [INFO] libbpf: struct_ops rdtai: member sub_attach not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_detach not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] libbpf: struct_ops rdtai: member sub_detach not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_caps_updated not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] libbpf: struct_ops rdtai: member sub_caps_updated not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_ecaps_updated not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] libbpf: struct_ops rdtai: member sub_ecaps_updated not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] libbpf: struct_ops rdtai: member init_cids not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] libbpf: struct_ops rdtai: member init_cids not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] libbpf: struct_ops rdtai: member cid_shard_size not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] libbpf: struct_ops rdtai: member cid_shard_size not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] libbpf: struct_ops rdtai: member rescue_bandwidth_ppt not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] libbpf: struct_ops rdtai: member rescue_bandwidth_ppt not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] libbpf: struct_ops rdtai: member rescue_quantum_us not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] libbpf: struct_ops rdtai: member rescue_quantum_us not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] libbpf: struct_ops rdtai: member sub_cgroup_id not found in kernel, skipping it as it's set to zero
+15:16:30 [INFO] libbpf: struct_ops rdtai: member sub_cgroup_id not found in kernel, skipping it as it's set to zero
 
-10:26:20 [INFO] Default RL Q-Table initialized and pushed to kernel!
-10:26:20 [WARN] libbpf: map 'rdtai': BPF map skeleton link is uninitialized
+15:16:30 [INFO] Default RL Q-Table initialized and pushed to kernel!
+15:16:30 [WARN] libbpf: map 'rdtai': BPF map skeleton link is uninitialized
 
-10:26:20 [INFO] Rusty scheduler started! Run `scx_rdtai --monitor` for metrics.
-10:26:20 [INFO] RL Q-Table successfully loaded from /var/lib/scx_rdtai_qtable.bin
-10:26:22 [INFO] RL Optimizer: Processed 318 state-action rewards and updated Q-Table.
-10:26:24 [INFO] RL Optimizer: Processed 232 state-action rewards and updated Q-Table.
-10:26:26 [INFO] RL Optimizer: Processed 253 state-action rewards and updated Q-Table.
-10:26:28 [INFO] RL Optimizer: Processed 264 state-action rewards and updated Q-Table.
-10:26:30 [INFO] RL Optimizer: Processed 285 state-action rewards and updated Q-Table.
-10:26:32 [INFO] RL Optimizer: Processed 196 state-action rewards and updated Q-Table.
-10:26:34 [INFO] RL Optimizer: Processed 239 state-action rewards and updated Q-Table.
-10:26:36 [INFO] RL Optimizer: Processed 225 state-action rewards and updated Q-Table.
-10:26:38 [INFO] RL Optimizer: Processed 241 state-action rewards and updated Q-Table.
-10:26:40 [INFO] RL Optimizer: Processed 192 state-action rewards and updated Q-Table.
-10:26:42 [INFO] RL Optimizer: Processed 172 state-action rewards and updated Q-Table.
-10:26:44 [INFO] RL Optimizer: Processed 161 state-action rewards and updated Q-Table.
-10:26:46 [INFO] RL Optimizer: Processed 143 state-action rewards and updated Q-Table.
-10:26:48 [INFO] RL Optimizer: Processed 159 state-action rewards and updated Q-Table.
-10:26:50 [INFO] RL Optimizer: Processed 203 state-action rewards and updated Q-Table.
-10:26:52 [INFO] RL Optimizer: Processed 166 state-action rewards and updated Q-Table.
-10:26:54 [INFO] RL Optimizer: Processed 185 state-action rewards and updated Q-Table.
-10:26:56 [INFO] RL Optimizer: Processed 388 state-action rewards and updated Q-Table.
-10:26:58 [INFO] RL Optimizer: Processed 425 state-action rewards and updated Q-Table.
-10:27:00 [INFO] RL Optimizer: Processed 431 state-action rewards and updated Q-Table.
-10:27:02 [INFO] RL Optimizer: Processed 452 state-action rewards and updated Q-Table.
-10:27:04 [INFO] RL Optimizer: Processed 432 state-action rewards and updated Q-Table.
-10:27:06 [INFO] RL Optimizer: Processed 428 state-action rewards and updated Q-Table.
-10:27:08 [INFO] RL Optimizer: Processed 487 state-action rewards and updated Q-Table.
-10:27:10 [INFO] RL Optimizer: Processed 532 state-action rewards and updated Q-Table.
-10:27:12 [INFO] RL Optimizer: Processed 474 state-action rewards and updated Q-Table.
-10:27:14 [INFO] RL Optimizer: Processed 487 state-action rewards and updated Q-Table.
-10:27:16 [INFO] RL Optimizer: Processed 454 state-action rewards and updated Q-Table.
-10:27:18 [INFO] RL Optimizer: Processed 398 state-action rewards and updated Q-Table.
-10:27:20 [INFO] RL Optimizer: Processed 411 state-action rewards and updated Q-Table.
-10:27:22 [INFO] RL Optimizer: Processed 397 state-action rewards and updated Q-Table.
-10:27:24 [INFO] RL Optimizer: Processed 422 state-action rewards and updated Q-Table.
-10:27:26 [INFO] RL Optimizer: Processed 494 state-action rewards and updated Q-Table.
-10:27:28 [INFO] RL Optimizer: Processed 577 state-action rewards and updated Q-Table.
-10:27:30 [INFO] RL Optimizer: Processed 537 state-action rewards and updated Q-Table.
-10:27:32 [INFO] RL Optimizer: Processed 530 state-action rewards and updated Q-Table.
-10:27:34 [INFO] RL Optimizer: Processed 486 state-action rewards and updated Q-Table.
-10:27:36 [INFO] RL Optimizer: Processed 416 state-action rewards and updated Q-Table.
-10:27:38 [INFO] RL Optimizer: Processed 456 state-action rewards and updated Q-Table.
-10:27:40 [INFO] RL Optimizer: Processed 493 state-action rewards and updated Q-Table.
-10:27:42 [INFO] RL Optimizer: Processed 493 state-action rewards and updated Q-Table.
-10:27:44 [INFO] RL Optimizer: Processed 406 state-action rewards and updated Q-Table.
-10:27:46 [INFO] RL Optimizer: Processed 453 state-action rewards and updated Q-Table.
-10:27:48 [INFO] RL Optimizer: Processed 424 state-action rewards and updated Q-Table.
-10:27:50 [INFO] RL Optimizer: Processed 429 state-action rewards and updated Q-Table.
-10:27:52 [INFO] RL Optimizer: Processed 445 state-action rewards and updated Q-Table.
-10:27:54 [INFO] RL Optimizer: Processed 423 state-action rewards and updated Q-Table.
-10:27:56 [INFO] RL Optimizer: Processed 893 state-action rewards and updated Q-Table.
-10:27:58 [INFO] RL Optimizer: Processed 769 state-action rewards and updated Q-Table.
-10:28:00 [INFO] RL Optimizer: Processed 289 state-action rewards and updated Q-Table.
-10:28:00 [INFO] Unregister scx_rdtai scheduler
-10:28:00 [INFO] RL Q-Table successfully persisted to /var/lib/scx_rdtai_qtable.bin
-Error: Expected nonzero load transfer
+15:16:30 [INFO] Rusty scheduler started! Run `scx_rdtai --monitor` for metrics.
+15:16:30 [INFO] RL Q-Table successfully loaded from /var/lib/scx_rdtai_qtable.bin
+15:16:32 [INFO] RL Optimizer: Processed 138 state-action rewards, updated 14 kernel actions.
+15:16:34 [INFO] RL Optimizer: Processed 127 state-action rewards, updated 13 kernel actions.
+15:16:36 [INFO] RL Optimizer: Processed 120 state-action rewards, updated 14 kernel actions.
+15:16:38 [INFO] RL Optimizer: Processed 134 state-action rewards, updated 7 kernel actions.
+15:16:40 [INFO] RL Optimizer: Processed 152 state-action rewards, updated 15 kernel actions.
+15:16:42 [INFO] RL Optimizer: Processed 130 state-action rewards, updated 17 kernel actions.
+15:16:44 [INFO] RL Optimizer: Processed 114 state-action rewards, updated 14 kernel actions.
+15:16:46 [INFO] RL Optimizer: Processed 148 state-action rewards, updated 22 kernel actions.
+15:16:48 [INFO] RL Optimizer: Processed 128 state-action rewards, updated 14 kernel actions.
+15:16:50 [INFO] RL Optimizer: Processed 122 state-action rewards, updated 16 kernel actions.
+15:16:52 [INFO] RL Optimizer: Processed 160 state-action rewards, updated 18 kernel actions.
+15:16:54 [INFO] RL Optimizer: Processed 136 state-action rewards, updated 14 kernel actions.
+15:16:56 [INFO] RL Optimizer: Processed 228 state-action rewards, updated 29 kernel actions.
+15:16:58 [INFO] RL Optimizer: Processed 222 state-action rewards, updated 27 kernel actions.
+15:17:00 [INFO] RL Optimizer: Processed 248 state-action rewards, updated 34 kernel actions.
+15:17:02 [INFO] RL Optimizer: Processed 227 state-action rewards, updated 43 kernel actions.
+15:17:04 [INFO] RL Optimizer: Processed 229 state-action rewards, updated 38 kernel actions.
+15:17:06 [INFO] RL Optimizer: Processed 207 state-action rewards, updated 31 kernel actions.
+15:17:08 [INFO] RL Optimizer: Processed 204 state-action rewards, updated 29 kernel actions.
+15:17:10 [INFO] RL Optimizer: Processed 208 state-action rewards, updated 33 kernel actions.
+15:17:12 [INFO] RL Optimizer: Processed 203 state-action rewards, updated 30 kernel actions.
+15:17:14 [INFO] RL Optimizer: Processed 210 state-action rewards, updated 37 kernel actions.
+15:17:16 [INFO] RL Optimizer: Processed 276 state-action rewards, updated 36 kernel actions.
+15:17:18 [INFO] RL Optimizer: Processed 200 state-action rewards, updated 33 kernel actions.
+15:17:20 [INFO] RL Optimizer: Processed 174 state-action rewards, updated 15 kernel actions.
+15:17:22 [INFO] RL Optimizer: Processed 140 state-action rewards, updated 7 kernel actions.
+15:17:24 [INFO] RL Optimizer: Processed 146 state-action rewards, updated 7 kernel actions.
+15:17:26 [INFO] RL Optimizer: Processed 171 state-action rewards, updated 10 kernel actions.
+15:17:28 [INFO] RL Optimizer: Processed 120 state-action rewards, updated 13 kernel actions.
+15:17:30 [INFO] RL Optimizer: Processed 139 state-action rewards, updated 14 kernel actions.
+15:17:32 [INFO] RL Optimizer: Processed 142 state-action rewards, updated 12 kernel actions.
+15:17:34 [INFO] RL Optimizer: Processed 167 state-action rewards, updated 14 kernel actions.
+15:17:36 [INFO] RL Optimizer: Processed 144 state-action rewards, updated 12 kernel actions.
+15:17:38 [INFO] RL Optimizer: Processed 118 state-action rewards, updated 6 kernel actions.
+15:17:40 [INFO] RL Optimizer: Processed 119 state-action rewards, updated 13 kernel actions.
+15:17:42 [INFO] RL Optimizer: Processed 133 state-action rewards, updated 16 kernel actions.
+15:17:44 [INFO] RL Optimizer: Processed 129 state-action rewards, updated 13 kernel actions.
+15:17:46 [INFO] RL Optimizer: Processed 113 state-action rewards, updated 15 kernel actions.
+15:17:48 [INFO] RL Optimizer: Processed 156 state-action rewards, updated 14 kernel actions.
+EXIT: unregistered from user space
+15:17:50 [INFO] Unregister scx_rdtai scheduler
+15:17:50 [INFO] RL Q-Table successfully persisted to /var/lib/scx_rdtai_qtable.bin
