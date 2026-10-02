@@ -65,6 +65,7 @@ struct task_ctx {
 	u64 density;		/* Task density rho_i = (w_i * 1000) / max(p_i_us, 1) */
 	u64 total_runtime;	/* Total cumulative execution time */
 	bool dispatch_local;	/* Direct dispatch flag */
+	bool is_batch;		/* True if last slice ended by preemption/quantum expiry */
 };
 
 /*

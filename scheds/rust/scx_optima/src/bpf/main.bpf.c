@@ -84,12 +84,12 @@ static inline bool __maybe_unused is_eff_core(s32 cpu)
 static inline u32 evaluate_dp_partition(struct task_ctx *tctx)
 {
 	/*
-	 * Stage 1: Real-Time & High-Priority Tasks
-	 * Authoritative Game Simulation loop and RT Audio DSP require
-	 * the full 5.16 GHz Zen 5 execution engine and 16MB L3 cache.
+	 * Stage 1: Real-Time & Periodic Simulation Tasks
+	 * Authoritative Game Simulation loop (~4ms voluntary periodic tick)
+	 * and RT Audio DSP (high weight or periodic callback).
 	 * Pinned strictly to P-cores to guarantee 0 dropped frames and 0 Xruns.
 	 */
-	if (tctx->weight >= RT_WEIGHT_THRESHOLD) {
+	if (tctx->weight >= RT_WEIGHT_THRESHOLD || (!tctx->is_batch && tctx->avg_runtime >= 1500000ULL)) {
 		stat_add(OPTIMA_STAT_DP_PCORE, 1);
 		return CORE_TYPE_PERF;
 	}
@@ -387,6 +387,9 @@ void BPF_STRUCT_OPS(optima_stopping, struct task_struct *p, bool runnable)
 	/* Exponential moving average runtime: avg = (old * 3 + new) / 4 */
 	tctx->avg_runtime = (tctx->avg_runtime * 3 + delta) / 4;
 
+	/* Track whether task was preempted (CPU-bound batch) or voluntarily yielded/slept */
+	tctx->is_batch = runnable;
+
 	/* Density calculation: rho_i = (w_i * 1,000,000) / max(runtime_us, 1) */
 	u64 runtime_us = tctx->avg_runtime / 1000ULL;
 	if (!runtime_us)
@@ -409,6 +412,7 @@ s32 BPF_STRUCT_OPS(optima_init_task, struct task_struct *p, struct scx_init_task
 	tctx->density = 1000000ULL;
 	tctx->total_runtime = 0;
 	tctx->dispatch_local = false;
+	tctx->is_batch = false;
 	return 0;
 }
 
