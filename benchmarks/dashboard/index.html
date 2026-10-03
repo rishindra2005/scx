@@ -151,22 +151,28 @@
     </div>
 
     <!-- Navigation Bar -->
-    <div class="max-w-[1920px] w-full mx-auto px-6 sm:px-10 lg:px-14 xl:px-16 flex space-x-8 text-sm border-t border-slate-100 overflow-x-auto">
-      <button onclick="switchView('view-overview')" id="tab-overview" class="nav-tab-btn active py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
-        Launch Overview
-      </button>
-      <button onclick="switchView('view-architecture')" id="tab-architecture" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
-        How It Works: Architecture
-      </button>
-      <button onclick="switchView('view-benchmarks')" id="tab-benchmarks" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
-        Benchmark Deep Dive (10 Workloads)
-      </button>
-      <button onclick="switchView('view-3d')" id="tab-3d" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
-        3D &amp; Multidimensional Lab
-      </button>
-      <button onclick="switchView('view-telemetry')" id="tab-telemetry" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
-        Full Telemetry Dataset &amp; Matrix
-      </button>
+    <div class="max-w-[1920px] w-full mx-auto px-6 sm:px-10 lg:px-14 xl:px-16 flex items-center justify-between border-t border-slate-100 overflow-x-auto gap-4">
+      <div class="flex space-x-8 text-sm">
+        <button onclick="switchView('view-overview')" id="tab-overview" class="nav-tab-btn active py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
+          Launch Overview
+        </button>
+        <button onclick="switchView('view-architecture')" id="tab-architecture" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
+          How It Works: Architecture
+        </button>
+        <button onclick="switchView('view-benchmarks')" id="tab-benchmarks" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
+          Benchmark Deep Dive (10 Workloads)
+        </button>
+        <button onclick="switchView('view-3d')" id="tab-3d" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
+          3D &amp; Multidimensional Lab
+        </button>
+        <button onclick="switchView('view-telemetry')" id="tab-telemetry" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
+          Full Telemetry Dataset &amp; Matrix
+        </button>
+      </div>
+      <a href="how-it-works.html" class="my-auto inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 text-sm font-semibold transition whitespace-nowrap shadow-xs">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Student Guide: How It Works &rarr;</span>
+      </a>
     </div>
   </header>
 
@@ -188,7 +194,7 @@
           Introducing scx_optima
         </h1>
         <p class="text-2xl sm:text-3xl text-slate-600 font-serif leading-relaxed">
-          The first algorithmic Linux kernel scheduler engineered specifically for heterogeneous Zen 5 / Zen 5c silicon with mathematical complexity guarantees.
+          The first algorithmic Linux kernel scheduler engineered specifically for heterogeneous asymmetric P-Core / E-Core silicon with mathematical complexity guarantees.
         </p>
         <div class="text-base text-slate-500 font-mono pt-3">
           By <strong>Risheendra MN</strong> &bull; <a href="mailto:rishindra.hackbox@gmail.com" class="text-blue-600 hover:underline">rishindra.hackbox@gmail.com</a> &bull; October 2026
@@ -254,7 +260,7 @@
         <div class="prose max-w-none text-slate-600">
           <p>
             The rise of heterogeneous multi-core architectures—combining high-frequency Performance cores (P-cores) with high-density Efficiency cores (E-cores) across distinct cache topologies—has fundamentally transformed modern client and server silicon.
-            The silicon combines <strong>four Zen 5 Performance cores running at 5.16 GHz with 16MB L3 cache (CCX 0)</strong> and <strong>eight Zen 5c Dense cores running at 3.29 GHz with 8MB L3 cache (CCX 1)</strong>.
+            The silicon combines <strong>four Performance P-cores running at 5.16 GHz with 16MB L3 cache (CCX 0)</strong> and <strong>eight Dense E-cores running at 3.29 GHz with 8MB L3 cache (CCX 1)</strong>.
             This dual-CCX design presents a severe asymmetric penalty: crossing the CCX boundary incurs significant memory latency, and tasks scheduled onto E-cores run at 64% of P-core clock speeds with halved cache capacity.
           </p>
           <p>
@@ -369,8 +375,8 @@
                 <div class="text-cyan-300">[DEBUG] libbpf: map 'stats': created successfully, fd=5</div>
                 <div class="text-cyan-300">[DEBUG] libbpf: map 'task_ctx_stor': created (local task storage), fd=6</div>
                 <div class="text-slate-300">[INFO] Heterogeneous Hardware Topology Detected on 24 CPUs:</div>
-                <div class="text-emerald-400">  -&gt; P-Cores (Zen 5 Performance, 5.16 GHz): [0, 1, 2, 3, 12, 13, 14, 15]</div>
-                <div class="text-indigo-400">  -&gt; E-Cores (Zen 5c Efficiency, 3.29 GHz): [4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19, 20, 21, 22, 23]</div>
+                <div class="text-emerald-400">  -&gt; P-Cores (Performance Core Cluster, 5.16 GHz): [0, 1, 2, 3, 12, 13, 14, 15]</div>
+                <div class="text-indigo-400">  -&gt; E-Cores (Efficiency Core Cluster, 3.29 GHz): [4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19, 20, 21, 22, 23]</div>
                 <div class="text-cyan-300">[DEBUG] rodata: default_slice_ns=5000000, dp_threshold=500000, dp_capacity=8</div>
                 <div class="text-emerald-400">[INFO] scx_optima attached successfully to sched-ext!</div>
               </div>
@@ -534,6 +540,25 @@
         <p class="text-xl sm:text-2xl text-slate-600 font-serif leading-relaxed">
           A rigorous breakdown of the mathematical models, kernel dispatch queues (DSQs), asymmetric cache topologies, and an interactive line-by-line simulation of the core eBPF scheduler.
         </p>
+      </div>
+
+      <!-- High School Student Visual Explainer Banner -->
+      <div class="p-6 sm:p-7 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 shadow-xs">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white font-mono text-[11px] font-bold uppercase tracking-wider">Visual Guide</span>
+            <h4 class="text-base sm:text-lg font-bold text-emerald-950 font-sans">
+              Looking for a high-school friendly, step-by-step visual explainer?
+            </h4>
+          </div>
+          <p class="text-sm text-emerald-800 leading-relaxed font-sans max-w-4xl">
+            Explore <strong>The Kitchen Mental Model</strong> (Head Chef P-cores vs. Line Cook E-cores), plain-English explanations of all 7 kernel decisions, and an interactive student decision simulator with zero kernel jargon.
+          </p>
+        </div>
+        <a href="how-it-works.html" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-sans font-semibold text-sm transition shadow-sm whitespace-nowrap flex items-center gap-2 group">
+          <span>Explore Student Guide</span>
+          <span class="group-hover:translate-x-1 transition-transform">&rarr;</span>
+        </a>
       </div>
 
       <!-- Core Algorithmic Paradigms (6 Deep Conceptual Pillars) -->
@@ -1049,7 +1074,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 </div>
                 <div class="p-2 rounded bg-white border border-slate-200">
                   <span class="text-slate-400 block text-[10px]">CORE TARGET</span>
-                  <span id="sim-var-target-core" class="font-bold text-emerald-700">P-Core 2 (Zen 5)</span>
+                  <span id="sim-var-target-core" class="font-bold text-emerald-700">P-Core 2 (High-Frequency)</span>
                 </div>
                 <div class="p-2 rounded bg-white border border-slate-200">
                   <span class="text-slate-400 block text-[10px]">TARGET DSQ</span>
@@ -1174,7 +1199,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <strong>The Test Harness:</strong> <code>hackbench -g 20 -l 1000</code>. This spawns 20 process groups (800 tasks in total), exchanging 1,000 messages per pair under heavy memory and scheduler concurrency.
               </p>
               <p>
-                <strong>Why scx_optima Wins:</strong> By implementing $O(1)$ hardware bitops idle core picking and direct local queue dispatch on domestic Zen 5 cores, <code>scx_optima</code> eliminates the lock bouncing and queue churn that plummets CFS to 9.585s (7.7x slower).
+                <strong>Why scx_optima Wins:</strong> By implementing $O(1)$ hardware bitops idle core picking and direct local queue dispatch on domestic high-frequency P-cores, <code>scx_optima</code> eliminates the lock bouncing and queue churn that plummets CFS to 9.585s (7.7x slower).
               </p>
             </div>
 
@@ -1326,7 +1351,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 The tick deadline is <strong>8.33 milliseconds (8,333 &mu;s)</strong>. Missing a single tick causes hitching and desync for all connected players.
               </p>
               <p>
-                <strong>The Silicon Mechanism:</strong> Under 2,000 players, the simulation tick requires ~3.1ms on a 5.16 GHz Zen 5 P-core, but &gt;8.5ms on a 3.29 GHz Zen 5c E-core.
+                <strong>The Silicon Mechanism:</strong> Under 2,000 players, the simulation tick requires ~3.1ms on a 5.16 GHz P-core, but &gt;8.5ms on a 3.29 GHz E-core.
                 <code>scx_optima</code> uses its Dynamic Programming Knapsack model to isolate the game tick strictly to P-cores.
               </p>
               <p>
@@ -1405,7 +1430,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <strong>What It Tests:</strong> Evaluates single-threaded event loop I/O multiplexing under heavy client concurrency (50 to 750 clients issuing GET/SET commands via memtier benchmark).
               </p>
               <p>
-                <strong>Why Schedulers Fail:</strong> In CFS and rdtai, the Redis event loop thread is constantly migrated between Zen 5 and Zen 5c cores, thrashing CPU L1/L2 caches and collapsing throughput to ~350k ops/s with a catastrophic 62ms P99 latency.
+                <strong>Why Schedulers Fail:</strong> In CFS and rdtai, the Redis event loop thread is constantly migrated across asymmetric P-core and E-core clusters, thrashing CPU L1/L2 caches and collapsing throughput to ~350k ops/s with a catastrophic 62ms P99 latency.
               </p>
               <p>
                 <strong>Result:</strong> <code>scx_optima</code> achieves <strong>1,498,546 ops/s</strong> (4.2x higher than CFS) while maintaining an ultra-low <strong>4.14ms P99</strong> latency.
@@ -1676,7 +1701,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
             <p>
               CFS relies on symmetric load balancing heuristics.
               Under parallel kernel compilation, it took <strong>88.06 seconds (5.4x slower than scx_optima)</strong>.
-              In the 120 FPS game server, it fails to keep Python simulation ticks on Zen 5 P-cores, causing 0.09% dropped frames and player hitching.
+              In the 120 FPS game server, it fails to keep Python simulation ticks on high-frequency P-cores, causing 0.09% dropped frames and player hitching.
             </p>
           </div>
 
@@ -1903,19 +1928,19 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
             lines: [11, 12, 13],
             func: 'optima_select_cpu() &bull; O(1) Bitmask Core Pick',
             desc: '<strong>[Micro-Architectural Query]</strong> scx_bpf_pick_idle_cpu() performs an O(1) hardware bitops scan over the P-core idle cpumask.\nPhysical Performance Core CPU 2 is wholly idle. select_cpu() returns CPU 2 in <20 nanoseconds, avoiding runqueue wait states.',
-            runtime: '240 µs', weight: '100', density: '416,666', slice: '3,000,000 ns', target_core: 'P-Core 2 (Zen 5)', dsq: 'DSQ_PERF'
+            runtime: '240 µs', weight: '100', density: '416,666', slice: '3,000,000 ns', target_core: 'P-Core 2 (P-Core)', dsq: 'DSQ_PERF'
           },
           {
             lines: [14, 15, 16],
             func: 'optima_enqueue() &bull; Module 6 Greedy WSPT',
             desc: '<strong>[Theorem 1 (Smith\'s Rule)]</strong> Adaptive quantum assigns 3.0ms (3,000,000 ns) for interactive tasks.\nVirtual deadline delta: Δvtime = (3ms · 100) / 100 = 3ms.\nAbsolute virtual deadline assigned: d_i = vtime + 3,000,000 ns. Guarantees priority ordering over batch tasks.',
-            runtime: '240 µs', weight: '100', density: '416,666', slice: '3,000,000 ns', target_core: 'P-Core 2 (Zen 5)', dsq: 'DSQ_PERF'
+            runtime: '240 µs', weight: '100', density: '416,666', slice: '3,000,000 ns', target_core: 'P-Core 2 (P-Core)', dsq: 'DSQ_PERF'
           },
           {
             lines: [17, 18, 19, 20],
             func: 'optima_enqueue() &bull; DSQ Enqueue & Core Kick',
             desc: '<strong>[Kernel Dispatch]</strong> scx_bpf_dsq_insert_vtime() inserts task into DSQ_PERF with deadline ordering.\nscx_bpf_kick_cpu(2, SCX_KICK_IDLE) wakes CPU 2 immediately.\nThe game tick completes in 1.7ms (well within the 8.33ms 120 FPS frame deadline). Zero frame drops guaranteed!',
-            runtime: '240 µs', weight: '100', density: '416,666', slice: '3,000,000 ns', target_core: 'P-Core 2 (Zen 5)', dsq: 'DSQ_PERF'
+            runtime: '240 µs', weight: '100', density: '416,666', slice: '3,000,000 ns', target_core: 'P-Core 2 (P-Core)', dsq: 'DSQ_PERF'
           }
         ]
       },
