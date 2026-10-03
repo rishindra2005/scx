@@ -80,8 +80,9 @@
     }
     .prose p {
       margin-bottom: 1.25rem;
-      line-height: 1.75;
-      font-size: 1.05rem;
+      line-height: 1.85;
+      font-size: 1.15rem;
+      letter-spacing: -0.01em;
       color: #334155;
     }
     .prose strong {
@@ -115,17 +116,17 @@
 
   <!-- Top Global Header -->
   <header class="border-b border-slate-200 bg-white sticky top-0 z-50 shadow-sm">
-    <div class="max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div class="max-w-[1920px] w-full mx-auto px-6 sm:px-10 lg:px-14 xl:px-16 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div class="flex items-center space-x-3.5">
-        <div class="w-9 h-9 rounded-lg bg-blue-600 text-white font-mono font-black flex items-center justify-center text-sm shadow-md">
+        <div class="w-11 h-11 rounded-xl bg-blue-600 text-white font-mono font-black flex items-center justify-center text-base shadow-md">
           &Omega;
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <span class="font-bold text-slate-900 tracking-tight text-base">scx_optima</span>
+            <span class="font-bold text-slate-900 tracking-tight text-lg sm:text-xl">scx_optima</span>
             <span class="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono font-medium border border-blue-200">v1.0.0 Release</span>
           </div>
-          <p class="text-xs text-slate-500">
+          <p class="text-xs sm:text-sm text-slate-500">
             Formal Algorithmic Kernel Scheduler &bull; Authored by <span class="text-slate-800 font-semibold">Risheendra MN</span>
           </p>
         </div>
@@ -150,27 +151,27 @@
     </div>
 
     <!-- Navigation Bar -->
-    <div class="max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-10 flex space-x-8 text-sm border-t border-slate-100 overflow-x-auto">
-      <button onclick="switchView('view-overview')" id="tab-overview" class="nav-tab-btn active py-3 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-medium whitespace-nowrap">
+    <div class="max-w-[1920px] w-full mx-auto px-6 sm:px-10 lg:px-14 xl:px-16 flex space-x-8 text-sm border-t border-slate-100 overflow-x-auto">
+      <button onclick="switchView('view-overview')" id="tab-overview" class="nav-tab-btn active py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
         Launch Overview
       </button>
-      <button onclick="switchView('view-architecture')" id="tab-architecture" class="nav-tab-btn py-3 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-medium whitespace-nowrap">
+      <button onclick="switchView('view-architecture')" id="tab-architecture" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
         How It Works: Architecture
       </button>
-      <button onclick="switchView('view-benchmarks')" id="tab-benchmarks" class="nav-tab-btn py-3 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-medium whitespace-nowrap">
+      <button onclick="switchView('view-benchmarks')" id="tab-benchmarks" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
         Benchmark Deep Dive (10 Workloads)
       </button>
-      <button onclick="switchView('view-3d')" id="tab-3d" class="nav-tab-btn py-3 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-medium whitespace-nowrap">
+      <button onclick="switchView('view-3d')" id="tab-3d" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
         3D &amp; Multidimensional Lab
       </button>
-      <button onclick="switchView('view-telemetry')" id="tab-telemetry" class="nav-tab-btn py-3 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-medium whitespace-nowrap">
+      <button onclick="switchView('view-telemetry')" id="tab-telemetry" class="nav-tab-btn py-4 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-semibold text-base whitespace-nowrap">
         Full Telemetry Dataset &amp; Matrix
       </button>
     </div>
   </header>
 
   <!-- Main Content Area -->
-  <main class="max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-10 flex-1 w-full">
+  <main class="max-w-[1920px] w-full mx-auto px-6 sm:px-10 lg:px-14 xl:px-16 py-10 flex-1 w-full">
 
     <!-- ===================================================================== -->
     <!-- VIEW 1: LAUNCH OVERVIEW                                               -->
@@ -178,68 +179,68 @@
     <section id="view-overview" class="view-panel space-y-12">
       
       <!-- Hero Header -->
-      <div class="max-w-5xl space-y-4">
+      <div class="max-w-7xl space-y-5">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
           <span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
           Breakthrough Systems Engineering Announcement
         </div>
-        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-tight font-serif-heading">
+        <h1 class="text-5xl sm:text-6xl lg:text-7xl font-black text-slate-900 leading-tight font-serif-heading tracking-tight">
           Introducing scx_optima
         </h1>
-        <p class="text-xl sm:text-2xl text-slate-600 font-serif leading-relaxed">
+        <p class="text-2xl sm:text-3xl text-slate-600 font-serif leading-relaxed">
           The first algorithmic Linux kernel scheduler engineered specifically for heterogeneous Zen 5 / Zen 5c silicon with mathematical complexity guarantees.
         </p>
-        <div class="text-sm text-slate-500 font-mono pt-2">
+        <div class="text-base text-slate-500 font-mono pt-3">
           By <strong>Risheendra MN</strong> &bull; <a href="mailto:rishindra.hackbox@gmail.com" class="text-blue-600 hover:underline">rishindra.hackbox@gmail.com</a> &bull; October 2026
         </div>
       </div>
 
       <!-- Hero KPI Banner Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <!-- KPI 1 -->
-        <div class="p-6 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
-          <div class="text-xs font-mono font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+        <div class="p-7 sm:p-8 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition space-y-2">
+          <div class="text-xs sm:text-sm font-mono font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
             <span>Hackbench IPC</span>
             <span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[11px]">#1 in Suite</span>
           </div>
-          <div class="text-4xl font-extrabold text-slate-900 font-mono tracking-tight">1.239s</div>
-          <p class="text-xs text-slate-500 mt-2.5 leading-relaxed">
+          <div class="text-5xl sm:text-6xl font-black text-slate-900 font-mono tracking-tight">1.239s</div>
+          <p class="text-sm text-slate-600 mt-3 leading-relaxed">
             Fastest context switch time recorded. <strong>7.7x faster than default CFS (9.585s)</strong> and 10% faster than FIFO ringbuffers.
           </p>
         </div>
 
         <!-- KPI 2 -->
-        <div class="p-6 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
-          <div class="text-xs font-mono font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+        <div class="p-7 sm:p-8 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition space-y-2">
+          <div class="text-xs sm:text-sm font-mono font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
             <span>Linux Kernel Compile</span>
             <span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[11px]">#1 in Suite</span>
           </div>
-          <div class="text-4xl font-extrabold text-slate-900 font-mono tracking-tight">16.17s</div>
-          <p class="text-xs text-slate-500 mt-2.5 leading-relaxed">
+          <div class="text-5xl sm:text-6xl font-black text-slate-900 font-mono tracking-tight">16.17s</div>
+          <p class="text-sm text-slate-600 mt-3 leading-relaxed">
             <code class="text-blue-700 font-semibold">make -j12 kernel/</code> completed in record time, beating all 5 alternative schedulers. <strong>5.4x faster than CFS</strong>.
           </p>
         </div>
 
         <!-- KPI 3 -->
-        <div class="p-6 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
-          <div class="text-xs font-mono font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+        <div class="p-7 sm:p-8 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition space-y-2">
+          <div class="text-xs sm:text-sm font-mono font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
             <span>120 FPS Game Server</span>
             <span class="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded text-[11px]">Zero Hitching</span>
           </div>
-          <div class="text-4xl font-extrabold text-blue-600 font-mono tracking-tight">0.00%</div>
-          <p class="text-xs text-slate-500 mt-2.5 leading-relaxed">
+          <div class="text-5xl sm:text-6xl font-black text-blue-600 font-mono tracking-tight">0.00%</div>
+          <p class="text-sm text-slate-600 mt-3 leading-relaxed">
             <strong>Only scheduler surviving 2,000 players with zero dropped frames.</strong> All competitors experienced hitching or desync collapse.
           </p>
         </div>
 
         <!-- KPI 4 -->
-        <div class="p-6 rounded-xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
-          <div class="text-xs font-mono font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+        <div class="p-7 sm:p-8 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition space-y-2">
+          <div class="text-xs sm:text-sm font-mono font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
             <span>Loopback Network</span>
             <span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[11px]">+54% Lead</span>
           </div>
-          <div class="text-4xl font-extrabold text-slate-900 font-mono tracking-tight">171.6 <span class="text-xl font-normal text-slate-500 font-sans">Gbps</span></div>
-          <p class="text-xs text-slate-500 mt-2.5 leading-relaxed">
+          <div class="text-5xl sm:text-6xl font-black text-slate-900 font-mono tracking-tight">171.6 <span class="text-xl font-normal text-slate-500 font-sans">Gbps</span></div>
+          <p class="text-sm text-slate-600 mt-3 leading-relaxed">
             <code class="text-blue-700 font-semibold">SCX_WAKE_SYNC</code> direct cache dispatch delivers 171.58 Gbps local loopback throughput.
           </p>
         </div>
@@ -362,7 +363,7 @@
               <p class="text-xs text-slate-600 font-sans leading-relaxed">
                 <strong>What it shows:</strong> Detailed eBPF skeleton loading, map allocations, hardware frequency queries from sysfs, and read-only parameter initialization.
               </p>
-              <div class="p-3.5 rounded-lg bg-slate-900 text-slate-300 font-mono text-[11px] overflow-x-auto space-y-1">
+              <div class="p-3.5 rounded-lg bg-slate-900 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto space-y-1">
                 <div class="text-slate-500">$ sudo ./target/release/scx_optima -v</div>
                 <div class="text-cyan-300">[DEBUG] libbpf: loading BPF object 'optima_bpf' from memory...</div>
                 <div class="text-cyan-300">[DEBUG] libbpf: map 'stats': created successfully, fd=5</div>
@@ -386,7 +387,7 @@
               <p class="text-xs text-slate-600 font-sans leading-relaxed">
                 <strong>What it shows:</strong> BPF verifier instruction analysis, per-task CPU selection decisions, density calculations, and preemption events in real time.
               </p>
-              <div class="p-3.5 rounded-lg bg-slate-900 text-slate-300 font-mono text-[11px] overflow-x-auto space-y-1">
+              <div class="p-3.5 rounded-lg bg-slate-900 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto space-y-1">
                 <div class="text-slate-500">$ sudo ./target/release/scx_optima -vv</div>
                 <div class="text-purple-300">[TRACE] libbpf: prog 'optima_select_cpu': verified in 1,420 insns, 0 jumps</div>
                 <div class="text-purple-300">[TRACE] libbpf: prog 'optima_enqueue': verified in 890 insns</div>
@@ -424,90 +425,90 @@
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs font-mono border-collapse">
+            <table class="w-full text-left text-sm font-mono border-collapse">
               <thead>
                 <tr class="bg-slate-50 border-b border-slate-200 text-slate-600">
-                  <th class="p-3">Workload / Benchmark</th>
-                  <th class="p-3">Default CFS/EEVDF</th>
-                  <th class="p-3">scx_rdtai</th>
-                  <th class="p-3">scx_rusty</th>
-                  <th class="p-3">scx_rustland</th>
-                  <th class="p-3">scx_rlfifo</th>
-                  <th class="p-3 bg-blue-50 text-blue-900 border-l border-r border-blue-200 font-bold">scx_optima (Winner)</th>
+                  <th class="p-4 text-sm font-bold tracking-wider">Workload / Benchmark</th>
+                  <th class="p-4 text-sm font-bold tracking-wider">Default CFS/EEVDF</th>
+                  <th class="p-4 text-sm font-bold tracking-wider">scx_rdtai</th>
+                  <th class="p-4 text-sm font-bold tracking-wider">scx_rusty</th>
+                  <th class="p-4 text-sm font-bold tracking-wider">scx_rustland</th>
+                  <th class="p-4 text-sm font-bold tracking-wider">scx_rlfifo</th>
+                  <th class="p-4 bg-blue-50 text-blue-900 border-l border-r border-blue-200 font-bold text-sm tracking-wider">scx_optima (Winner)</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 text-slate-700">
                 <tr class="hover:bg-slate-50/80">
-                  <td class="p-3 font-sans font-semibold text-slate-900">Hackbench 20-group (Context Switching)</td>
-                  <td class="p-3 text-rose-600 font-bold">9.585s</td>
-                  <td class="p-3">1.591s</td>
-                  <td class="p-3">1.541s</td>
-                  <td class="p-3">1.398s</td>
-                  <td class="p-3">1.381s</td>
-                  <td class="p-3 font-bold text-blue-700 bg-blue-50/60 border-l border-r border-blue-200">1.239s <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">#1</span></td>
+                  <td class="p-4 font-sans font-bold text-slate-900 text-sm sm:text-base">Hackbench 20-group (Context Switching)</td>
+                  <td class="p-4 text-rose-600 font-bold">9.585s</td>
+                  <td class="p-4">1.591s</td>
+                  <td class="p-4">1.541s</td>
+                  <td class="p-4">1.398s</td>
+                  <td class="p-4">1.381s</td>
+                  <td class="p-4 font-bold text-base text-blue-700 bg-blue-50/70 border-l border-r border-blue-200">1.239s <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">#1</span></td>
                 </tr>
                 <tr class="hover:bg-slate-50/80">
-                  <td class="p-3 font-sans font-semibold text-slate-900">Kernel Compilation (make -j12 kernel/)</td>
-                  <td class="p-3 text-rose-600 font-bold">88.06s</td>
-                  <td class="p-3">17.25s</td>
-                  <td class="p-3">16.97s</td>
-                  <td class="p-3">16.87s</td>
-                  <td class="p-3">16.69s</td>
-                  <td class="p-3 font-bold text-blue-700 bg-blue-50/60 border-l border-r border-blue-200">16.17s <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">#1</span></td>
+                  <td class="p-4 font-sans font-bold text-slate-900 text-sm sm:text-base">Kernel Compilation (make -j12 kernel/)</td>
+                  <td class="p-4 text-rose-600 font-bold">88.06s</td>
+                  <td class="p-4">17.25s</td>
+                  <td class="p-4">16.97s</td>
+                  <td class="p-4">16.87s</td>
+                  <td class="p-4">16.69s</td>
+                  <td class="p-4 font-bold text-base text-blue-700 bg-blue-50/70 border-l border-r border-blue-200">16.17s <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">#1</span></td>
                 </tr>
                 <tr class="hover:bg-slate-50/80">
-                  <td class="p-3 font-sans font-semibold text-slate-900">Network Loopback Throughput (iperf3)</td>
-                  <td class="p-3">116.3 Gbps</td>
-                  <td class="p-3">111.6 Gbps</td>
-                  <td class="p-3">111.2 Gbps</td>
-                  <td class="p-3 text-rose-600">64.9 Gbps</td>
-                  <td class="p-3 text-rose-600">58.0 Gbps</td>
-                  <td class="p-3 font-bold text-blue-700 bg-blue-50/60 border-l border-r border-blue-200">171.58 Gbps <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">+54%</span></td>
+                  <td class="p-4 font-sans font-bold text-slate-900 text-sm sm:text-base">Network Loopback Throughput (iperf3)</td>
+                  <td class="p-4">116.3 Gbps</td>
+                  <td class="p-4">111.6 Gbps</td>
+                  <td class="p-4">111.2 Gbps</td>
+                  <td class="p-4 text-rose-600">64.9 Gbps</td>
+                  <td class="p-4 text-rose-600">58.0 Gbps</td>
+                  <td class="p-4 font-bold text-base text-blue-700 bg-blue-50/70 border-l border-r border-blue-200">171.58 Gbps <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">+54%</span></td>
                 </tr>
                 <tr class="hover:bg-slate-50/80">
-                  <td class="p-3 font-sans font-semibold text-slate-900">Schbench Wakeup P99 Tail Latency</td>
-                  <td class="p-3 text-rose-600">20,448 us</td>
-                  <td class="p-3">1,154 us</td>
-                  <td class="p-3">1,622 us</td>
-                  <td class="p-3">1,578 us</td>
-                  <td class="p-3">2,916 us</td>
-                  <td class="p-3 font-bold text-blue-700 bg-blue-50/60 border-l border-r border-blue-200">755 us <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">Lowest Tail</span></td>
+                  <td class="p-4 font-sans font-bold text-slate-900 text-sm sm:text-base">Schbench Wakeup P99 Tail Latency</td>
+                  <td class="p-4 text-rose-600">20,448 us</td>
+                  <td class="p-4">1,154 us</td>
+                  <td class="p-4">1,622 us</td>
+                  <td class="p-4">1,578 us</td>
+                  <td class="p-4">2,916 us</td>
+                  <td class="p-4 font-bold text-base text-blue-700 bg-blue-50/70 border-l border-r border-blue-200">755 us <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">Lowest Tail</span></td>
                 </tr>
                 <tr class="hover:bg-slate-50/80">
-                  <td class="p-3 font-sans font-semibold text-slate-900">120 FPS Game Server @ 2k Players</td>
-                  <td class="p-3 text-amber-600">0.09% (Hitching)</td>
-                  <td class="p-3 text-amber-600">0.09% (Hitching)</td>
-                  <td class="p-3 text-rose-600">0.93% (Hitching)</td>
-                  <td class="p-3 text-rose-600 font-bold">13.43% (Collapse)</td>
-                  <td class="p-3 text-slate-400">N/A (Crash)</td>
-                  <td class="p-3 font-bold text-emerald-700 bg-blue-50/60 border-l border-r border-blue-200">0.00% Drops <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">Flawless</span></td>
+                  <td class="p-4 font-sans font-bold text-slate-900 text-sm sm:text-base">120 FPS Game Server @ 2k Players</td>
+                  <td class="p-4 text-amber-600">0.09% (Hitching)</td>
+                  <td class="p-4 text-amber-600">0.09% (Hitching)</td>
+                  <td class="p-4 text-rose-600">0.93% (Hitching)</td>
+                  <td class="p-4 text-rose-600 font-bold">13.43% (Collapse)</td>
+                  <td class="p-4 text-slate-400">N/A (Crash)</td>
+                  <td class="p-4 font-bold text-emerald-700 bg-blue-50/60 border-l border-r border-blue-200">0.00% Drops <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">Flawless</span></td>
                 </tr>
                 <tr class="hover:bg-slate-50/80">
-                  <td class="p-3 font-sans font-semibold text-slate-900">Real-Time Audio DSP (3,072 Filters)</td>
-                  <td class="p-3">0 Xruns (593us)</td>
-                  <td class="p-3">0 Xruns (483us)</td>
-                  <td class="p-3">0 Xruns (404us)</td>
-                  <td class="p-3 text-rose-600 font-bold">22 Xruns (Failed)</td>
-                  <td class="p-3 text-slate-400">N/A</td>
-                  <td class="p-3 font-bold text-emerald-700 bg-blue-50/60 border-l border-r border-blue-200">0 Xruns (389us) <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">Lowest P99</span></td>
+                  <td class="p-4 font-sans font-bold text-slate-900 text-sm sm:text-base">Real-Time Audio DSP (3,072 Filters)</td>
+                  <td class="p-4">0 Xruns (593us)</td>
+                  <td class="p-4">0 Xruns (483us)</td>
+                  <td class="p-4">0 Xruns (404us)</td>
+                  <td class="p-4 text-rose-600 font-bold">22 Xruns (Failed)</td>
+                  <td class="p-4 text-slate-400">N/A</td>
+                  <td class="p-4 font-bold text-emerald-700 bg-blue-50/60 border-l border-r border-blue-200">0 Xruns (389us) <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">Lowest P99</span></td>
                 </tr>
                 <tr class="hover:bg-slate-50/80">
-                  <td class="p-3 font-sans font-semibold text-slate-900">Production Redis Peak Throughput</td>
-                  <td class="p-3 text-rose-600">351,858 ops/s</td>
-                  <td class="p-3 text-rose-600">358,215 ops/s</td>
-                  <td class="p-3">1,242,838 ops/s</td>
-                  <td class="p-3 font-bold text-slate-900">1,549,547 ops/s</td>
-                  <td class="p-3 text-slate-400">N/A</td>
-                  <td class="p-3 font-bold text-blue-700 bg-blue-50/60 border-l border-r border-blue-200">1,498,546 ops/s <span class="ml-1 text-[10px] bg-blue-100 text-blue-800 px-1 py-0.5 rounded font-sans">4.14ms P99</span></td>
+                  <td class="p-4 font-sans font-bold text-slate-900 text-sm sm:text-base">Production Redis Peak Throughput</td>
+                  <td class="p-4 text-rose-600">351,858 ops/s</td>
+                  <td class="p-4 text-rose-600">358,215 ops/s</td>
+                  <td class="p-4">1,242,838 ops/s</td>
+                  <td class="p-4 font-bold text-slate-900">1,549,547 ops/s</td>
+                  <td class="p-4 text-slate-400">N/A</td>
+                  <td class="p-4 font-bold text-base text-blue-700 bg-blue-50/70 border-l border-r border-blue-200">1,498,546 ops/s <span class="ml-1 text-[10px] bg-blue-100 text-blue-800 px-1 py-0.5 rounded font-sans">4.14ms P99</span></td>
                 </tr>
                 <tr class="hover:bg-slate-50/80">
-                  <td class="p-3 font-sans font-semibold text-slate-900">Cloud API Gateway Peak QPS</td>
-                  <td class="p-3">839.8 req/s</td>
-                  <td class="p-3">650.7 req/s</td>
-                  <td class="p-3">744.7 req/s</td>
-                  <td class="p-3">602.9 req/s</td>
-                  <td class="p-3 text-slate-400">N/A</td>
-                  <td class="p-3 font-bold text-blue-700 bg-blue-50/60 border-l border-r border-blue-200">946.6 req/s <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">#1 Peak</span></td>
+                  <td class="p-4 font-sans font-bold text-slate-900 text-sm sm:text-base">Cloud API Gateway Peak QPS</td>
+                  <td class="p-4">839.8 req/s</td>
+                  <td class="p-4">650.7 req/s</td>
+                  <td class="p-4">744.7 req/s</td>
+                  <td class="p-4">602.9 req/s</td>
+                  <td class="p-4 text-slate-400">N/A</td>
+                  <td class="p-4 font-bold text-base text-blue-700 bg-blue-50/70 border-l border-r border-blue-200">946.6 req/s <span class="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded font-sans">#1 Peak</span></td>
                 </tr>
               </tbody>
             </table>
@@ -522,15 +523,15 @@
     <!-- ===================================================================== -->
         <section id="view-architecture" class="view-panel hidden space-y-12">
       
-      <div class="max-w-5xl space-y-4">
+      <div class="max-w-7xl space-y-5">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
           <span class="w-2 h-2 rounded-full bg-blue-600"></span>
           Formal Algorithmic Kernel Theory &bull; Design &amp; Analysis of Algorithms (CS301)
         </div>
-        <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-serif-heading">
+        <h2 class="text-4xl sm:text-5xl font-black text-slate-900 font-serif-heading">
           How scx_optima Works Under the Hood
         </h2>
-        <p class="text-lg text-slate-600 font-serif leading-relaxed">
+        <p class="text-xl sm:text-2xl text-slate-600 font-serif leading-relaxed">
           A rigorous breakdown of the mathematical models, kernel dispatch queues (DSQs), asymmetric cache topologies, and an interactive line-by-line simulation of the core eBPF scheduler.
         </p>
       </div>
@@ -544,108 +545,108 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
           <!-- Concept 1 -->
-          <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-7 sm:p-8 rounded-2xl shadow-sm space-y-4">
             <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 font-mono font-bold flex items-center justify-center text-sm">
               01
             </div>
-            <h4 class="text-base font-bold text-slate-900 font-sans">
+            <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-sans">
               Greedy WSPT + Virtual EDF Deadlines
             </h4>
-            <p class="text-xs text-slate-600 leading-relaxed font-sans">
+            <p class="text-sm text-slate-600 leading-relaxed font-sans">
               In classical scheduling theory, minimizing total weighted completion time $\sum_{i=1}^n w_i C_i$ is solved optimally by ordering tasks by task density $w_i / p_i$ (Smith's Rule).
               In a preemptive kernel, we synthesize WSPT with Earliest Deadline First (EDF) by computing a virtual deadline $d_i$:
             </p>
             <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-center font-mono text-blue-700 text-xs my-2">
               $$d_i = \text{vtime} + \frac{\text{slice} \times 100}{w_i}$$
             </div>
-            <p class="text-xs text-slate-500 leading-relaxed font-sans">
+            <p class="text-sm text-slate-500 leading-relaxed font-sans">
               Tasks enter virtual-time ordered Dispatch Queues (DSQs) with $O(\log N)$ tree insertion, ensuring tasks with higher weights receive proportionally earlier deadlines.
             </p>
           </div>
 
           <!-- Concept 2 -->
-          <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-7 sm:p-8 rounded-2xl shadow-sm space-y-4">
             <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 font-mono font-bold flex items-center justify-center text-sm">
               02
             </div>
-            <h4 class="text-base font-bold text-slate-900 font-sans">
+            <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-sans">
               Dynamic Programming Knapsack Partitioning
             </h4>
-            <p class="text-xs text-slate-600 leading-relaxed font-sans">
+            <p class="text-sm text-slate-600 leading-relaxed font-sans">
               Heterogeneous processor assignment across asymmetric Performance (P) and Efficiency (E) cores is modeled as an online Knapsack problem evaluating computational density $\rho_i$:
             </p>
             <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-center font-mono text-purple-700 text-xs my-2">
               $$\rho_i = \frac{w_i \times 10^6}{\max(\bar{p}_i, 1)}$$
             </div>
-            <p class="text-xs text-slate-500 leading-relaxed font-sans">
+            <p class="text-sm text-slate-500 leading-relaxed font-sans">
               Where $\bar{p}_i$ is the exponential moving average runtime. Latency-critical tasks with high density ($\rho_i \ge 300\text{k}$) are routed to <code>CORE_TYPE_PERF</code>, while throughput compute flows to <code>CORE_TYPE_SHARED</code>.
             </p>
           </div>
 
           <!-- Concept 3 -->
-          <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-7 sm:p-8 rounded-2xl shadow-sm space-y-4">
             <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 font-mono font-bold flex items-center justify-center text-sm">
               03
             </div>
-            <h4 class="text-base font-bold text-slate-900 font-sans">
+            <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-sans">
               Branch &amp; Bound Priority Inversion Guard
             </h4>
-            <p class="text-xs text-slate-600 leading-relaxed font-sans">
+            <p class="text-sm text-slate-600 leading-relaxed font-sans">
               When physical P-cores are saturated and a real-time task awakens, standard FIFO queues suffer priority inversion.
               <code>scx_optima</code> executes an admissible branch-and-bound preemption search:
             </p>
             <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-center font-mono text-emerald-700 text-xs my-2">
               $$\text{LowerBound}(c) = \text{penalty} - \frac{w_i \times \text{Speed}(c)}{100}$$
             </div>
-            <p class="text-xs text-slate-500 leading-relaxed font-sans">
+            <p class="text-sm text-slate-500 leading-relaxed font-sans">
               <strong>Pruning Rule:</strong> If an idle core is discovered via $O(1)$ hardware bitops, search halts immediately. If a candidate's lower bound is negative, core preemption is triggered.
             </p>
           </div>
 
           <!-- Concept 4 -->
-          <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-7 sm:p-8 rounded-2xl shadow-sm space-y-4">
             <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 font-mono font-bold flex items-center justify-center text-sm">
               04
             </div>
-            <h4 class="text-base font-bold text-slate-900 font-sans">
+            <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-sans">
               Dual-CCX Domestic Shared Queues
             </h4>
-            <p class="text-xs text-slate-600 leading-relaxed font-sans">
+            <p class="text-sm text-slate-600 leading-relaxed font-sans">
               Modern multi-core processors separate logical cores into distinct cache clusters (CCX domains). Crossing CCX boundaries introduces cross-die bus latency and invalidates L1/L2/L3 caches.
             </p>
-            <p class="text-xs text-slate-500 leading-relaxed font-sans">
+            <p class="text-sm text-slate-500 leading-relaxed font-sans">
               <code>scx_optima</code> isolates shared tasks into domestic CCX queues: <code>DSQ_SHARED_P</code> (for the P-core cluster) and <code>DSQ_SHARED_E</code> (for the E-core cluster). Tasks remain cache-hot without cross-cluster bouncing.
             </p>
           </div>
 
           <!-- Concept 5 -->
-          <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-7 sm:p-8 rounded-2xl shadow-sm space-y-4">
             <div class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 font-mono font-bold flex items-center justify-center text-sm">
               05
             </div>
-            <h4 class="text-base font-bold text-slate-900 font-sans">
+            <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-sans">
               Work-Conserving Two-Tier Steal Engine
             </h4>
-            <p class="text-xs text-slate-600 leading-relaxed font-sans">
+            <p class="text-sm text-slate-600 leading-relaxed font-sans">
               To guarantee zero core idling (work-conserving theorem), when a P-core empties its exclusive <code>DSQ_PERF</code>, it consumes from its domestic <code>DSQ_SHARED_P</code>.
             </p>
-            <p class="text-xs text-slate-500 leading-relaxed font-sans">
+            <p class="text-sm text-slate-500 leading-relaxed font-sans">
               Only if domestic queues are fully exhausted will a P-core steal pending batch work from <code>DSQ_SHARED_E</code> or <code>DSQ_EFF</code>, keeping aggregate multi-core throughput at 100% capacity during compiler builds.
             </p>
           </div>
 
           <!-- Concept 6 -->
-          <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+          <div class="bg-white rounded-xl border border-slate-200 p-7 sm:p-8 rounded-2xl shadow-sm space-y-4">
             <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 font-mono font-bold flex items-center justify-center text-sm">
               06
             </div>
-            <h4 class="text-base font-bold text-slate-900 font-sans">
+            <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-sans">
               Direct Cache Dispatch (SCX_WAKE_SYNC)
             </h4>
-            <p class="text-xs text-slate-600 leading-relaxed font-sans">
+            <p class="text-sm text-slate-600 leading-relaxed font-sans">
               In high-throughput TCP network loopback (<code>iperf3</code>) and IPC pipelines, when a sender sends a packet burst and sleeps, it sets the kernel <code>WAKE_SYNC</code> flag.
             </p>
-            <p class="text-xs text-slate-500 leading-relaxed font-sans">
+            <p class="text-sm text-slate-500 leading-relaxed font-sans">
               <code>scx_optima</code> intercepts <code>WAKE_SYNC</code> and hands off execution directly to the receiver process on the local core without inserting into global queues, delivering <strong>171.58 Gbps</strong> loopback memory bandwidth.
             </p>
           </div>
@@ -674,7 +675,7 @@
         </p>
 
         <!-- Visual Flowchart Container -->
-        <div class="space-y-6 max-w-5xl mx-auto">
+        <div class="space-y-8 w-full mx-auto">
           
           <!-- Root Node: Task Wakeup / Enqueue -->
           <div class="flex justify-center">
@@ -707,7 +708,7 @@
               <p class="text-xs text-slate-600 font-sans leading-relaxed">
                 If sender and receiver cooperate via TCP sockets (<code>iperf3</code>) or synchronous IPC pipes:
               </p>
-              <div class="p-3 rounded-lg bg-white border border-indigo-100 font-mono text-[11px] text-indigo-900 space-y-1">
+              <div class="p-3 rounded-lg bg-white border border-indigo-100 font-mono text-xs sm:text-sm text-indigo-900 space-y-1">
                 <div>&bull; Bypasses all shared &amp; global DSQs</div>
                 <div>&bull; Directly handed off to <strong>SCX_DSQ_LOCAL</strong></div>
                 <div>&bull; Preserves L1/L2 cache warmth &rarr; <strong>171.58 Gbps</strong></div>
@@ -744,7 +745,7 @@
                     <strong>Concept 01:</strong> Greedy WSPT virtual deadline $d_i$.<br>
                     <strong>Concept 03:</strong> Branch &amp; Bound preemption guard.
                   </p>
-                  <div class="px-2.5 py-1 rounded bg-blue-600 text-white font-mono text-[11px] font-bold text-center shadow-2xs">
+                  <div class="px-2.5 py-1 rounded bg-blue-600 text-white font-mono text-xs sm:text-sm font-bold text-center shadow-2xs">
                     &darr; DSQ_PERF (P-Cores)
                   </div>
                 </div>
@@ -755,7 +756,7 @@
                   <p class="text-[11px] text-slate-500 font-sans leading-relaxed">
                     <strong>Concept 04:</strong> Dual-CCX domestic queue isolation. Extended 20ms slice.
                   </p>
-                  <div class="px-2.5 py-1 rounded bg-slate-700 text-white font-mono text-[11px] font-bold text-center shadow-2xs">
+                  <div class="px-2.5 py-1 rounded bg-slate-700 text-white font-mono text-xs sm:text-sm font-bold text-center shadow-2xs">
                     &darr; DSQ_SHARED / EFF
                   </div>
                 </div>
@@ -880,7 +881,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           <!-- Code View (7 Cols) -->
-          <div class="lg:col-span-7 rounded-xl bg-slate-950 p-4 sm:p-5 border border-slate-800 text-slate-300 font-mono text-xs overflow-x-auto space-y-1 shadow-inner">
+          <div class="lg:col-span-7 rounded-xl bg-slate-950 p-4 sm:p-5 border border-slate-800 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto space-y-2 shadow-inner">
             <div class="text-slate-500 text-[11px] pb-2 border-b border-slate-800 flex items-center justify-between">
               <span>// scheds/rust/scx_optima/src/bpf/main.bpf.c</span>
               <span id="sim-func-badge" class="text-cyan-400 font-bold">optima_select_cpu()</span>
@@ -888,128 +889,128 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
 
             <!-- Code Lines with Dynamic Active Highlight & Deep In-Line Commentary -->
             <div id="code-line-1" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">01</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">01</span>
               <div>
                 <span class="text-slate-500">// [O(1) Memory Lookup] Retrieve task context from eBPF local task storage</span><br>
                 <span class="text-slate-200">struct task_ctx *tctx = lookup_task_ctx(p);</span>
               </div>
             </div>
             <div id="code-line-2" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">02</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">02</span>
               <div>
                 <span class="text-slate-500">// [Safety Invariant] Pinned tasks &amp; kthreads CANNOT be queued into shared DSQs</span><br>
                 <span class="text-slate-200">if (p-&gt;nr_cpus_allowed == 1 || (p-&gt;flags &amp; PF_KTHREAD)) {</span>
               </div>
             </div>
             <div id="code-line-3" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">03</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">03</span>
               <div>
                 <span class="text-slate-500">// [Watchdog Stall Fix] Direct handoff to SCX_DSQ_LOCAL on allowed CPU</span><br>
                 <span class="text-slate-400 pl-4">tctx-&gt;dispatch_local = true; return prev_cpu;</span>
               </div>
             </div>
             <div id="code-line-4" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">04</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">04</span>
               <span class="text-slate-200">}</span>
             </div>
             <div id="code-line-5" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">05</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">05</span>
               <div>
                 <span class="text-slate-500">// [Network Stack Fast-Path] Detect synchronized TCP socket handoff</span><br>
                 <span class="text-slate-200">if (wake_flags &amp; SCX_WAKE_SYNC) {</span>
               </div>
             </div>
             <div id="code-line-6" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">06</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">06</span>
               <div>
                 <span class="text-slate-500">// [171 Gbps Loopback] Preserve L1/L2 cache warmth via direct local dispatch</span><br>
                 <span class="text-slate-400 pl-4">tctx-&gt;dispatch_local = true; return prev_cpu;</span>
               </div>
             </div>
             <div id="code-line-7" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">07</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">07</span>
               <span class="text-slate-200">}</span>
             </div>
             <div id="code-line-8" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">08</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">08</span>
               <div>
                 <span class="text-slate-500">// [Module 4-5 Knapsack] Compute online task computational density rho_i</span><br>
                 <span class="text-slate-200">u64 density = ((u64)tctx-&gt;weight * 1000000ULL) / max(runtime_us, 1);</span>
               </div>
             </div>
             <div id="code-line-9" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">09</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">09</span>
               <div>
                 <span class="text-slate-500">// [Threshold Partition] Density &gt;= 300,000 isolates latency-critical tasks</span><br>
                 <span class="text-slate-200">if (density &gt;= dp_density_threshold) {</span>
               </div>
             </div>
             <div id="code-line-10" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">10</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">10</span>
               <div>
                 <span class="text-slate-500">// [Core Classification] Assign task to Performance core exclusive DSQ</span><br>
                 <span class="text-slate-400 pl-4">tctx-&gt;core_type = CORE_TYPE_PERF;</span>
               </div>
             </div>
             <div id="code-line-11" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">11</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">11</span>
               <div>
                 <span class="text-slate-500">// [O(1) Bitmask Scan] Query physical Performance core idle mask in &lt;20ns</span><br>
                 <span class="text-slate-400 pl-4">s32 target_p = pick_idle_p_core();</span>
               </div>
             </div>
             <div id="code-line-12" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">12</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">12</span>
               <div>
                 <span class="text-slate-500">// [Zero Runqueue Delay] Immediately dispatch to wholly idle physical core</span><br>
                 <span class="text-slate-400 pl-4">if (target_p &gt;= 0) return target_p;</span>
               </div>
             </div>
             <div id="code-line-13" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">13</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">13</span>
               <span class="text-slate-200">}</span>
             </div>
             <div id="code-line-14" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">14</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">14</span>
               <div>
                 <span class="text-slate-500">// [Adaptive Quantum Sizing] Interactive gets 3ms; Batch compute gets 20ms</span><br>
                 <span class="text-slate-200">u64 slice = (avg_runtime &lt; 1000000ULL) ? 3000000ULL : 20000000ULL;</span>
               </div>
             </div>
             <div id="code-line-15" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">15</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">15</span>
               <div>
                 <span class="text-slate-500">// [Module 6 Greedy WSPT] Virtual deadline delta: delta_vtime = (slice * 100) / weight</span><br>
                 <span class="text-slate-200">u64 delta_vtime = (slice * 100ULL) / (u64)tctx-&gt;weight;</span>
               </div>
             </div>
             <div id="code-line-16" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">16</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">16</span>
               <div>
                 <span class="text-slate-500">// [Virtual Deadline Assignment] d_i = vtime + delta_vtime</span><br>
                 <span class="text-slate-200">tctx-&gt;deadline = vtime + delta_vtime;</span>
               </div>
             </div>
             <div id="code-line-17" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">17</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">17</span>
               <div>
                 <span class="text-slate-500">// [Module 8 Branch &amp; Bound] If all cores busy, test lower bound preemption</span><br>
                 <span class="text-slate-200">if (all_busy &amp;&amp; test_lower_bound_preempt(p, target_core) &lt; 0) {</span>
               </div>
             </div>
             <div id="code-line-18" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">18</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">18</span>
               <div>
                 <span class="text-slate-500">// [Preemption Trigger] Kick CPU to preempt batch task for real-time task</span><br>
                 <span class="text-slate-400 pl-4">scx_bpf_kick_cpu(target_core, SCX_KICK_PREEMPT);</span>
               </div>
             </div>
             <div id="code-line-19" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">19</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">19</span>
               <span class="text-slate-200">}</span>
             </div>
             <div id="code-line-20" class="sim-code-line py-1.5 px-2.5 rounded transition flex items-start gap-3">
-              <span class="text-slate-600 select-none w-5 text-right font-mono text-[11px]">20</span>
+              <span class="text-slate-600 select-none w-5 text-right font-mono text-xs sm:text-sm">20</span>
               <div>
                 <span class="text-slate-500">// [O(log N) DSQ Insert] Enqueue into target DSQ with virtual deadline ordering</span><br>
                 <span class="text-slate-200">scx_bpf_dsq_insert_vtime(p, target_dsq, slice, tctx-&gt;deadline, enq_flags);</span>
@@ -1029,7 +1030,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
               </div>
 
               <!-- Live Register Values Grid -->
-              <div class="grid grid-cols-2 gap-2 text-slate-600 font-mono text-[11px]">
+              <div class="grid grid-cols-2 gap-2 text-slate-600 font-mono text-xs sm:text-sm">
                 <div class="p-2 rounded bg-white border border-slate-200">
                   <span class="text-slate-400 block text-[10px]">AVG RUNTIME</span>
                   <span id="sim-var-runtime" class="font-bold text-slate-900">240 &mu;s</span>
@@ -1085,7 +1086,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
 
         <!-- Failure 1 -->
         <div class="border-l-4 border-rose-500 pl-4 space-y-2">
-          <h4 class="text-base font-bold text-slate-900 font-sans">
+          <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-sans">
             1. The Watchdog Runnable Stall (Kind 1026) Root Cause and Resolution
           </h4>
           <p class="text-sm text-slate-600 leading-relaxed font-sans">
@@ -1111,7 +1112,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
 
         <!-- Failure 2 -->
         <div class="border-l-4 border-amber-500 pl-4 space-y-2">
-          <h4 class="text-base font-bold text-slate-900 font-sans">
+          <h4 class="text-lg sm:text-xl font-bold text-slate-900 font-sans">
             2. The 1.5ms Starvation Trap: Isolating Periodic Real-Time Loops from Batch Tasks
           </h4>
           <p class="text-sm text-slate-600 leading-relaxed font-sans">
@@ -1139,8 +1140,8 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
     <!-- ===================================================================== -->
     <section id="view-benchmarks" class="view-panel hidden space-y-12">
       
-      <div class="max-w-5xl space-y-4">
-        <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-serif-heading">
+      <div class="max-w-7xl space-y-5">
+        <h2 class="text-4xl sm:text-5xl font-black text-slate-900 font-serif-heading">
           Deep Dive: The 10 Rigorous Benchmark Workloads
         </h2>
         <p class="text-lg text-slate-600 font-serif">
@@ -1156,14 +1157,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 01 &bull; Microbenchmark</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">Hackbench: IPC &amp; Context Switch Latency</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">Hackbench: IPC &amp; Context Switch Latency</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 1.239s (#1 in Suite)
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> Created by kernel developer Rusty Russell, Hackbench is the classic Linux stress test for context switching, runqueue lock contention, and inter-process communication (IPC).
@@ -1183,7 +1184,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 5: HACKBENCH EXECUTION TIME</span>
                 <span class="text-slate-500">Seconds (Lower is better)</span>
               </div>
-              <div class="h-64 sm:h-72">
+              <div class="h-80 sm:h-96">
                 <canvas id="chart-hackbench"></canvas>
               </div>
             </div>
@@ -1195,14 +1196,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 02 &bull; Compute Throughput</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">Linux Kernel Compilation: Multicore Throughput</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">Linux Kernel Compilation: Multicore Throughput</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 16.17s (5.4x vs CFS)
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> Compiling the Linux kernel (<code>make -j12 kernel/</code>) evaluates sustained parallel CPU-bound compute throughput, compiler fork/clone overhead, quantum sizing, and cache thrashing across all 12 isolated cores.
@@ -1221,7 +1222,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 6: KERNEL COMPILATION TIME</span>
                 <span class="text-slate-500">Seconds (Lower is better)</span>
               </div>
-              <div class="h-64 sm:h-72">
+              <div class="h-80 sm:h-96">
                 <canvas id="chart-compile"></canvas>
               </div>
             </div>
@@ -1233,14 +1234,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 03 &bull; Networking Stack</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">Local Loopback Network Throughput (iperf3)</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">Local Loopback Network Throughput (iperf3)</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 171.58 Gbps (+54%)
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> <code>iperf3</code> loopback measures local TCP/IP stack efficiency, SoftIRQ packet processing, socket buffer handoffs, and L1/L2 cache preservation between server and client threads.
@@ -1259,7 +1260,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 7: NETWORK STACK BANDWIDTH</span>
                 <span class="text-slate-500">Gbps (Higher is better)</span>
               </div>
-              <div class="h-64 sm:h-72">
+              <div class="h-80 sm:h-96">
                 <canvas id="chart-iperf"></canvas>
               </div>
             </div>
@@ -1271,14 +1272,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 04 &bull; Tail Latency</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">Schbench: Queuing &amp; Wakeup Tail Latencies</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">Schbench: Queuing &amp; Wakeup Tail Latencies</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 5 us P50 / 755 us P99
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> Developed by Chris Mason at Meta, <code>schbench</code> models a message-passing worker architecture.
@@ -1311,14 +1312,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 05 &bull; Real-Time Simulation</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">120 FPS Game Server: Authoritative Tick Deadline Adherence</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">120 FPS Game Server: Authoritative Tick Deadline Adherence</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 0.00% Drops @ 2k Players
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> Simulating an authoritative competitive game server (Valorant/CS2 architecture), the engine simulates 3D collision physics, hitbox calculations, and spatial network updates at 120 FPS.
@@ -1339,7 +1340,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 10: 120 FPS FRAME DROPS (%)</span>
                 <span class="text-slate-500">Player Scaling (100 to 2000)</span>
               </div>
-              <div class="h-64 sm:h-72">
+              <div class="h-80 sm:h-96">
                 <canvas id="chart-game-drops"></canvas>
               </div>
             </div>
@@ -1351,14 +1352,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 06 &bull; Pro Audio</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">Pro-Audio DSP Engine: Buffer Underrun (Xrun) Immunity</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">Pro-Audio DSP Engine: Buffer Underrun (Xrun) Immunity</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 0 Xruns @ 3,072 Filters
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> Emulating professional digital audio workstations (DAWs like Bitwig, Ableton, and PipeWire/JACK engines), the audio engine streams 48 kHz multi-channel audio through cascaded biquad filters and waveshapers with a 64-sample buffer.
@@ -1379,7 +1380,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 11: AUDIO DSP TURNAROUND P99 (&mu;S)</span>
                 <span class="text-slate-500">Deadline = 1,333 &mu;s</span>
               </div>
-              <div class="h-64 sm:h-72">
+              <div class="h-80 sm:h-96">
                 <canvas id="chart-audio-p99"></canvas>
               </div>
             </div>
@@ -1391,14 +1392,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 07 &bull; In-Memory Database</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">Production Redis Cache: Epoll &amp; Memory Throughput</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">Production Redis Cache: Epoll &amp; Memory Throughput</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 1,498,546 ops/s
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> Evaluates single-threaded event loop I/O multiplexing under heavy client concurrency (50 to 750 clients issuing GET/SET commands via memtier benchmark).
@@ -1417,7 +1418,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 9: REDIS THROUGHPUT (OPS/SEC)</span>
                 <span class="text-slate-500">Higher is better</span>
               </div>
-              <div class="h-64 sm:h-72">
+              <div class="h-80 sm:h-96">
                 <canvas id="chart-redis-qps"></canvas>
               </div>
             </div>
@@ -1429,14 +1430,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 08 &bull; Microservices</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">Cloud API Gateway: Async Ingress Concurrency</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">Cloud API Gateway: Async Ingress Concurrency</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 946.6 req/s (#1 in Suite)
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> Simulating modern microservices infrastructure, an Nginx reverse proxy fronts asynchronous Python Uvicorn ASGI workers processing JSON web requests under concurrency ramps (10 to 150 concurrent streams).
@@ -1452,7 +1453,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 12: API GATEWAY THROUGHPUT (REQ/S)</span>
                 <span class="text-slate-500">Peak QPS</span>
               </div>
-              <div class="h-64 sm:h-72">
+              <div class="h-80 sm:h-96">
                 <canvas id="chart-gateway-qps"></canvas>
               </div>
             </div>
@@ -1464,14 +1465,14 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 09 &bull; Financial Tech</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">High-Frequency Trading Matching Engine</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">High-Frequency Trading Matching Engine</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 font-semibold">
               scx_optima: 12.99M orders/s
             </span>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm text-slate-600">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 text-sm sm:text-base text-slate-600">
             <div class="space-y-3">
               <p>
                 <strong>What It Tests:</strong> Simulates an exchange matching engine processing continuous bid/ask order volume across price levels (50,000 to 1,500,000 orders). It stresses L3 cache residency, memory serialization, and low turnaround latency.
@@ -1487,7 +1488,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 13: HFT MATCHING THROUGHPUT</span>
                 <span class="text-slate-500">Orders/sec</span>
               </div>
-              <div class="h-64 sm:h-72">
+              <div class="h-80 sm:h-96">
                 <canvas id="chart-hft-qps"></canvas>
               </div>
             </div>
@@ -1499,7 +1500,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <span class="text-xs font-mono font-semibold text-blue-600 uppercase tracking-wider">Benchmark 10 &bull; Determinism</span>
-              <h3 class="text-xl sm:text-2xl font-bold text-slate-900 font-serif-heading">POSIX Cyclictest Real-Time Wakeup Jitter</h3>
+              <h3 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">POSIX Cyclictest Real-Time Wakeup Jitter</h3>
             </div>
             <span class="text-xs font-mono px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
               scx_optima: 1.2 us Avg / 1.0 us P50
@@ -1526,8 +1527,8 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
     <!-- ===================================================================== -->
     <section id="view-3d" class="view-panel hidden space-y-12">
       
-      <div class="max-w-5xl space-y-4">
-        <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-serif-heading">
+      <div class="max-w-7xl space-y-5">
+        <h2 class="text-4xl sm:text-5xl font-black text-slate-900 font-serif-heading">
           3D &amp; Multidimensional Visualization Lab
         </h2>
         <p class="text-lg text-slate-600 font-serif">
@@ -1551,8 +1552,8 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <p class="text-xs text-slate-600">
             Comparing normalized performance across: Context Switching, Compile Speed, Game Determinism, Audio DSP SLA, Network IPC, and Wakeup Latency.
           </p>
-          <div id="plot-radar" class="w-full h-[450px] rounded-lg bg-slate-50 border border-slate-100"></div>
-          <p class="text-xs text-slate-500">
+          <div id="plot-radar" class="w-full h-[560px] sm:h-[640px] rounded-xl bg-slate-50 border border-slate-200"></div>
+          <p class="text-xs sm:text-sm text-slate-500">
             <strong>Key Insight:</strong> <code>scx_optima</code> bounds the largest convex hull. Alternative schedulers exhibit severe deficits in their polygons.
           </p>
         </div>
@@ -1570,8 +1571,8 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
             Discrete 3D trajectory curves for each scheduler across scaling load (100 to 2,000 players). 
             <strong>Click &amp; drag to rotate in 3D space!</strong> Rather than an artificial continuous surface interpolation across discrete schedulers, each curve plots empirical state-space evolution across Concurrency ($), P99 Tick Latency ($), and Frame Drop Rate % ($).
           </p>
-          <div id="plot-3d-surface" class="w-full h-[450px] rounded-lg bg-slate-50 border border-slate-100"></div>
-          <p class="text-xs text-slate-500">
+          <div id="plot-3d-surface" class="w-full h-[560px] sm:h-[640px] rounded-xl bg-slate-50 border border-slate-200"></div>
+          <p class="text-xs sm:text-sm text-slate-500">
             <strong>Manifold Analysis:</strong> <code>scx_optima</code> (thick blue line) remains pinned to the floor ( = 0.00\%$ drops) under 4.8ms tick latency even at 2,000 players. In contrast, <code>scx_rustland</code> (green) lifts off into exponential latency and 13.43% frame collapse.
           </p>
         </div>
@@ -1593,8 +1594,8 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <p class="text-xs text-slate-600">
             Throughput ($X$) vs P99 Tail Latency ($Y$) vs P-Core Utilization Ratio ($Z$).
           </p>
-          <div id="plot-3d-scatter" class="w-full h-[450px] rounded-lg bg-slate-50 border border-slate-100"></div>
-          <p class="text-xs text-slate-500">
+          <div id="plot-3d-scatter" class="w-full h-[560px] sm:h-[640px] rounded-xl bg-slate-50 border border-slate-200"></div>
+          <p class="text-xs sm:text-sm text-slate-500">
             <strong>Pareto Frontier:</strong> <code>scx_optima</code> occupies the ideal frontier: high throughput, sub-5ms P99 latency, and balanced P-core utilization.
           </p>
         </div>
@@ -1611,8 +1612,8 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           <p class="text-xs text-slate-600">
             Drag selections on any vertical axis (e.g. on Drop Rate or P99 Latency) to brush and filter trajectories!
           </p>
-          <div id="plot-parallel" class="w-full h-[450px] rounded-lg bg-slate-50 border border-slate-100"></div>
-          <p class="text-xs text-slate-500">
+          <div id="plot-parallel" class="w-full h-[560px] sm:h-[640px] rounded-xl bg-slate-50 border border-slate-200"></div>
+          <p class="text-xs sm:text-sm text-slate-500">
             <strong>Interactive Exploration:</strong> Drag on the Drop Rate (%) axis to isolate only zero-hitching execution runs.
           </p>
         </div>
@@ -1626,8 +1627,8 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
     <!-- ===================================================================== -->
     <section id="view-telemetry" class="view-panel hidden space-y-12">
       
-      <div class="max-w-5xl space-y-4">
-        <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-serif-heading">
+      <div class="max-w-7xl space-y-5">
+        <h2 class="text-4xl sm:text-5xl font-black text-slate-900 font-serif-heading">
           Full Telemetry Dataset &amp; Competitor Breakdown
         </h2>
         <p class="text-lg text-slate-600 font-serif">
@@ -1641,19 +1642,19 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
           Table 1: Isolated Microbenchmark Telemetry
         </h3>
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs font-mono border-collapse">
+          <table class="w-full text-left text-sm font-mono border-collapse">
             <thead>
               <tr class="bg-slate-50 border-b border-slate-200 text-slate-600">
-                <th class="p-3">Scheduler</th>
-                <th class="p-3">Sysbench (eps)</th>
-                <th class="p-3">Hackbench (s)</th>
-                <th class="p-3">Compile (s)</th>
-                <th class="p-3">iperf3 (Gbps)</th>
-                <th class="p-3">Wakeup P50 (us)</th>
-                <th class="p-3">Wakeup P99 (us)</th>
-                <th class="p-3">Request P50 (us)</th>
-                <th class="p-3">Redis GET P50 (ms)</th>
-                <th class="p-3">Cyclic P50 (us)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Scheduler</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Sysbench (eps)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Hackbench (s)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Compile (s)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">iperf3 (Gbps)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Wakeup P50 (us)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Wakeup P99 (us)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Request P50 (us)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Redis GET P50 (ms)</th>
+                <th class="p-4 text-sm font-bold tracking-wider">Cyclic P50 (us)</th>
               </tr>
             </thead>
             <tbody id="telemetry-table-body" class="divide-y divide-slate-100 text-slate-700">
@@ -1734,7 +1735,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
             <p class="text-slate-600 font-sans">
               Source code, proofs, and the benchmark test harness are maintained on GitHub on the <code>DAA</code> branch:
             </p>
-            <div class="p-3 rounded-lg bg-slate-950 font-mono text-[11px] text-cyan-300 overflow-x-auto space-y-1">
+            <div class="p-3 rounded-lg bg-slate-950 font-mono text-xs sm:text-sm text-cyan-300 overflow-x-auto space-y-1">
               <div>git clone -b DAA https://github.com/rishindra2005/scx.git</div>
               <div>cd scx</div>
               <div class="text-slate-400"># Build scx_optima in release mode:</div>
@@ -1762,7 +1763,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
               <h5 class="text-base font-bold text-slate-900 font-sans">
                 Low-Latency &amp; Deterministic Real-Time SLA
               </h5>
-              <p class="text-xs text-slate-600 leading-relaxed font-sans">
+              <p class="text-sm text-slate-600 leading-relaxed font-sans">
                 <strong>Target Workloads:</strong> 120 FPS game simulation loops, Pro Audio DSP, HFT matching engines, and desktop interactive fluidity.
               </p>
               <div class="p-3 rounded-lg bg-slate-950 font-mono text-xs text-cyan-300 overflow-x-auto">
@@ -1771,7 +1772,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
               </div>
               <div class="space-y-2">
                 <strong class="text-xs font-sans text-slate-900 block">How We Achieved It:</strong>
-                <p class="text-xs text-slate-600 leading-relaxed font-sans">
+                <p class="text-sm text-slate-600 leading-relaxed font-sans">
                   1. <strong>2ms Quantum (<code>-s 2000</code>):</strong> Guarantees rapid round-robin responsiveness for high-frequency thread wakeups.<br>
                   2. <strong>Strict DP Partitioning (<code>--dp-threshold 300k</code>):</strong> Locks latency-critical simulation loops exclusively into high-speed P-cores in (1)$.<br>
                   3. <strong>Branch &amp; Bound Preemption:</strong> Instantly pre-empts lower-priority background tasks when real-time deadlines approach.<br>
@@ -1779,7 +1780,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 </p>
               </div>
               <!-- Console Output -->
-              <div class="p-3 rounded-lg bg-slate-900 text-slate-300 font-mono text-[11px] overflow-x-auto space-y-1">
+              <div class="p-3 rounded-lg bg-slate-900 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto space-y-1">
                 <div class="text-slate-500">// Console Live Output (Level 1):</div>
                 <div class="text-emerald-400">[INFO] scx_optima attached successfully to sched-ext!</div>
                 <div class="text-slate-400">[INFO] Active Profile: Level 1 (Low-Latency / Real-Time SLA)</div>
@@ -1799,7 +1800,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
               <h5 class="text-base font-bold text-slate-900 font-sans">
                 High-Throughput &amp; Sustained Parallel Compute
               </h5>
-              <p class="text-xs text-slate-600 leading-relaxed font-sans">
+              <p class="text-sm text-slate-600 leading-relaxed font-sans">
                 <strong>Target Workloads:</strong> Linux kernel compilation (<code>make -j12</code>), distributed database bulk indexing, parallel GCC/LLVM code builds.
               </p>
               <div class="p-3 rounded-lg bg-slate-950 font-mono text-xs text-cyan-300 overflow-x-auto">
@@ -1808,7 +1809,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
               </div>
               <div class="space-y-2">
                 <strong class="text-xs font-sans text-slate-900 block">How We Achieved It:</strong>
-                <p class="text-xs text-slate-600 leading-relaxed font-sans">
+                <p class="text-sm text-slate-600 leading-relaxed font-sans">
                   1. <strong>20ms Quantum (<code>-s 20000</code>):</strong> Eliminates context switch churn and keeps compiler pipelines 100% saturated.<br>
                   2. <strong>Expanded Knapsack Capacity (<code>--dp-capacity 16</code>):</strong> Allows compiler worker threads to overflow smoothly across all P-cores and E-cores without priority contention.<br>
                   3. <strong>Two-Tier Work Stealing:</strong> Idle cores proactively pull batch tasks across CCX clusters to maximize aggregate core IPC.<br>
@@ -1816,7 +1817,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 </p>
               </div>
               <!-- Console Output -->
-              <div class="p-3 rounded-lg bg-slate-900 text-slate-300 font-mono text-[11px] overflow-x-auto space-y-1">
+              <div class="p-3 rounded-lg bg-slate-900 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto space-y-1">
                 <div class="text-slate-500">// Console Live Output (Level 2):</div>
                 <div class="text-emerald-400">[INFO] scx_optima attached successfully to sched-ext!</div>
                 <div class="text-slate-400">[INFO] Active Profile: Level 2 (High-Throughput / Batch Compute)</div>
@@ -1855,7 +1856,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
 
   <!-- Global Footer -->
   <footer class="border-t border-slate-200 bg-white py-8 text-xs text-slate-500 font-mono">
-    <div class="max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-10 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div class="max-w-[1920px] w-full mx-auto px-6 sm:px-10 lg:px-14 xl:px-16 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div>
         &copy; 2026 Risheendra MN &bull; <strong>scx_optima</strong> Algorithmic Kernel Scheduler &bull; Built with eBPF, Rust, and Linux sched_ext
       </div>
@@ -2209,16 +2210,16 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
         if (isOptima) tr.className += ' font-bold bg-blue-50/40 text-blue-900';
 
         tr.innerHTML = `
-          <td class="p-3 font-sans">${row.scheduler}</td>
-          <td class="p-3">${row.sysbench_eps}</td>
-          <td class="p-3">${row.hackbench_time}s</td>
-          <td class="p-3">${row.compile_time}s</td>
-          <td class="p-3">${row.iperf_gbps}</td>
-          <td class="p-3">${row.w_p50}</td>
-          <td class="p-3">${row.w_p99}</td>
-          <td class="p-3">${row.r_p50}</td>
-          <td class="p-3">${row.redis_g_p50}</td>
-          <td class="p-3">${row.cyc_p50}</td>
+          <td class="p-4 font-sans">${row.scheduler}</td>
+          <td class="p-4">${row.sysbench_eps}</td>
+          <td class="p-4">${row.hackbench_time}s</td>
+          <td class="p-4">${row.compile_time}s</td>
+          <td class="p-4">${row.iperf_gbps}</td>
+          <td class="p-4">${row.w_p50}</td>
+          <td class="p-4">${row.w_p99}</td>
+          <td class="p-4">${row.r_p50}</td>
+          <td class="p-4">${row.redis_g_p50}</td>
+          <td class="p-4">${row.cyc_p50}</td>
         `;
         tbody.appendChild(tr);
       });
