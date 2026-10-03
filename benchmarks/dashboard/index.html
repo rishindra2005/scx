@@ -252,6 +252,77 @@
         </div>
       </div>
 
+      <!-- Prologue: Micro-Architectural Reality -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 shadow-sm space-y-6">
+        <div class="space-y-2">
+          <span class="text-xs font-mono font-bold text-blue-600 uppercase tracking-wider">Prologue &bull; The First-Principles Inquiry</span>
+          <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">
+            What Actually Happens on the Silicon When a Thread "Waits"?
+          </h2>
+        </div>
+
+        <div class="border-l-4 border-blue-500 bg-blue-50/60 p-5 sm:p-6 rounded-r-xl font-serif text-lg text-blue-950 leading-relaxed italic">
+          &ldquo;The first principle is that you must not fool yourself — and you are the easiest person to fool. In computer science, we fool ourselves constantly with words like 'virtual threads', 'multitasking', and 'fairness'. But the physical reality of a processor is completely indifferent to human notions of fairness.&rdquo;
+          <span class="block mt-2 text-xs font-sans font-semibold text-blue-800 not-italic uppercase tracking-wider">&mdash; Axiom of Systems Architecture</span>
+        </div>
+
+        <div class="prose max-w-none text-slate-600 space-y-4">
+          <p>
+            Let us strip away the OS textbook abstractions. At the physical layer, a modern CPU does not know what a &ldquo;thread&rdquo; is. A CPU core is simply a finite-state machine clocked by a quartz crystal oscillating billions of times per second (e.g. $5.16 \times 10^9$ cycles per second on a Performance core).
+          </p>
+          <p>
+            Every nanosecond, it executes micro-operations against physical registers: the Program Counter (<code>%rip</code>), Stack Pointer (<code>%rsp</code>), general-purpose registers (<code>%rax</code>, <code>%rbx</code>, ...), and 512-bit vector registers. Surrounding this arithmetic execution unit is a strictly hierarchical, non-uniform memory landscape:
+          </p>
+        </div>
+
+        <!-- Latency Hierarchy Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-1">
+          <div class="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <span class="text-xs font-mono font-bold text-emerald-600 block">L1 Data Cache</span>
+            <div class="text-2xl font-black font-mono text-slate-900">~0.8 ns</div>
+            <p class="text-xs text-slate-500 font-sans leading-relaxed">
+              4-5 CPU cycles. Direct register feed. Private to each individual core.
+            </p>
+          </div>
+          <div class="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <span class="text-xs font-mono font-bold text-blue-600 block">L2 Cache</span>
+            <div class="text-2xl font-black font-mono text-slate-900">~3.0 ns</div>
+            <p class="text-xs text-slate-500 font-sans leading-relaxed">
+              14 CPU cycles. 1MB private cache. Preserves active working sets.
+            </p>
+          </div>
+          <div class="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <span class="text-xs font-mono font-bold text-indigo-600 block">Local L3 (CCX 0)</span>
+            <div class="text-2xl font-black font-mono text-slate-900">~12.0 ns</div>
+            <p class="text-xs text-slate-500 font-sans leading-relaxed">
+              16MB shared within Performance cluster. Zero interconnect serialization.
+            </p>
+          </div>
+          <div class="p-5 rounded-xl bg-amber-50 border border-amber-200 space-y-1.5">
+            <span class="text-xs font-mono font-bold text-amber-700 block">Cross-CCX Interconnect</span>
+            <div class="text-2xl font-black font-mono text-amber-900">~55.0 ns</div>
+            <p class="text-xs text-amber-800 font-sans leading-relaxed">
+              <strong>The Latency Cliff:</strong> Traverses inter-die on-chip fabric. $5\times$ penalty!
+            </p>
+          </div>
+          <div class="p-5 rounded-xl bg-rose-50 border border-rose-200 space-y-1.5">
+            <span class="text-xs font-mono font-bold text-rose-700 block">Main DRAM</span>
+            <div class="text-2xl font-black font-mono text-rose-900">~95.0 ns</div>
+            <p class="text-xs text-rose-800 font-sans leading-relaxed">
+              Catastrophic pipeline stall. Hundreds of instruction execution slots lost.
+            </p>
+          </div>
+        </div>
+
+        <div class="prose max-w-none text-slate-600">
+          <p>
+            When an operating system scheduler takes a running task from Core 2 and migrates it to Core 8 across the silicon boundary, <strong>it is not performing an abstract software pointer update</strong>.
+            It is physically invalidating cache lines, forcing MOESI cache-coherency bus snoops across the inter-cluster interconnect, purging translation lookaside buffers (TLBs), and triggering pipeline flushes.
+            <strong>A naive scheduler destroys performance not by computing bad schedules, but by ignoring the physical physics of the silicon die.</strong>
+          </p>
+        </div>
+      </div>
+
       <!-- Narrative Section: The Breakthrough -->
       <div class="bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 shadow-sm space-y-6">
         <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 font-serif-heading">
@@ -542,17 +613,17 @@
         </p>
       </div>
 
-      <!-- High School Student Visual Explainer Banner -->
+      <!-- First-Principles Treatise Banner -->
       <div class="p-6 sm:p-7 rounded-2xl bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 border border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 shadow-xs">
         <div class="space-y-1.5">
           <div class="flex items-center gap-2">
             <span class="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white font-mono text-[11px] font-bold uppercase tracking-wider">First-Principles Treatise</span>
             <h4 class="text-base sm:text-lg font-bold text-indigo-950 font-sans">
-              Looking for a deep, self-discovery exploration in the style of 3Blue1Brown &amp; Richard Feynman?
+              Looking for a deep, first-principles exploration of the underlying physics and mathematics?
             </h4>
           </div>
           <p class="text-sm text-indigo-800 leading-relaxed font-sans max-w-4xl">
-            Explore the 3B1B pairwise swap geometric proof of Smith's Rule, Feynman micro-architectural silicon physics (cache line snooping, interconnect latency cliffs), the 171.58 Gbps <code>SCX_WAKE_SYNC</code> phenomenon, single-cycle <code>tzcnt</code> bitops, and an explorable systems laboratory.
+            Explore the geometric pairwise swap proof of Smith's Rule, micro-architectural silicon physics (cache line snooping, interconnect latency cliffs), the 171.58 Gbps <code>SCX_WAKE_SYNC</code> phenomenon, single-cycle <code>tzcnt</code> bitops, and an explorable systems laboratory.
           </p>
         </div>
         <a href="how-it-works.html" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-semibold text-sm transition shadow-sm whitespace-nowrap flex items-center gap-2 group">
