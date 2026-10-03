@@ -1,0 +1,91 @@
+Scheduler,Application,Ramp_Step,Throughput,Throughput_Unit,P50,P90,P95,P99,Max_Latency,CPU_Percent,RAM_MB,Status
+default_cfs_eevdf,01_api_gateway,Concurrency 25,479.11,req/s,28.65 ms,81.08 ms,113.36 ms,196.36 ms,N/A,7.5,261.7,HEALTHY
+default_cfs_eevdf,01_api_gateway,Concurrency 50,254.56,req/s,75.83 ms,393.74 ms,535.23 ms,965.91 ms,N/A,8.0,263.6,HEALTHY
+default_cfs_eevdf,01_api_gateway,Concurrency 100,130.81,req/s,323.83 ms,1457.06 ms,1883.14 ms,3021.7 ms,N/A,8.2,266.3,Latency Cliff: P99 3021.7ms > 2000ms
+default_cfs_eevdf,02_redis_cache,Clients 50,32589.3,ops/s,23.98 ms,26.21 ms,26.77 ms,39.519 ms,N/A,8.3,17.1,P99 Latency Breach: 39.519ms > 5.0ms
+default_cfs_eevdf,03_realtime_audio,Step 1:  8ch /  8 stages (64 filters),64,DSP filters @ 1.33ms,89.3 us,94.3 us,95.58 us,119.47 us,948.38 us,0.2,11.1,PERFECT (0 xruns)
+default_cfs_eevdf,03_realtime_audio,Step 2:  8ch / 16 stages (128 filters),128,DSP filters @ 1.33ms,109.8 us,114.3 us,115.38 us,127.29 us,401.08 us,0.3,11.2,PERFECT (0 xruns)
+default_cfs_eevdf,03_realtime_audio,Step 3: 16ch / 24 stages (384 filters),384,DSP filters @ 1.33ms,191.61 us,200.6 us,202.81 us,217.02 us,1001.6 us,0.7,11.4,PERFECT (0 xruns)
+default_cfs_eevdf,03_realtime_audio,Step 4: 24ch / 32 stages (768 filters),768,DSP filters @ 1.33ms,152.24 us,286.8 us,320.38 us,341.12 us,357.02 us,0.9,11.4,PERFECT (0 xruns)
+default_cfs_eevdf,03_realtime_audio,Step 5: 32ch / 48 stages (1536 filters),1536,DSP filters @ 1.33ms,217.06 us,441.7 us,497.8 us,567.06 us,595.87 us,1.2,11.6,PERFECT (0 xruns)
+default_cfs_eevdf,03_realtime_audio,Step 6: 48ch / 64 stages (3072 filters),3072,DSP filters @ 1.33ms,380.43 us,387.6 us,389.39 us,395.55 us,892.5 us,2.0,11.5,PERFECT (0 xruns)
+default_cfs_eevdf,04_hft_matching,"50,000 orders",10545215.03,orders/sec,1536.25 us,1660.93 us,1676.53 us,1688.29 us,1730.12 us,0.7,11.2,HFT Latency Squeeze: P99 1688.3us > 1000us
+default_cfs_eevdf,05_game_tick_server,100 players,100,players @ 120 FPS,340.293 us,492.78 us,536.543 us,649.706 us,895.36 us,1.6,11.8,PERFECT (0 drops)
+default_cfs_eevdf,05_game_tick_server,250 players,250,players @ 120 FPS,440.181 us,734.637 us,824.486 us,938.351 us,1305.363 us,2.0,12.0,PERFECT (0 drops)
+default_cfs_eevdf,05_game_tick_server,500 players,500,players @ 120 FPS,777.277 us,1133.89 us,1271.289 us,1556.647 us,1855.521 us,2.6,11.8,PERFECT (0 drops)
+default_cfs_eevdf,05_game_tick_server,750 players,750,players @ 120 FPS,1072.634 us,1529.416 us,1644.223 us,1920.875 us,2263.832 us,3.2,11.9,PERFECT (0 drops)
+default_cfs_eevdf,05_game_tick_server,1000 players,1000,players @ 120 FPS,1412.646 us,1855.972 us,1966.301 us,2248.423 us,2510.026 us,3.7,12.0,PERFECT (0 drops)
+default_cfs_eevdf,05_game_tick_server,1300 players,1300,players @ 120 FPS,1837.027 us,2434.945 us,2566.804 us,2781.449 us,3052.661 us,4.6,12.2,Transient Hitching: 1 drops (0.14%)
+default_cfs_eevdf,05_game_tick_server,1600 players,1600,players @ 120 FPS,2303.287 us,2764.617 us,2887.559 us,3351.485 us,3675.937 us,5.0,12.1,PERFECT (0 drops)
+default_cfs_eevdf,05_game_tick_server,2000 players,2000,players @ 120 FPS,3051.729 us,3421.257 us,3441.634 us,3823.065 us,4501.455 us,5.9,12.2,PERFECT (0 drops)
+scx_optima,01_api_gateway,Concurrency 25,544.15,req/s,24.56 ms,51.57 ms,61.82 ms,88.14 ms,N/A,7.8,262.4,HEALTHY
+scx_optima,01_api_gateway,Concurrency 50,246.24,req/s,105.49 ms,393.78 ms,507.6 ms,961.96 ms,N/A,8.4,265.8,HEALTHY
+scx_optima,01_api_gateway,Concurrency 100,87.68,req/s,558.72 ms,2193.88 ms,2855.47 ms,4324.95 ms,N/A,6.0,268.2,Latency Cliff: P99 4324.95ms > 2000ms
+scx_optima,02_redis_cache,Clients 50,1263736.2,ops/s,0.4 ms,0.64 ms,0.7 ms,8.247 ms,N/A,29.0,22.0,P99 Latency Breach: 8.247ms > 5.0ms
+scx_optima,03_realtime_audio,Step 1:  8ch /  8 stages (64 filters),64,DSP filters @ 1.33ms,89.82 us,93.5 us,94.39 us,97.84 us,578.71 us,0.2,16.0,PERFECT (0 xruns)
+scx_optima,03_realtime_audio,Step 2:  8ch / 16 stages (128 filters),128,DSP filters @ 1.33ms,104.53 us,125.3 us,130.53 us,416.76 us,802.38 us,0.3,16.5,PERFECT (0 xruns)
+scx_optima,03_realtime_audio,Step 3: 16ch / 24 stages (384 filters),384,DSP filters @ 1.33ms,95.41 us,173.2 us,192.63 us,200.14 us,224.13 us,0.4,16.5,PERFECT (0 xruns)
+scx_optima,03_realtime_audio,Step 4: 24ch / 32 stages (768 filters),768,DSP filters @ 1.33ms,134.65 us,280.8 us,317.37 us,320.91 us,472.13 us,0.7,16.5,PERFECT (0 xruns)
+scx_optima,03_realtime_audio,Step 5: 32ch / 48 stages (1536 filters),1536,DSP filters @ 1.33ms,217.06 us,221.9 us,223.16 us,401.47 us,547.64 us,1.0,16.3,PERFECT (0 xruns)
+scx_optima,03_realtime_audio,Step 6: 48ch / 64 stages (3072 filters),3072,DSP filters @ 1.33ms,383.24 us,521.1 us,555.57 us,585.23 us,1126.42 us,2.2,16.8,PERFECT (0 xruns)
+scx_optima,04_hft_matching,"50,000 orders",14605644.67,orders/sec,979.29 us,1099.1 us,1107.25 us,1113.65 us,1114.94 us,0.8,16.6,HFT Latency Squeeze: P99 1113.7us > 1000us
+scx_optima,05_game_tick_server,100 players,100,players @ 120 FPS,382.101 us,494.684 us,502.379 us,645.167 us,742.181 us,1.1,16.8,PERFECT (0 drops)
+scx_optima,05_game_tick_server,250 players,250,players @ 120 FPS,557.081 us,910.077 us,937.66 us,1141.804 us,7163.068 us,1.8,17.3,PERFECT (0 drops)
+scx_optima,05_game_tick_server,500 players,500,players @ 120 FPS,898.575 us,1425.94 us,1696.862 us,5630.576 us,6523.24 us,2.2,17.5,PERFECT (0 drops)
+scx_optima,05_game_tick_server,750 players,750,players @ 120 FPS,1483.56 us,5879.696 us,6875.355 us,8582.215 us,10698.129 us,3.0,17.6,DESYNC COLLAPSE: 3.33% frame drops (24/720 ticks > 8.33ms)
+scx_rdtai,01_api_gateway,Concurrency 25,411.32,req/s,30.05 ms,91.6 ms,135.54 ms,256.8 ms,N/A,11.5,268.1,HEALTHY
+scx_rdtai,01_api_gateway,Concurrency 50,289.36,req/s,52.68 ms,348.29 ms,503.3 ms,787.33 ms,N/A,11.1,269.5,HEALTHY
+scx_rdtai,01_api_gateway,Concurrency 100,96.56,req/s,490.47 ms,1803.92 ms,2467.56 ms,4005.48 ms,N/A,9.5,273.0,Latency Cliff: P99 4005.48ms > 2000ms
+scx_rdtai,02_redis_cache,Clients 50,2290260.2,ops/s,0.28 ms,0.4 ms,0.43 ms,0.855 ms,N/A,29.3,27.6,HEALTHY
+scx_rdtai,02_redis_cache,Clients 100,2379679.1,ops/s,0.54 ms,0.6 ms,0.62 ms,0.967 ms,N/A,16.8,32.9,HEALTHY
+scx_rdtai,02_redis_cache,Clients 200,1877406.9,ops/s,1.4 ms,1.6 ms,1.64 ms,3.367 ms,N/A,10.5,29.9,HEALTHY
+scx_rdtai,02_redis_cache,Clients 350,1363564.3,ops/s,3.79 ms,4.71 ms,4.94 ms,8.143 ms,N/A,8.9,29.7,P99 Latency Breach: 8.143ms > 5.0ms
+scx_rdtai,03_realtime_audio,Step 1:  8ch /  8 stages (64 filters),64,DSP filters @ 1.33ms,90.24 us,94.5 us,95.54 us,98.83 us,410.7 us,0.2,17.1,PERFECT (0 xruns)
+scx_rdtai,03_realtime_audio,Step 2:  8ch / 16 stages (128 filters),128,DSP filters @ 1.33ms,111.0 us,115.6 us,116.76 us,145.35 us,722.66 us,0.3,17.3,PERFECT (0 xruns)
+scx_rdtai,03_realtime_audio,Step 3: 16ch / 24 stages (384 filters),384,DSP filters @ 1.33ms,177.69 us,213.7 us,222.7 us,530.09 us,1401.2 us,0.7,17.5,DEADLINE BREACH: 1 Xruns! (Max: 1401.2us > 1333.3us)
+scx_rdtai,04_hft_matching,"50,000 orders",7235674.31,orders/sec,272.63 us,470.69 us,499.3 us,526.47 us,531.31 us,1.0,16.5,HEALTHY
+scx_rdtai,04_hft_matching,"150,000 orders",18859443.71,orders/sec,793.19 us,1276.09 us,1310.53 us,1336.49 us,1344.1 us,1.3,16.8,HFT Latency Squeeze: P99 1336.5us > 1000us
+scx_rdtai,05_game_tick_server,100 players,100,players @ 120 FPS,281.882 us,520.443 us,570.026 us,693.278 us,858.841 us,1.6,18.0,PERFECT (0 drops)
+scx_rdtai,05_game_tick_server,250 players,250,players @ 120 FPS,827.942 us,1028.892 us,1069.288 us,1191.048 us,1551.498 us,2.5,18.4,PERFECT (0 drops)
+scx_rdtai,05_game_tick_server,500 players,500,players @ 120 FPS,1348.415 us,1586.063 us,1693.446 us,1833.41 us,2573.798 us,3.5,18.6,PERFECT (0 drops)
+scx_rdtai,05_game_tick_server,750 players,750,players @ 120 FPS,2026.835 us,2342.881 us,2416.831 us,2767.463 us,3378.155 us,4.3,19.0,PERFECT (0 drops)
+scx_rdtai,05_game_tick_server,1000 players,1000,players @ 120 FPS,1713.624 us,2126.793 us,2267.479 us,2672.072 us,3044.465 us,4.2,19.0,PERFECT (0 drops)
+scx_rdtai,05_game_tick_server,1300 players,1300,players @ 120 FPS,3083.369 us,3396.78 us,3464.077 us,3970.042 us,5025.765 us,6.0,18.4,Transient Hitching: 2 drops (0.28%)
+scx_rdtai,05_game_tick_server,1600 players,1600,players @ 120 FPS,2516.439 us,3121.922 us,3216.641 us,3550.43 us,4229.111 us,5.1,18.0,PERFECT (0 drops)
+scx_rdtai,05_game_tick_server,2000 players,2000,players @ 120 FPS,4839.683 us,5076.77 us,5160.899 us,7383.113 us,11387.71 us,7.8,18.2,DESYNC COLLAPSE: 3.47% frame drops (25/720 ticks > 8.33ms)
+scx_rusty,01_api_gateway,Concurrency 25,519.31,req/s,27.21 ms,72.09 ms,100.31 ms,196.08 ms,N/A,11.6,268.7,HEALTHY
+scx_rusty,01_api_gateway,Concurrency 50,208.66,req/s,100.15 ms,518.62 ms,681.17 ms,950.09 ms,N/A,10.7,271.1,HEALTHY
+scx_rusty,01_api_gateway,Concurrency 100,98.97,req/s,504.28 ms,1956.86 ms,2481.59 ms,3397.1 ms,N/A,9.6,274.8,Latency Cliff: P99 3397.1ms > 2000ms
+scx_rusty,02_redis_cache,Clients 50,2175925.9,ops/s,0.25 ms,0.31 ms,0.33 ms,0.527 ms,N/A,29.4,28.6,HEALTHY
+scx_rusty,02_redis_cache,Clients 100,1939586.7,ops/s,0.74 ms,1.12 ms,1.22 ms,7.775 ms,N/A,19.3,33.8,P99 Latency Breach: 7.775ms > 5.0ms
+scx_rusty,03_realtime_audio,Step 1:  8ch /  8 stages (64 filters),64,DSP filters @ 1.33ms,90.06 us,94.6 us,95.71 us,123.23 us,868.55 us,0.2,27.9,PERFECT (0 xruns)
+scx_rusty,03_realtime_audio,Step 2:  8ch / 16 stages (128 filters),128,DSP filters @ 1.33ms,106.17 us,137.6 us,145.45 us,456.35 us,1319.74 us,0.3,27.5,PERFECT (0 xruns)
+scx_rusty,03_realtime_audio,Step 3: 16ch / 24 stages (384 filters),384,DSP filters @ 1.33ms,175.77 us,182.2 us,183.81 us,204.66 us,1108.54 us,0.7,28.2,PERFECT (0 xruns)
+scx_rusty,03_realtime_audio,Step 4: 24ch / 32 stages (768 filters),768,DSP filters @ 1.33ms,290.88 us,313.2 us,318.76 us,342.87 us,1215.54 us,1.3,28.3,PERFECT (0 xruns)
+scx_rusty,03_realtime_audio,Step 5: 32ch / 48 stages (1536 filters),1536,DSP filters @ 1.33ms,217.16 us,289.0 us,306.92 us,364.35 us,550.66 us,1.1,28.0,PERFECT (0 xruns)
+scx_rusty,03_realtime_audio,Step 6: 48ch / 64 stages (3072 filters),3072,DSP filters @ 1.33ms,382.35 us,385.1 us,385.78 us,548.52 us,901.98 us,2.0,28.4,PERFECT (0 xruns)
+scx_rusty,04_hft_matching,"50,000 orders",13105957.21,orders/sec,250.94 us,433.78 us,451.61 us,465.28 us,470.67 us,1.2,29.1,HEALTHY
+scx_rusty,04_hft_matching,"150,000 orders",13785919.56,orders/sec,909.81 us,1408.69 us,1455.19 us,1496.21 us,1513.79 us,1.7,28.4,HFT Latency Squeeze: P99 1496.2us > 1000us
+scx_rusty,05_game_tick_server,100 players,100,players @ 120 FPS,449.238 us,557.623 us,591.377 us,626.141 us,658.623 us,1.9,28.1,PERFECT (0 drops)
+scx_rusty,05_game_tick_server,250 players,250,players @ 120 FPS,681.135 us,951.416 us,1021.437 us,1182.131 us,1381.738 us,2.3,28.4,PERFECT (0 drops)
+scx_rusty,05_game_tick_server,500 players,500,players @ 120 FPS,1053.438 us,1451.85 us,1541.66 us,1698.015 us,1950.851 us,3.0,28.6,PERFECT (0 drops)
+scx_rusty,05_game_tick_server,750 players,750,players @ 120 FPS,1939.52 us,2309.338 us,2381.104 us,2557.566 us,3624.55 us,4.2,28.3,PERFECT (0 drops)
+scx_rusty,05_game_tick_server,1000 players,1000,players @ 120 FPS,2401.893 us,2776.841 us,2881.468 us,3205.469 us,4077.895 us,5.0,28.5,PERFECT (0 drops)
+scx_rusty,05_game_tick_server,1300 players,1300,players @ 120 FPS,2251.98 us,2757.204 us,2873.924 us,3247.639 us,3815.319 us,4.9,28.0,PERFECT (0 drops)
+scx_rusty,05_game_tick_server,1600 players,1600,players @ 120 FPS,4125.515 us,4412.307 us,4479.393 us,4931.286 us,8398.57 us,6.7,27.6,DESYNC COLLAPSE: 1.11% frame drops (8/720 ticks > 8.33ms)
+scx_rustland,01_api_gateway,Concurrency 25,500.69,req/s,27.26 ms,81.31 ms,109.78 ms,209.14 ms,N/A,10.9,278.8,HEALTHY
+scx_rustland,01_api_gateway,Concurrency 50,220.94,req/s,107.81 ms,460.36 ms,619.64 ms,991.47 ms,N/A,9.9,280.6,HEALTHY
+scx_rustland,01_api_gateway,Concurrency 100,119.22,req/s,375.17 ms,1562.31 ms,2136.41 ms,3546.55 ms,N/A,9.4,284.1,Latency Cliff: P99 3546.55ms > 2000ms
+scx_rustland,02_redis_cache,Clients 50,484400.7,ops/s,1.83 ms,1.92 ms,1.94 ms,2.935 ms,N/A,25.5,37.3,HEALTHY
+scx_rustland,02_redis_cache,Clients 100,1160037.8,ops/s,1.13 ms,1.98 ms,2.19 ms,3.703 ms,N/A,18.8,43.0,HEALTHY
+scx_rustland,02_redis_cache,Clients 200,1253675.9,ops/s,1.91 ms,2.84 ms,3.08 ms,6.575 ms,N/A,10.6,40.7,P99 Latency Breach: 6.575ms > 5.0ms
+scx_rustland,03_realtime_audio,Step 1:  8ch /  8 stages (64 filters),64,DSP filters @ 1.33ms,87.32 us,149.9 us,165.52 us,459.84 us,2394.0 us,0.2,32.1,DEADLINE BREACH: 2 Xruns! (Max: 2394.0us > 1333.3us)
+scx_rustland,04_hft_matching,"50,000 orders",7412418.2,orders/sec,501.14 us,980.33 us,1042.58 us,1109.61 us,1127.06 us,1.2,33.5,HFT Latency Squeeze: P99 1109.6us > 1000us
+scx_rustland,05_game_tick_server,100 players,100,players @ 120 FPS,412.598 us,523.407 us,567.391 us,651.74 us,666.167 us,1.8,33.7,PERFECT (0 drops)
+scx_rustland,05_game_tick_server,250 players,250,players @ 120 FPS,695.542 us,919.024 us,996.791 us,1146.734 us,1328.708 us,2.4,34.1,PERFECT (0 drops)
+scx_rustland,05_game_tick_server,500 players,500,players @ 120 FPS,1308.599 us,1592.074 us,1683.507 us,1831.406 us,2247.371 us,3.3,34.7,PERFECT (0 drops)
+scx_rustland,05_game_tick_server,750 players,750,players @ 120 FPS,1944.189 us,2244.576 us,2317.473 us,2475.221 us,3211.962 us,4.3,35.6,PERFECT (0 drops)
+scx_rustland,05_game_tick_server,1000 players,1000,players @ 120 FPS,2078.944 us,2553.319 us,2668.035 us,2963.502 us,3519.833 us,4.7,36.4,Transient Hitching: 1 drops (0.14%)
+scx_rustland,05_game_tick_server,1300 players,1300,players @ 120 FPS,2457.688 us,2932.634 us,3042.291 us,3411.268 us,4219.643 us,5.4,36.0,Transient Hitching: 2 drops (0.28%)
+scx_rustland,05_game_tick_server,1600 players,1600,players @ 120 FPS,3937.19 us,4393.481 us,4451.12 us,4608.617 us,4948.098 us,6.4,35.8,Transient Hitching: 2 drops (0.28%)
+scx_rustland,05_game_tick_server,2000 players,2000,players @ 120 FPS,4936.946 us,5471.956 us,5616.149 us,7183.316 us,20890.583 us,7.6,34.4,DESYNC COLLAPSE: 3.33% frame drops (24/720 ticks > 8.33ms)

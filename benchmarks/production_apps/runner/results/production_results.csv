@@ -1,0 +1,6 @@
+scheduler,app_name,workload,throughput,p50_us,p95_us,p99_us,tail_metric,tail_val
+scx_optima,API Gateway,Fan-out 4 Services,214.4,124960.0,646020.0,941090.0,Errors,0
+scx_optima,Redis Cache,Pipelined GET/SET,165016.5,167.0,215.0,247.0,Set P99 (us),327.0
+scx_optima,Pro-Audio DSP,48kHz 64-smp Loop,125.0,59.48,61.97,71.75,Xruns,0
+scx_optima,HFT Matching,LMAX Disruptor LOB,15058286.11,127.79,340.43,346.16,P99.9 (us),348.16
+scx_optima,120 FPS Game Server,500 Client Sim,120,953.24,3705.457,6466.52,Frame Drops,2

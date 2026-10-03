@@ -1,0 +1,33 @@
+FROM debian:bookworm-slim
+
+# Install all benchmark dependencies for both throughput and latency suites
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    sysbench \
+    rt-tests \
+    redis-server \
+    redis-tools \
+    iperf3 \
+    jq \
+    bc \
+    procps \
+    coreutils \
+    time \
+    bison \
+    flex \
+    libssl-dev \
+    libelf-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# Compile schbench
+COPY sch_tests/schbench/schbench.c /workspace/
+RUN gcc -O2 /workspace/schbench.c -lpthread -lm -o /usr/local/bin/schbench && rm -f /workspace/schbench.c
+
+# Install the consolidated benchmark runner
+COPY sch_tests/docker_bench_inner.sh /usr/local/bin/run_bench
+RUN chmod +x /usr/local/bin/run_bench
+
+ENTRYPOINT ["/usr/local/bin/run_bench"]

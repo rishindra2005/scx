@@ -1,0 +1,15 @@
+{
+  "duration_s": 5.178,
+  "successful_reqs": 500,
+  "total_reqs": 500,
+  "failed_reqs": 0,
+  "throughput_req_s": 96.56,
+  "p50_ms": 490.47,
+  "p90_ms": 1803.92,
+  "p95_ms": 2467.56,
+  "p99_ms": 4005.48,
+  "p999_ms": 4912.13,
+  "min_ms": 20.49,
+  "max_ms": 4912.13,
+  "avg_ms": 768.99
+}
