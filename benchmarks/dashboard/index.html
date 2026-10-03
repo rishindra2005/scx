@@ -115,7 +115,7 @@
 
   <!-- Top Global Header -->
   <header class="border-b border-slate-200 bg-white sticky top-0 z-50 shadow-sm">
-    <div class="max-w-7xl mx-auto px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div class="max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div class="flex items-center space-x-3.5">
         <div class="w-9 h-9 rounded-lg bg-blue-600 text-white font-mono font-black flex items-center justify-center text-sm shadow-md">
           &Omega;
@@ -150,7 +150,7 @@
     </div>
 
     <!-- Navigation Bar -->
-    <div class="max-w-7xl mx-auto px-6 flex space-x-8 text-sm border-t border-slate-100 overflow-x-auto">
+    <div class="max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-10 flex space-x-8 text-sm border-t border-slate-100 overflow-x-auto">
       <button onclick="switchView('view-overview')" id="tab-overview" class="nav-tab-btn active py-3 border-b-2 border-transparent text-slate-600 hover:text-slate-900 transition font-medium whitespace-nowrap">
         Launch Overview
       </button>
@@ -170,7 +170,7 @@
   </header>
 
   <!-- Main Content Area -->
-  <main class="max-w-7xl mx-auto px-6 py-10 flex-1 w-full">
+  <main class="max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-10 py-10 flex-1 w-full">
 
     <!-- ===================================================================== -->
     <!-- VIEW 1: LAUNCH OVERVIEW                                               -->
@@ -178,7 +178,7 @@
     <section id="view-overview" class="view-panel space-y-12">
       
       <!-- Hero Header -->
-      <div class="max-w-4xl space-y-4">
+      <div class="max-w-5xl space-y-4">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
           <span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
           Breakthrough Systems Engineering Announcement
@@ -522,7 +522,7 @@
     <!-- ===================================================================== -->
         <section id="view-architecture" class="view-panel hidden space-y-12">
       
-      <div class="max-w-4xl space-y-4">
+      <div class="max-w-5xl space-y-4">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
           <span class="w-2 h-2 rounded-full bg-blue-600"></span>
           Formal Algorithmic Kernel Theory &bull; Design &amp; Analysis of Algorithms (CS301)
@@ -674,7 +674,7 @@
         </p>
 
         <!-- Visual Flowchart Container -->
-        <div class="space-y-6 max-w-4xl mx-auto">
+        <div class="space-y-6 max-w-5xl mx-auto">
           
           <!-- Root Node: Task Wakeup / Enqueue -->
           <div class="flex justify-center">
@@ -1139,7 +1139,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
     <!-- ===================================================================== -->
     <section id="view-benchmarks" class="view-panel hidden space-y-12">
       
-      <div class="max-w-4xl space-y-4">
+      <div class="max-w-5xl space-y-4">
         <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-serif-heading">
           Deep Dive: The 10 Rigorous Benchmark Workloads
         </h2>
@@ -1183,7 +1183,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 5: HACKBENCH EXECUTION TIME</span>
                 <span class="text-slate-500">Seconds (Lower is better)</span>
               </div>
-              <div class="h-56">
+              <div class="h-64 sm:h-72">
                 <canvas id="chart-hackbench"></canvas>
               </div>
             </div>
@@ -1221,7 +1221,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 6: KERNEL COMPILATION TIME</span>
                 <span class="text-slate-500">Seconds (Lower is better)</span>
               </div>
-              <div class="h-56">
+              <div class="h-64 sm:h-72">
                 <canvas id="chart-compile"></canvas>
               </div>
             </div>
@@ -1259,7 +1259,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 7: NETWORK STACK BANDWIDTH</span>
                 <span class="text-slate-500">Gbps (Higher is better)</span>
               </div>
-              <div class="h-56">
+              <div class="h-64 sm:h-72">
                 <canvas id="chart-iperf"></canvas>
               </div>
             </div>
@@ -1339,7 +1339,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 10: 120 FPS FRAME DROPS (%)</span>
                 <span class="text-slate-500">Player Scaling (100 to 2000)</span>
               </div>
-              <div class="h-56">
+              <div class="h-64 sm:h-72">
                 <canvas id="chart-game-drops"></canvas>
               </div>
             </div>
@@ -1379,7 +1379,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 11: AUDIO DSP TURNAROUND P99 (&mu;S)</span>
                 <span class="text-slate-500">Deadline = 1,333 &mu;s</span>
               </div>
-              <div class="h-56">
+              <div class="h-64 sm:h-72">
                 <canvas id="chart-audio-p99"></canvas>
               </div>
             </div>
@@ -1417,7 +1417,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 9: REDIS THROUGHPUT (OPS/SEC)</span>
                 <span class="text-slate-500">Higher is better</span>
               </div>
-              <div class="h-56">
+              <div class="h-64 sm:h-72">
                 <canvas id="chart-redis-qps"></canvas>
               </div>
             </div>
@@ -1452,7 +1452,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 12: API GATEWAY THROUGHPUT (REQ/S)</span>
                 <span class="text-slate-500">Peak QPS</span>
               </div>
-              <div class="h-56">
+              <div class="h-64 sm:h-72">
                 <canvas id="chart-gateway-qps"></canvas>
               </div>
             </div>
@@ -1487,7 +1487,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
                 <span class="font-bold text-slate-700">INFOGRAPHIC 13: HFT MATCHING THROUGHPUT</span>
                 <span class="text-slate-500">Orders/sec</span>
               </div>
-              <div class="h-56">
+              <div class="h-64 sm:h-72">
                 <canvas id="chart-hft-qps"></canvas>
               </div>
             </div>
@@ -1526,7 +1526,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
     <!-- ===================================================================== -->
     <section id="view-3d" class="view-panel hidden space-y-12">
       
-      <div class="max-w-4xl space-y-4">
+      <div class="max-w-5xl space-y-4">
         <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-serif-heading">
           3D &amp; Multidimensional Visualization Lab
         </h2>
@@ -1626,7 +1626,7 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
     <!-- ===================================================================== -->
     <section id="view-telemetry" class="view-panel hidden space-y-12">
       
-      <div class="max-w-4xl space-y-4">
+      <div class="max-w-5xl space-y-4">
         <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-serif-heading">
           Full Telemetry Dataset &amp; Competitor Breakdown
         </h2>
@@ -1854,8 +1854,17 @@ SCX_DSQ_LOCAL (Local Core)       DSQ_PERF (P-Cores)                        DSQ_S
   </main>
 
   <!-- Global Footer -->
-  <footer class="border-t border-slate-200 bg-white py-8 text-center text-xs text-slate-500 font-mono">
-    &copy; 2026 Risheendra MN &bull; scx_optima Algorithmic Kernel Scheduler &bull; Built with eBPF, Rust, and Linux sched_ext
+  <footer class="border-t border-slate-200 bg-white py-8 text-xs text-slate-500 font-mono">
+    <div class="max-w-[1720px] w-full mx-auto px-4 sm:px-6 lg:px-10 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div>
+        &copy; 2026 Risheendra MN &bull; <strong>scx_optima</strong> Algorithmic Kernel Scheduler &bull; Built with eBPF, Rust, and Linux sched_ext
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="https://github.com/rishindra2005/scx" target="_blank" class="hover:text-blue-600 transition font-sans">GitHub: rishindra2005/scx (DAA)</a>
+        <span>&bull;</span>
+        <a href="mailto:rishindra.hackbox@gmail.com" class="hover:text-blue-600 transition font-sans">rishindra.hackbox@gmail.com</a>
+      </div>
+    </div>
   </footer>
 
   <!-- Scripts for Navigation and Visualizations -->
