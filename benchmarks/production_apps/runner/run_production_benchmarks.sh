@@ -23,7 +23,7 @@ mkdir -p "$RESULTS_DIR"
 
 # Configurable options
 QUICK_MODE=false
-SCHEDULERS=("default_cfs_eevdf" "scx_optima" "scx_rdtai")
+SCHEDULERS=("default_cfs_eevdf" "scx_optima" "scx_rlfifo" "scx_rdtai" "scx_rusty" "scx_rustland")
 
 print_usage() {
     echo "Usage: $0 [options]"
@@ -121,7 +121,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
     # Start or verify scheduler state
     if [ "$SCHED" != "default_cfs_eevdf" ]; then
         echo "  [Host] Launching scheduler: $SCHED..."
-        sudo "$TARGET_DIR/$SCHED" > "/tmp/${SCHED}_prod_host.log" 2>&1 &
+        sudo "$TARGET_DIR/$SCHED" > "$RESULTS_DIR/${SCHED}_host.log" 2>&1 &
         SCHED_PID=$!
         for i in {1..8}; do
             CURRENT_OPS=$(cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo "None")
@@ -133,7 +133,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
         echo "  [Host] Active sched_ext ops: $CURRENT_OPS"
         if [ "$CURRENT_OPS" = "None" ]; then
             echo "  [ERROR] $SCHED failed to load! Log:"
-            cat "/tmp/${SCHED}_prod_host.log" | tail -n 10
+            cat "$RESULTS_DIR/${SCHED}_host.log" | tail -n 10
             continue
         fi
     else
@@ -149,6 +149,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
     # --------------------------------------------------------------------------
     echo ""
     echo "--- [1/5] Running App 1: Cloud-Native API Gateway (NGINX + uvloop) ---"
+    docker rm -f "bench_gw_${SCHED}" >/dev/null 2>&1 || true
     GW_CID=$(docker create \
         --cgroup-parent benchmark.slice \
         -m 4g --memory-swap 4g \
@@ -194,6 +195,7 @@ json.dump(data, open('$RESULTS_DIR/${SCHED}_gateway.json', 'w'), indent=2)
     # --------------------------------------------------------------------------
     echo ""
     echo "--- [2/5] Running App 2: In-Memory Redis Cache Tier (Pipelined) ---"
+    docker rm -f "bench_rd_${SCHED}" >/dev/null 2>&1 || true
     RD_CID=$(docker create \
         --cgroup-parent benchmark.slice \
         -m 4g --memory-swap 4g \
@@ -258,8 +260,8 @@ json.dump(data, open('$RESULTS_DIR/${SCHED}_redis.json', 'w'), indent=2)
         -n "$AUDIO_FRAMES" -j "/results/${SCHED}_audio_dsp.json")
     docker start "$AUD_CID" >/dev/null
     attach_to_resctrl "$AUD_CID"
-
-    docker attach "$AUD_CID" || true
+    docker wait "$AUD_CID" >/dev/null 2>&1 || true
+    docker logs "$AUD_CID" || true
     docker rm -f "$AUD_CID" >/dev/null 2>&1 || true
 
     # --------------------------------------------------------------------------
@@ -275,8 +277,8 @@ json.dump(data, open('$RESULTS_DIR/${SCHED}_redis.json', 'w'), indent=2)
         -n "$HFT_ORDERS" -j "/results/${SCHED}_hft.json")
     docker start "$HFT_CID" >/dev/null
     attach_to_resctrl "$HFT_CID"
-
-    docker attach "$HFT_CID" || true
+    docker wait "$HFT_CID" >/dev/null 2>&1 || true
+    docker logs "$HFT_CID" || true
     docker rm -f "$HFT_CID" >/dev/null 2>&1 || true
 
     # --------------------------------------------------------------------------
@@ -292,8 +294,8 @@ json.dump(data, open('$RESULTS_DIR/${SCHED}_redis.json', 'w'), indent=2)
         -c 500 -d "$GAME_DURATION" -j "/results/${SCHED}_game.json")
     docker start "$GM_CID" >/dev/null
     attach_to_resctrl "$GM_CID"
-
-    docker attach "$GM_CID" || true
+    docker wait "$GM_CID" >/dev/null 2>&1 || true
+    docker logs "$GM_CID" || true
     docker rm -f "$GM_CID" >/dev/null 2>&1 || true
 
     # Teardown current scheduler

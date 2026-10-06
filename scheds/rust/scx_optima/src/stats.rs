@@ -39,6 +39,19 @@ impl OptimaStats {
         Ok(())
     }
 
+    pub fn format_verbose<W: Write>(&self, w: &mut W) -> Result<()> {
+        writeln!(
+            w,
+            "[scx_optima:detail] Direct: {:<6} | DSQ_PERF: {:<6} | DSQ_EFF: {:<6} | Steal: {:<6} | Fallback: {:<6}",
+            self.direct_dispatch,
+            self.dsq_perf,
+            self.dsq_eff,
+            self.work_steal,
+            self.fallback
+        )?;
+        Ok(())
+    }
+
     pub fn delta(&self, prev: &Self) -> Self {
         Self {
             greedy_wspt: self.greedy_wspt.saturating_sub(prev.greedy_wspt),

@@ -2,26 +2,26 @@
   "sample_rate": 48000,
   "buffer_size": 64,
   "frame_deadline_us": 1333.333,
-  "total_frames": 5000,
+  "total_frames": 30000,
   "xruns": 0,
   "xrun_rate_pct": 0.0000,
   "max_consecutive_xruns": 0,
   "processing_time_us": {
-    "p50": 41.84,
-    "p95": 42.23,
-    "p99": 43.63,
-    "max": 72.28
+    "p50": 13.91,
+    "p95": 41.88,
+    "p99": 41.94,
+    "max": 48.67
   },
   "turnaround_time_us": {
-    "p50": 59.48,
-    "p95": 61.97,
-    "p99": 71.75,
-    "max": 90.94
+    "p50": 24.97,
+    "p95": 59.56,
+    "p99": 60.16,
+    "max": 535.76
   },
   "wake_jitter_us": {
-    "p50": 17.74,
-    "p95": 24.23,
-    "p99": 28.75,
-    "max": 39.65
+    "p50": 4.11,
+    "p95": 17.80,
+    "p99": 18.36,
+    "max": 494.05
   }
 }

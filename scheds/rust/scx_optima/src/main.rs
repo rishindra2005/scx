@@ -40,8 +40,8 @@ pub const SCHEDULER_NAME: &str = "scx_optima";
     about = "Algorithmic sched_ext scheduler with formal complexity guarantees (Greedy WSPT, DP, Branch & Bound)"
 )]
 struct Opts {
-    /// Base time slice in microseconds.
-    #[clap(short = 's', long, default_value = "5000")]
+    /// Base time slice in microseconds (low latency, high responsiveness).
+    #[clap(short = 's', long, default_value = "3000")]
     slice_us: u64,
 
     /// Task density threshold for Dynamic Programming P-core partitioning.
@@ -52,8 +52,8 @@ struct Opts {
     #[clap(long, default_value = "8")]
     dp_capacity: u32,
 
-    /// Display live algorithmic statistics every interval (seconds).
-    #[clap(long, default_value = "1")]
+    /// Display live algorithmic statistics every interval (seconds, 0 = disabled for pure kernel speed).
+    #[clap(long, default_value = "0")]
     stats: u64,
 
     /// Verbose BPF debug output.
@@ -191,10 +191,26 @@ fn main() -> Result<()> {
 
     // BPF Skeleton Initialization
     let mut skel_builder = BpfSkelBuilder::default();
-    skel_builder.obj_builder.debug(opts.verbose > 0);
+    skel_builder.obj_builder.debug(opts.verbose > 2);
 
     let mut open_object = MaybeUninit::uninit();
     let mut skel = scx_ops_open!(skel_builder, &mut open_object, optima_ops, Default::default())?;
+
+    // Query SMT thread siblings for cache-affine wakeup
+    let mut smt_siblings = [-1i32; 512];
+    for cpu in 0..*NR_CPU_IDS {
+        let path = format!("/sys/devices/system/cpu/cpu{}/topology/thread_siblings_list", cpu);
+        if let Ok(content) = fs::read_to_string(&path) {
+            let list: Vec<&str> = content.trim().split(',').collect();
+            for s in list {
+                if let Ok(sib) = s.parse::<usize>() {
+                    if sib != cpu && sib < 512 {
+                        smt_siblings[cpu] = sib as i32;
+                    }
+                }
+            }
+        }
+    }
 
     // Set Read-Only Parameters in .rodata
     let rodata = skel
@@ -204,10 +220,14 @@ fn main() -> Result<()> {
         .context("Failed to get rodata")?;
     rodata.p_core_mask = p_mask;
     rodata.e_core_mask = e_mask;
+    rodata.smt_sibling_map = smt_siblings;
+    rodata.nr_p_cores = p_cores.len() as u32;
+    rodata.nr_e_cores = e_cores.len() as u32;
     rodata.default_slice_ns = opts.slice_us * 1000;
     rodata.dp_density_threshold = opts.dp_threshold;
     rodata.dp_pcore_capacity = opts.dp_capacity;
     rodata.nr_cpu_ids = *NR_CPU_IDS as u32;
+    rodata.verbose_decisions = opts.verbose >= 2;
 
     // Sched-ext Flags
     skel.struct_ops.optima_ops_mut().flags = *compat::SCX_OPS_ENQ_EXITING
@@ -236,15 +256,52 @@ fn main() -> Result<()> {
     })
     .context("Error setting Ctrl-C handler")?;
 
+    // If verbose >= 2 (-vv), stream kernel decision trace pipe in real time
+    if opts.verbose >= 2 {
+        let shutdown_trace = shutdown.clone();
+        thread::spawn(move || {
+            let trace_path = if std::path::Path::new("/sys/kernel/tracing/trace_pipe").exists() {
+                "/sys/kernel/tracing/trace_pipe"
+            } else {
+                "/sys/kernel/debug/tracing/trace_pipe"
+            };
+            if let Ok(file) = fs::File::open(trace_path) {
+                use std::io::BufRead;
+                let reader = std::io::BufReader::new(file);
+                for line in reader.lines() {
+                    if shutdown_trace.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    if let Ok(l) = line {
+                        if l.contains("optima:") {
+                            if let Some(idx) = l.find("optima:") {
+                                println!("[trace] {}", &l[idx..]);
+                            } else {
+                                println!("[trace] {}", l.trim());
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     let mut prev_stats = OptimaStats::default();
 
     // Main Algorithmic Monitoring Loop
     while !shutdown.load(Ordering::Relaxed) && !uei_exited!(&skel, uei) {
+        if opts.stats == 0 {
+            thread::sleep(Duration::from_millis(500));
+            continue;
+        }
         thread::sleep(Duration::from_secs(opts.stats));
 
         if let Ok(curr_stats) = read_aggregated_stats(&skel) {
             let delta = curr_stats.delta(&prev_stats);
             let _ = delta.format(&mut std::io::stdout());
+            if opts.verbose >= 1 {
+                let _ = delta.format_verbose(&mut std::io::stdout());
+            }
             prev_stats = curr_stats;
         }
     }

@@ -45,9 +45,9 @@ enum consts {
 	E_CORE_SPEED_SCALE	= 100,
 
 	/* Default Algorithmic Parameters */
-	DEFAULT_SLICE_NS	= 5000000ULL,	/* 5ms base time slice */
-	MIN_SLICE_NS		= 1000000ULL,	/* 1ms minimum time slice */
-	MAX_SLICE_NS		= 20000000ULL,	/* 20ms maximum time slice */
+	DEFAULT_SLICE_NS	= 3000000ULL,	/* 3ms base time slice (low latency, high interactivity) */
+	MIN_SLICE_NS		= 500000ULL,	/* 500us minimum time slice (sub-millisecond turnaround) */
+	MAX_SLICE_NS		= 8000000ULL,	/* 8ms maximum time slice for batch compute */
 
 	/* Real-Time Priority Inversion Threshold */
 	RT_WEIGHT_THRESHOLD	= 500,		/* High-priority task threshold */
@@ -66,6 +66,17 @@ struct task_ctx {
 	u64 total_runtime;	/* Total cumulative execution time */
 	bool dispatch_local;	/* Direct dispatch flag */
 	bool is_batch;		/* True if last slice ended by preemption/quantum expiry */
+	bool preempt;		/* Immediate preemption required on local dispatch */
+};
+
+/*
+ * Per-CPU running task state for Branch-and-Bound preemption inspection
+ */
+struct cpu_run_state {
+	u32 pid;
+	u32 weight;
+	u64 slice_ns;
+	u64 start_time_ns;
 };
 
 /*

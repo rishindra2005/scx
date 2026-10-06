@@ -21,3 +21,4 @@ CLAUDE.md
 .agents/
 *.log
 benchmarks/docker/
+benchmarks/production_apps/04_hft_matching/matching_engine

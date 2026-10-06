@@ -1,5 +1,5 @@
 # Production Architecture Benchmark Report
-**Execution Timestamp:** 2026-10-02 20:44:20  
+**Execution Timestamp:** 2026-10-06 20:43:50  
 **Environment:** AMD Ryzen AI 9 HX 370 (12 Logical Isolated CPUs: 2 Zen 5 P-cores + 4 Zen 5c E-cores)  
 **Memory Isolation:** 4.0 GB RAM constraint (`benchmark.slice`)  
 **L3 Cache Isolation:** AMD CAT exclusive mask (`ff00`) via `/sys/fs/resctrl/benchmark`  
@@ -32,11 +32,11 @@ flowchart TD
 
 | Application Setup | Evaluated Metric | Default CFS / EEVDF | `scx_optima` | Relative Delta |
 |:-------------------|:-----------------|:--------------------|:-------------|:---------------|
-| **App 1: API Gateway** | P99 Tail Latency | 20.40 ms | 941.09 ms
-| **App 2: Redis Cache** | GET P99 Tail Latency | 185.00 us | 247.00 us
-| **App 3: Pro-Audio DSP** | Audio Xrun Dropouts | 14 xruns | 0 xruns
-| **App 4: HFT Matching** | Ingestion Throughput | 7,850,000 ops/s | 15,058,286 ops/s
-| **App 5: Game Server** | 120 FPS Frame Drops | 18 drops | 2 drops
+| **App 1: API Gateway** | P99 Tail Latency | 911.57 ms
+| **App 2: Redis Cache** | GET P99 Tail Latency | 343.00 us
+| **App 3: Pro-Audio DSP** | Audio Xrun Dropouts | 0 xruns
+| **App 4: HFT Matching** | Ingestion Throughput | 13,142,912 ops/s
+| **App 5: Game Server** | 120 FPS Frame Drops | 0 drops
 
 ---
 
@@ -48,7 +48,12 @@ flowchart TD
 
 | Scheduler | Total Frames | Frame Deadline | Turnaround P50 | Turnaround P95 | Turnaround P99 | Total Xruns | Health Grade |
 |:---|:---|:---|:---|:---|:---|:---|:---|
-| `scx_optima` | 5000 | 1333.3 us | 59.48 us | 61.97 us | 71.75 us | **0** | PERFECT (Glitch-Free) |
+| `default_cfs_eevdf` | 30000 | 1333.3 us | 78.31 us | 422.94 us | 649.69 us | **0** | PERFECT (Glitch-Free) |
+| `scx_optima` | 30000 | 1333.3 us | 24.97 us | 59.56 us | 60.16 us | **0** | PERFECT (Glitch-Free) |
+| `scx_rdtai` | 30000 | 1333.3 us | 78.08 us | 450.07 us | 634.02 us | **0** | PERFECT (Glitch-Free) |
+| `scx_rlfifo` | 30000 | 1333.3 us | 59.19 us | 60.03 us | 60.76 us | **0** | PERFECT (Glitch-Free) |
+| `scx_rustland` | 30000 | 1333.3 us | 74.54 us | 77.15 us | 84.24 us | **0** | PERFECT (Glitch-Free) |
+| `scx_rusty` | 30000 | 1333.3 us | 78.34 us | 386.96 us | 603.60 us | **0** | PERFECT (Glitch-Free) |
 
 ### Production App 4: Ultra-Low-Latency HFT Matching Engine
 * **Model:** LMAX Disruptor lock-free cache-aligned ring buffer consuming 250,000 synthetic market orders (Limit Buys/Sells, Cancels, Market sweeps) on a direct-indexed price ladder.
@@ -56,7 +61,12 @@ flowchart TD
 
 | Scheduler | Orders Ingested | Wall Time | Throughput | Turnaround P50 | Turnaround P95 | Turnaround P99 | Turnaround Max |
 |:---|:---|:---|:---|:---|:---|:---|:---|
-| `scx_optima` | 50,000 | 0.0033 s | **15,058,286 ops/s** | 127.79 us | 340.43 us | 346.16 us | 348.64 us |
+| `default_cfs_eevdf` | 250,000 | 0.0190 s | **13,142,912 ops/s** | 2064.28 us | 3307.88 us | 3389.40 us | 3401.82 us |
+| `scx_optima` | 250,000 | 0.0156 s | **15,998,819 ops/s** | 1179.12 us | 2111.97 us | 2163.89 us | 2177.14 us |
+| `scx_rdtai` | 250,000 | 0.0188 s | **13,322,067 ops/s** | 2303.62 us | 3391.12 us | 3471.35 us | 3489.41 us |
+| `scx_rlfifo` | 250,000 | 0.0121 s | **20,698,454 ops/s** | 989.12 us | 1675.50 us | 1758.75 us | 1780.92 us |
+| `scx_rustland` | 250,000 | 0.0395 s | **6,321,417 ops/s** | 1852.72 us | 3321.16 us | 3482.85 us | 3506.63 us |
+| `scx_rusty` | 250,000 | 0.0182 s | **13,756,281 ops/s** | 2099.44 us | 3169.55 us | 3242.38 us | 3259.59 us |
 
 ### Production App 5: 120 FPS Interactive Game Simulation Server
 * **Model:** Authoritative tournament server running a strict 120 Hz tick loop (8.33 ms frame deadline) managing 500 connected active players, 64x64 spatial hash collision detection, and snapshot broadcast.
@@ -64,7 +74,12 @@ flowchart TD
 
 | Scheduler | Active Clients | Total Ticks | Target Deadline | Execution P50 | Execution P99 | Pacing Jitter P99 | Frame Drops | Esports Health |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|
-| `scx_optima` | 500 | 1200 | 8.333 ms | 953.24 us | 6466.52 us | 415.37 us | **2** | Hitching |
+| `default_cfs_eevdf` | 500 | 3000 | 8.333 ms | 895.06 us | 1766.04 us | 380.02 us | **0** | FLAWLESS |
+| `scx_optima` | 500 | 3000 | 8.333 ms | 1263.10 us | 2618.69 us | 763.37 us | **0** | FLAWLESS |
+| `scx_rdtai` | 500 | 3000 | 8.333 ms | 1330.33 us | 2195.15 us | 512.18 us | **0** | FLAWLESS |
+| `scx_rlfifo` | 500 | 3000 | 8.333 ms | 1475.48 us | 1880.48 us | 475.06 us | **0** | FLAWLESS |
+| `scx_rustland` | 500 | 3000 | 8.333 ms | 1506.57 us | 1901.94 us | 486.67 us | **0** | FLAWLESS |
+| `scx_rusty` | 500 | 3000 | 8.333 ms | 1267.40 us | 1945.79 us | 532.87 us | **0** | FLAWLESS |
 
 ### Production App 1 & App 2: API Gateway & Redis Cache Tier
 * **API Gateway:** Microservices fan-out where tail latency compounds exponentially across downstream services.
@@ -72,7 +87,12 @@ flowchart TD
 
 | Scheduler | Gateway Throughput | Gateway P99 Latency | Redis GET Throughput | Redis GET P50 | Redis GET P99 |
 |:---|:---|:---|:---|:---|:---|
-| `scx_optima` | 214.4 req/s | 941.09 ms | 165,016 ops/s | 167.00 us | 247.00 us |
+| `default_cfs_eevdf` | 264.1 req/s | 911.57 ms | 163,132 ops/s | 167.00 us | 343.00 us |
+| `scx_optima` | 280.5 req/s | 896.65 ms | 146,843 ops/s | 215.00 us | 511.00 us |
+| `scx_rdtai` | 246.3 req/s | 1055.98 ms | 156,740 ops/s | 175.00 us | 335.00 us |
+| `scx_rlfifo` | 280.2 req/s | 976.74 ms | 132,979 ops/s | 279.00 us | 551.00 us |
+| `scx_rustland` | 276.4 req/s | 1095.39 ms | 123,001 ops/s | 303.00 us | 615.00 us |
+| `scx_rusty` | 243.6 req/s | 1099.27 ms | 121,951 ops/s | 311.00 us | 607.00 us |
 
 ---
 

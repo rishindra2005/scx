@@ -71,12 +71,12 @@ enable_isolation() {
     mkdir -p "$CGROUP_PATH"
     echo "$ISO_CPUS" > "$CGROUP_PATH/cpuset.cpus.exclusive"
     echo "$ISO_CPUS" > "$CGROUP_PATH/cpuset.cpus"
-    echo "isolated" > "$CGROUP_PATH/cpuset.cpus.partition"
+    echo "root" > "$CGROUP_PATH/cpuset.cpus.partition"
 
     # Enable controllers so nested sub-cgroups (and Docker containers) inherit them
     echo "+cpuset +cpu +memory +io" > "$CGROUP_PATH/cgroup.subtree_control"
 
-    echo "      Kernel sched_domain rebuilt. cpuset.cpus.isolated = $(cat /sys/fs/cgroup/cpuset.cpus.isolated)"
+    echo "      Kernel sched_domain rebuilt. cpuset.cpus.isolated = $(cat /sys/fs/cgroup/cpuset.cpus.isolated 2>/dev/null || echo 'None')"
     echo "      benchmark.slice partition state                  = $(cat "$CGROUP_PATH/cpuset.cpus.partition")"
 
     echo "[3/4] Rerouting Hardware Device Interrupts (IRQs)..."
@@ -126,12 +126,13 @@ run_command_isolated() {
     if [ ! -d "$CGROUP_PATH" ]; then
         enable_isolation
     fi
+    mkdir -p "$CGROUP_PATH/isolated"
 
     echo "[*] Launching native command in isolated domain: $*"
     # Run in subshell, place into isolated cgroup and resctrl group
     (
-        echo $BASHPID > "$CGROUP_PATH/cgroup.procs"
-        echo $BASHPID > "$RESCTRL_PATH/tasks"
+        echo $BASHPID > "$CGROUP_PATH/isolated/cgroup.procs" 2>/dev/null || echo $BASHPID > "$CGROUP_PATH/cgroup.procs" 2>/dev/null || true
+        echo $BASHPID > "$RESCTRL_PATH/tasks" 2>/dev/null || true
         exec "$@"
     )
 }

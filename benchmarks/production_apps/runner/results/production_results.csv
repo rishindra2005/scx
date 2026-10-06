@@ -1,6 +1,31 @@
 scheduler,app_name,workload,throughput,p50_us,p95_us,p99_us,tail_metric,tail_val
-scx_optima,API Gateway,Fan-out 4 Services,214.4,124960.0,646020.0,941090.0,Errors,0
-scx_optima,Redis Cache,Pipelined GET/SET,165016.5,167.0,215.0,247.0,Set P99 (us),327.0
-scx_optima,Pro-Audio DSP,48kHz 64-smp Loop,125.0,59.48,61.97,71.75,Xruns,0
-scx_optima,HFT Matching,LMAX Disruptor LOB,15058286.11,127.79,340.43,346.16,P99.9 (us),348.16
-scx_optima,120 FPS Game Server,500 Client Sim,120,953.24,3705.457,6466.52,Frame Drops,2
+default_cfs_eevdf,API Gateway,Fan-out 4 Services,264.13,88460.0,582440.0,911570.0,Errors,0
+default_cfs_eevdf,Redis Cache,Pipelined GET/SET,163132.14,167.0,215.0,343.0,Set P99 (us),359.0
+default_cfs_eevdf,Pro-Audio DSP,48kHz 64-smp Loop,750.0,78.31,422.94,649.69,Xruns,0
+default_cfs_eevdf,HFT Matching,LMAX Disruptor LOB,13142911.82,2064.28,3307.88,3389.4,P99.9 (us),3399.13
+default_cfs_eevdf,120 FPS Game Server,500 Client Sim,120,895.059,1484.902,1766.042,Frame Drops,0
+scx_optima,API Gateway,Fan-out 4 Services,280.52,75810.0,596630.0,896650.0,Errors,0
+scx_optima,Redis Cache,Pipelined GET/SET,146842.88,215.0,431.0,511.0,Set P99 (us),543.0
+scx_optima,Pro-Audio DSP,48kHz 64-smp Loop,750.0,24.97,59.56,60.16,Xruns,0
+scx_optima,HFT Matching,LMAX Disruptor LOB,15998819.42,1179.12,2111.97,2163.89,P99.9 (us),2175.05
+scx_optima,120 FPS Game Server,500 Client Sim,120,1263.103,2336.818,2618.69,Frame Drops,0
+scx_rdtai,API Gateway,Fan-out 4 Services,246.31,82290.0,671890.0,1055980.0,Errors,0
+scx_rdtai,Redis Cache,Pipelined GET/SET,156739.81,175.0,231.0,335.0,Set P99 (us),359.0
+scx_rdtai,Pro-Audio DSP,48kHz 64-smp Loop,750.0,78.08,450.07,634.02,Xruns,0
+scx_rdtai,HFT Matching,LMAX Disruptor LOB,13322066.77,2303.62,3391.12,3471.35,P99.9 (us),3487.95
+scx_rdtai,120 FPS Game Server,500 Client Sim,120,1330.33,1943.638,2195.151,Frame Drops,0
+scx_rlfifo,API Gateway,Fan-out 4 Services,280.19,56680.0,614850.0,976740.0,Errors,0
+scx_rlfifo,Redis Cache,Pipelined GET/SET,132978.73,279.0,471.0,551.0,Set P99 (us),583.0
+scx_rlfifo,Pro-Audio DSP,48kHz 64-smp Loop,750.0,59.19,60.03,60.76,Xruns,0
+scx_rlfifo,HFT Matching,LMAX Disruptor LOB,20698453.59,989.12,1675.5,1758.75,P99.9 (us),1778.51
+scx_rlfifo,120 FPS Game Server,500 Client Sim,120,1475.484,1745.373,1880.478,Frame Drops,0
+scx_rustland,API Gateway,Fan-out 4 Services,276.35,60480.0,621630.0,1095390.0,Errors,0
+scx_rustland,Redis Cache,Pipelined GET/SET,123001.23,303.0,519.0,615.0,Set P99 (us),623.0
+scx_rustland,Pro-Audio DSP,48kHz 64-smp Loop,750.0,74.54,77.15,84.24,Xruns,0
+scx_rustland,HFT Matching,LMAX Disruptor LOB,6321417.16,1852.72,3321.16,3482.85,P99.9 (us),3502.99
+scx_rustland,120 FPS Game Server,500 Client Sim,120,1506.572,1774.919,1901.939,Frame Drops,0
+scx_rusty,API Gateway,Fan-out 4 Services,243.61,72330.0,664110.0,1099270.0,Errors,0
+scx_rusty,Redis Cache,Pipelined GET/SET,121951.22,311.0,511.0,607.0,Set P99 (us),623.0
+scx_rusty,Pro-Audio DSP,48kHz 64-smp Loop,750.0,78.34,386.96,603.6,Xruns,0
+scx_rusty,HFT Matching,LMAX Disruptor LOB,13756280.64,2099.44,3169.55,3242.38,P99.9 (us),3257.22
+scx_rusty,120 FPS Game Server,500 Client Sim,120,1267.401,1668.287,1945.791,Frame Drops,0

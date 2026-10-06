@@ -116,7 +116,6 @@ static s32 create_save_cpumask(struct bpf_cpumask **kptr)
 
 	cpumask = bpf_kptr_xchg(kptr, cpumask);
 	if (cpumask) {
-		scx_bpf_error("kptr already had cpumask");
 		bpf_cpumask_release(cpumask);
 	}
 

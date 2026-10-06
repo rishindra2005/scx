@@ -33,13 +33,19 @@ if [ $# -gt 0 ]; then
         echo "scheduler,sysbench_eps,hackbench_time,compile_time,iperf_gbps,w_p50,w_p90,w_p99,w_p999,r_p50,r_p90,r_p99,r_p999,redis_g_p50,redis_g_p99,redis_s_p50,redis_s_p99,cyc_avg,cyc_p50,cyc_p99,cyc_max" > "$CSV_FILE"
     fi
 else
-    SCHEDULERS=("default_cfs_eevdf" "scx_optima" "scx_rdtai" "scx_rusty" "scx_rustland" "scx_rlfifo")
+    SCHEDULERS=("default_cfs_eevdf" "scx_optima" "scx_rdtai" "scx_rusty" "scx_rustland" "scx_rlfifo" "scx_lavd" "scx_bpfland" "scx_flash" "scx_beerland")
     # CSV Header
     echo "scheduler,sysbench_eps,hackbench_time,compile_time,iperf_gbps,w_p50,w_p90,w_p99,w_p999,r_p50,r_p90,r_p99,r_p999,redis_g_p50,redis_g_p99,redis_s_p50,redis_s_p99,cyc_avg,cyc_p50,cyc_p99,cyc_max" > "$CSV_FILE"
 fi
 
 # Ensure hardware and cache isolation are enabled
 sudo "$BASE_DIR/scripts/isolate_benchmark_env.sh" enable
+
+# Clean up any leftover sched_ext scheduler before beginning
+if [ "$(cat /sys/kernel/sched_ext/state 2>/dev/null || cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo 'disabled')" = "enabled" ]; then
+    sudo pkill -9 -f "$TARGET_DIR" 2>/dev/null || true
+    sleep 2
+fi
 
 for SCHED in "${SCHEDULERS[@]}"; do
     echo ""
@@ -49,17 +55,18 @@ for SCHED in "${SCHEDULERS[@]}"; do
 
     if [ "$SCHED" != "default_cfs_eevdf" ]; then
         echo "  [Host] Launching scheduler: $SCHED..."
+        sudo rm -f "/tmp/${SCHED}_host.log"
         sudo bash -c "$TARGET_DIR/$SCHED > /tmp/${SCHED}_host.log 2>&1" &
         SCHED_PID=$!
         for i in {1..8}; do
-            CURRENT_OPS=$(cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo "None")
-            if [ "$CURRENT_OPS" != "None" ]; then
+            CURRENT_OPS=$(cat /sys/kernel/sched_ext/state 2>/dev/null || cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo "disabled")
+            if [ "$CURRENT_OPS" = "enabled" ] || ([ "$CURRENT_OPS" != "disabled" ] && [ "$CURRENT_OPS" != "None" ]); then
                 break
             fi
             sleep 1
         done
         echo "  [Host] Active sched_ext ops: $CURRENT_OPS"
-        if [ "$CURRENT_OPS" = "None" ]; then
+        if [ "$CURRENT_OPS" = "disabled" ] || [ "$CURRENT_OPS" = "None" ]; then
             echo "  [ERROR] $SCHED failed to load! Log:"
             cat "/tmp/${SCHED}_host.log" | tail -n 10
             continue
@@ -75,6 +82,7 @@ for SCHED in "${SCHEDULERS[@]}"; do
         -m 4g --memory-swap 4g \
         -v "$RESULTS_DIR:/results" \
         -v "$LINUX_DIR:/linux" \
+        -v "$BASE_DIR/sch_tests/docker_bench_inner.sh:/usr/local/bin/run_bench:ro" \
         scx-bench-runner:latest "$SCHED")
 
     docker start "$CID" >/dev/null
@@ -85,32 +93,34 @@ for SCHED in "${SCHEDULERS[@]}"; do
 
     # Stream container logs in real time
     docker attach "$CID" || true
-    docker rm "$CID" >/dev/null 2>&1 || true
+    docker wait "$CID" >/dev/null 2>&1 || true
+    docker rm -f "$CID" >/dev/null 2>&1 || true
 
     if [ "$SCHED" != "default_cfs_eevdf" ]; then
         echo "  [Host] Stopping scheduler: $SCHED..."
         sudo pkill -SIGINT -f "$TARGET_DIR/$SCHED" 2>/dev/null || true
         for i in {1..6}; do
-            if [ "$(cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo 'None')" = "None" ]; then
+            CURRENT_STATE=$(cat /sys/kernel/sched_ext/state 2>/dev/null || cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo "disabled")
+            if [ "$CURRENT_STATE" = "disabled" ] || [ "$CURRENT_STATE" = "None" ]; then
                 break
             fi
             sleep 1
         done
-        if [ "$(cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo 'None')" != "None" ]; then
+        if [ "$(cat /sys/kernel/sched_ext/state 2>/dev/null || cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo 'disabled')" = "enabled" ]; then
             sudo pkill -9 -f "$TARGET_DIR/$SCHED" 2>/dev/null || true
             sleep 2
         fi
-        echo "  [Host] Scheduler stopped. Sched_ext state: $(cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo 'None')"
+        echo "  [Host] Scheduler stopped. Sched_ext state: $(cat /sys/kernel/sched_ext/state 2>/dev/null || echo 'disabled')"
     fi
     sleep 2
 done
 
-# Ensure sched_ext is completely reset to None
-if [ "$(cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo 'None')" != "None" ]; then
+# Ensure sched_ext is completely reset to disabled
+if [ "$(cat /sys/kernel/sched_ext/state 2>/dev/null || cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo 'disabled')" = "enabled" ]; then
     sudo pkill -9 -f "$TARGET_DIR" 2>/dev/null || true
     sleep 2
 fi
-echo "Active sched_ext ops at suite completion: $(cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo 'None')"
+echo "Active sched_ext state at suite completion: $(cat /sys/kernel/sched_ext/state 2>/dev/null || echo 'disabled')"
 
 echo ""
 echo "=========================================================="

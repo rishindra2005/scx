@@ -19,6 +19,9 @@ LOG_FILE="$TEST_DIR/benchmark_details.log"
 NORMAL_USER="rishi"
 
 SCHEDULERS=("scx_rlfifo" "scx_rusty" "scx_rustland" "scx_rdtai" "scx_optima")
+if [ $# -gt 0 ]; then
+    SCHEDULERS=("$@")
+fi
 
 # 0. Setup Kernel Repo
 if [ ! -d "$LINUX_DIR" ]; then

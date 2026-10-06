@@ -57,7 +57,7 @@ echo "    Result: ${H_TIME}s"
 # 4. Redis Key-Value Store Latency
 # -------------------------------------------------------------
 echo "--> [4/7] Running Redis Latency Benchmark..."
-killall redis-server 2>/dev/null || true
+pkill -9 -x redis-server 2>/dev/null || true
 redis-server --daemonize yes --protected-mode no --save "" --appendonly no >/dev/null 2>&1
 sleep 1
 
@@ -65,7 +65,7 @@ sleep 1
 redis-benchmark -t set,get -n 25000 -q > /dev/null 2>&1 || true
 # Record
 REDIS_OUT=$(redis-benchmark -t set,get -n 50000 --csv 2>&1 || true)
-killall redis-server 2>/dev/null || true
+pkill -9 -x redis-server 2>/dev/null || true
 
 G_P50=$(echo "$REDIS_OUT" | grep "GET" | awk -F',' '{print $5}' | tr -d '"' || echo "N/A")
 G_P95=$(echo "$REDIS_OUT" | grep "GET" | awk -F',' '{print $6}' | tr -d '"' || echo "N/A")
@@ -120,12 +120,12 @@ echo "    Cyclictest Jitter: avg=${AVG_VAL}us, p50=${CYC_P50}us, p99=${CYC_P99}u
 # 6. Local Network Loopback Throughput (iperf3)
 # -------------------------------------------------------------
 echo "--> [6/7] Running Local Network Throughput (iperf3)..."
-killall iperf3 2>/dev/null || true
+pkill -9 -x iperf3 2>/dev/null || true
 iperf3 -s -D > /dev/null 2>&1 || true
 sleep 1
 NET_OUT=$(iperf3 -c 127.0.0.1 -t 5 --json 2>&1 || true)
 GBPS=$(echo "$NET_OUT" | jq '.end.sum_received.bits_per_second / 1000000000' 2>/dev/null | awk '{printf "%.2f", $1}' || echo "N/A")
-killall iperf3 2>/dev/null || true
+pkill -9 -x iperf3 2>/dev/null || true
 echo "    Network Throughput: ${GBPS} Gbps"
 
 # -------------------------------------------------------------

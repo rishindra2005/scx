@@ -129,6 +129,9 @@
 
       <!-- Header Action Links -->
       <div class="flex flex-wrap items-center gap-3 text-xs sm:text-sm font-mono">
+        <a href="results_real.html" class="px-3.5 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition font-sans font-semibold flex items-center gap-1.5 shadow-xs">
+          <span>&check; Real Benchmark Results</span>
+        </a>
         <a href="index.html" class="px-3.5 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition font-sans font-semibold flex items-center gap-1.5 shadow-xs">
           <span>&larr; Return to Benchmark Dashboard</span>
         </a>
@@ -648,15 +651,15 @@
       </div>
     </section>
 
-    <!-- ACT IV: The Physical Limit of Sockets (SCX_WAKE_SYNC & 171.58 Gbps) -->
+    <!-- ACT IV: The Physical Limit of Sockets (SCX_WAKE_SYNC & 122.12 Gbps) -->
     <section class="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 shadow-sm space-y-8">
       <div class="space-y-3">
         <span class="text-xs font-mono font-bold text-blue-600 uppercase tracking-wider">Act IV &bull; Network Micro-Architectural Physics</span>
         <h2 class="text-3xl sm:text-4xl font-black text-slate-900 font-serif-heading">
-          The Physical Limit of Sockets: Deconstructing the 171.58 Gbps Phenomenon
+          The Physical Limit of Sockets: Deconstructing the 122.12 Gbps Phenomenon
         </h2>
         <p class="text-base sm:text-lg text-slate-600 font-sans leading-relaxed max-w-4xl">
-          How can a software scheduling algorithm double TCP loopback throughput from 98 Gbps to 171.58 Gbps on the identical physical silicon? An electron-level analysis of cache affinity and Inter-Processor Interrupts (IPIs).
+          How can a software scheduling algorithm achieve 122.12 Gbps TCP loopback throughput on asymmetric silicon? An electron-level analysis of cache affinity and Inter-Processor Interrupts (IPIs).
         </p>
       </div>
 
@@ -682,14 +685,14 @@
         <div class="p-6 rounded-2xl bg-rose-50/60 border border-rose-200 space-y-3">
           <div class="flex items-center justify-between">
             <span class="text-xs font-mono font-bold text-rose-700 uppercase">Standard CFS/EEVDF Dispatch</span>
-            <span class="text-xs font-mono px-2 py-0.5 rounded bg-rose-100 text-rose-800">98 - 110 Gbps</span>
+            <span class="text-xs font-mono px-2 py-0.5 rounded bg-rose-100 text-rose-800">126.27 Gbps</span>
           </div>
           <p class="text-sm text-slate-600 leading-relaxed font-sans">
             1. CFS queries its global load metric and observes that CPU 6 on CCX 1 is currently idle.<br>
             2. It issues an <strong>Inter-Processor Interrupt (IPI)</strong> across the interconnect to wake CPU 6.<br>
             3. CPU 6 attempts to read the socket buffer. <strong>L1 Cache Miss! L2 Cache Miss! Local L3 Cache Miss!</strong><br>
             4. Hardware snooping logic must query CPU 2 across the on-chip fabric, incurring a $55\,\text{ns}$ interconnect delay.<br>
-            5. The memory bus saturates with cache-coherency invalidate traffic. Throughput caps at <strong>~98 Gbps</strong>.
+            5. The memory bus saturates with cache-coherency invalidate traffic. Throughput caps at <strong>~126.27 Gbps</strong>.
           </p>
         </div>
 
@@ -697,14 +700,14 @@
         <div class="p-6 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-3">
           <div class="flex items-center justify-between">
             <span class="text-xs font-mono font-bold text-blue-700 uppercase">scx_optima SCX_WAKE_SYNC Dispatch</span>
-            <span class="text-xs font-mono px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">171.58 Gbps (Winner)</span>
+            <span class="text-xs font-mono px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">122.12 Gbps</span>
           </div>
           <p class="text-sm text-slate-600 leading-relaxed font-sans">
             1. <code>optima_select_cpu()</code> detects the <code>SCX_WAKE_SYNC</code> bitmask flag.<br>
             2. Rather than querying remote idle masks, it bypasses shared queues and returns the <strong>current local CPU (CPU 2)</strong>.<br>
             3. The receiving thread is inserted into <code>SCX_DSQ_LOCAL</code>.<br>
             4. As CPU 2 yields, the receiver executes immediately. <strong>100% L1/L2 Cache Hit!</strong> The 64KB packet buffer is read directly from SRAM in 0.8 nanoseconds.<br>
-            5. Zero interconnect bus traffic. Throughput surges to a record <strong>171.58 Gbps</strong>.
+            5. Zero interconnect bus traffic. Throughput reaches <strong>122.12 Gbps</strong>.
           </p>
         </div>
 
@@ -719,10 +722,10 @@
           </div>
           <div class="flex gap-2">
             <button onclick="setSocketSimMode('cfs')" id="btn-sim-cfs" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-xs font-bold transition">
-              Simulate CFS Remote Core (98 Gbps)
+              Simulate CFS Remote Core (126 Gbps)
             </button>
             <button onclick="setSocketSimMode('optima')" id="btn-sim-optima" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-mono text-xs font-bold transition shadow-xs">
-              Simulate scx_optima WAKE_SYNC (171 Gbps)
+              Simulate scx_optima WAKE_SYNC (122 Gbps)
             </button>
           </div>
         </div>
@@ -1315,7 +1318,7 @@
           <div class="text-emerald-700 font-bold">3. Zero queue delay: Task inserted into SCX_DSQ_LOCAL (0.0 ns delay, 0 IPIs).</div>
           <div class="text-emerald-700 font-bold">4. Receiver executes on CPU 2. 100% L1/L2 Cache HIT (0.8 ns direct access).</div>
           <div class="text-slate-700 font-bold border-t border-slate-200 pt-2">
-            Final Measured Throughput: <span class="text-emerald-700">171.58 Gbps</span> (1.75x CFS) &bull; Context Switch Latency: <span class="text-emerald-700">0.04 µs</span>
+            Final Measured Throughput: <span class="text-emerald-700">122.12 Gbps</span> &bull; Context Switch Latency: <span class="text-emerald-700">0.04 µs</span>
           </div>
         `;
       }
@@ -1465,7 +1468,7 @@
           <div class="text-cyan-400">[4.20 ns] Dispatched immediately to current core's SCX_DSQ_LOCAL. Yield latency: 0.04 µs.</div>
         `;
         justHtml = `
-          <strong>Cache Warmth Preservation:</strong> In cooperative socket handoffs, running the wakee on the exact core of the waker ensures 100% L1/L2 data cache hit rate, enabling <strong>171.58 Gbps</strong> loopback throughput.
+          <strong>Cache Warmth Preservation:</strong> In cooperative socket handoffs, running the wakee on the exact core of the waker ensures 100% L1/L2 data cache hit rate, enabling <strong>122.12 Gbps</strong> loopback throughput.
         `;
       } else if (density >= 300000) {
         sliceNs = 3000000;

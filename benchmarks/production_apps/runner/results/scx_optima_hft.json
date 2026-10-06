@@ -1,17 +1,17 @@
 {
-  "total_orders": 50000,
-  "wall_time_sec": 0.0033,
-  "throughput_ops": 15058286.11,
-  "trades_executed": 30992,
-  "volume_matched": 862830,
+  "total_orders": 250000,
+  "wall_time_sec": 0.0156,
+  "throughput_ops": 15998819.42,
+  "trades_executed": 156188,
+  "volume_matched": 4331870,
   "latency_turnaround_us": {
-    "min": 0.09,
-    "avg": 150.06,
-    "p50": 127.79,
-    "p90": 319.04,
-    "p95": 340.43,
-    "p99": 346.16,
-    "p999": 348.16,
-    "max": 348.64
+    "min": 0.10,
+    "avg": 1138.54,
+    "p50": 1179.12,
+    "p90": 2046.98,
+    "p95": 2111.97,
+    "p99": 2163.89,
+    "p999": 2175.05,
+    "max": 2177.14
   }
 }
