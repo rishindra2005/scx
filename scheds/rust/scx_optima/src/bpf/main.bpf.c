@@ -213,9 +213,9 @@ static inline s32 branch_and_bound_preempt_target(struct task_struct *p, struct 
 		s64 lb;
 		if (is_peer) {
 			s64 gain_peer = (s64)wake_weight * (s64)(rem_slice_us > 500 ? (rem_slice_us - 500) : 0);
-			lb = 50000 - gain_peer;
+			lb = (s64)wake_weight * 50 - gain_peer;
 		} else {
-			s64 penalty = (s64)st->weight * (s64)rem_slice_us + 50000;
+			s64 penalty = (s64)st->weight * (s64)rem_slice_us + ((s64)st->weight * 50);
 			s64 gain = (s64)wake_weight * (s64)rem_slice_us;
 			lb = penalty - gain;
 		}
@@ -458,9 +458,10 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 	}
 
 	/*
-	 * 8. Real-Time Branch & Bound preemption if prioritized
+	 * 8. Branch & Bound preemption for RT tasks or congested interactive tasks
 	 */
-	if (tctx->weight >= RT_WEIGHT_THRESHOLD) {
+	bool is_interactive_task = (!tctx->is_batch || tctx->avg_runtime < 1000000ULL || tctx->weight >= RT_WEIGHT_THRESHOLD);
+	if (tctx->weight >= RT_WEIGHT_THRESHOLD || (is_interactive_task && scx_bpf_dsq_nr_queued(DSQ_SHARED_P) > 0)) {
 		s32 bb_cpu = branch_and_bound_preempt_target(p, tctx);
 		if (bb_cpu >= 0) {
 			scx_bpf_put_idle_cpumask(idle_smtmask);

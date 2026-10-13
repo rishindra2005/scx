@@ -1,4 +1,5 @@
 \documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath,amssymb,amsfonts,amsthm}
 \usepackage{algorithmic}
@@ -30,6 +31,12 @@
 \renewcommand{\floatpagefraction}{0.8}
 \renewcommand{\dblfloatpagefraction}{0.8}
 
+\setlength{\textfloatsep}{7pt plus 1.0pt minus 1.5pt}
+\setlength{\floatsep}{5pt plus 1.0pt minus 1.5pt}
+\setlength{\intextsep}{5pt plus 1.0pt minus 1.5pt}
+\setlength{\dbltextfloatsep}{7pt plus 1.0pt minus 1.5pt}
+\setlength{\dblfloatsep}{5pt plus 1.0pt minus 1.5pt}
+
 \hypersetup{
     colorlinks=true,
     linkcolor=blue,
@@ -41,9 +48,10 @@
 
 \author{\IEEEauthorblockN{Risheendra MN}
 \IEEEauthorblockA{\textit{Systems Research} \\
-rishindra.hackbox@gmail.com}
-}
+Bengaluru, India \\
+\texttt{rishindra.hackbox@gmail.com}}}
 
+\linespread{0.98}\selectfont
 \begin{document}
 
 \maketitle
@@ -57,9 +65,9 @@ In this paper, we present \textbf{OPTIMA}, an extensible operating system schedu
 We evaluate OPTIMA across 16 diverse workloads (pro-audio DSP, high-frequency financial order matching, game physics server, API gateway fan-out, Redis caching, microbenchmarks, IPC ping-pong, and parallel Linux kernel compilation) against CFS/EEVDF, \texttt{scx\_rusty}, and \texttt{scx\_rlfifo}. OPTIMA exhibits a bimodal performance profile: delivering an \textbf{84.1\% reduction in IPC ping-pong latency} (2.55\,$\mu$s vs 16.06\,$\mu$s on CFS) with a \textbf{6.3$\times$ throughput increase} (392,691 ops/s), a \textbf{93.6\% increase in network loopback bandwidth} (111.47 Gbps), \textbf{zero audio underruns}, \textbf{zero game desyncs}, and a \textbf{94.6\% reduction in worst-case real-time latency spikes}. Conversely, on parallel software compilation (\texttt{make kernel/}), OPTIMA takes 6.03s, matching other \texttt{sched\_ext} baselines (5.67s--5.83s) while trailing native in-kernel CFS (3.29s) due to eBPF struct-ops trampoline overhead during fork/exec process storms, and shows moderate throughput regressions (14--30\%) under high-concurrency request multiplexing (Redis, API Gateway). We present an in-depth architectural analysis characterizing these workload trade-offs and identifying the microarchitectural boundaries between specialized eBPF dispatch and in-kernel heuristics.
 \end{abstract}
 
-\begin{IEEEkeywords}
-Operating System Scheduling, eBPF, sched\_ext, Asymmetric Multiprocessors, Online Preemption Filtering, WSPT, Lyapunov Stability, Real-Time Systems.
-\end{IEEEkeywords}
+\vspace{1em}
+\noindent\textbf{Keywords:} Operating System Scheduling, eBPF, sched\_ext, Asymmetric Multiprocessors, Online Preemption Filtering, WSPT, Lyapunov Stability, Real-Time Systems.
+\vspace{1em}
 
 % =========================================================================
 % SECTION 1: INTRODUCTION
@@ -237,14 +245,7 @@ minimizes the total weighted completion time $\sum_{j=1}^n w_j C_j$. (Arbitrary 
 \end{theorem}
 
 \begin{proof}
-Assume for contradiction that an optimal schedule $\mathcal{S}^*$ does not follow non-increasing density order. There must exist adjacent tasks $J_a, J_b$ where $J_a$ immediately precedes $J_b$ with $\rho_a < \rho_b$, meaning $w_a p_b < w_b p_a$. 
-
-Let $t \ge t_0$ be the start time of $J_a$. Under $\mathcal{S}^*$, completion times are $C_a = t + \frac{p_a}{c_k}$ and $C_b = t + \frac{p_a + p_b}{c_k}$. Interchanging $J_a$ and $J_b$ produces schedule $\mathcal{S}'$ without affecting any other tasks. For the swapped pair:
-\begin{align}
-\Delta \Phi &= \Big[ w_b C_b(\mathcal{S}') + w_a C_a(\mathcal{S}') \Big] - \Big[ w_a C_a(\mathcal{S}^*) + w_b C_b(\mathcal{S}^*) \Big] \nonumber \\
-&= \frac{w_a p_b - w_b p_a}{c_k} < 0
-\end{align}
-Because $\Delta \Phi < 0$, $\mathcal{S}'$ achieves a strictly lower cost, contradicting optimality of $\mathcal{S}^*$. Finite adjacent transpositions transform any schedule into monotonic density order, establishing that Smith's ordering is optimal for single-core non-preemptive queues at time zero.
+Consider adjacent jobs $J_a, J_b$ where $J_a$ immediately precedes $J_b$ with $\rho_a < \rho_b$, implying $w_a p_b < w_b p_a$. Interchanging them produces schedule $\mathcal{S}'$ without affecting any other tasks, yielding $\Delta \Phi = \frac{w_a p_b - w_b p_a}{c_k} < 0$. Adjacent pairwise exchanges strictly reduce total weighted completion time until jobs are sorted in monotonic non-increasing density order, establishing that Smith's ordering minimizes $\sum w_j C_j$ on an isolated single-core queue.
 \end{proof}
 
 \begin{proposition}[Computational Complexity \& Online Information Barrier]
@@ -335,9 +336,11 @@ While Theorem~\ref{thm:oapf} formally prevents lower-priority tasks from interru
 To resolve this latency cliff without inducing context-switch thrashing, OPTIMA incorporates \textbf{OAPF-Adaptive}:
 \begin{definition}[Admissible Peer Preemption Criterion]
 Let $J_{\mathrm{curr}}(c)$ and $J_{\mathrm{wake}}$ belong to equal priority classes ($w_{\mathrm{curr}}(c) = w_{\mathrm{wake}}$). Peer preemption is admissible if and only if the incumbent thread has attained forward execution progress of at least $\tau_{\mathrm{soft}} = 1{,}000\,\mu\mathrm{s}$ and possesses remaining quantum $R(c) > \tau_{\min} = 500\,\mu\mathrm{s}$. The peer dispatch delay differential is defined as:
-\begin{equation}
-\Delta\mathrm{DelayPeer}(c) \triangleq C_{\mathrm{switch}} - w_{\mathrm{wake}} \cdot (R(c) - \tau_{\min})
-\end{equation}
+\begin{align}
+\label{eq:peer_delay}
+\Delta\mathrm{DelayPeer}(c) &\triangleq w_{\mathrm{curr}}(c) \cdot C_{\mathrm{switch}} - w_{\mathrm{wake}} \cdot (R(c) - \tau_{\min}) \nonumber \\
+&= w \cdot \Big[ C_{\mathrm{switch}} - (R(c) - \tau_{\min}) \Big]
+\end{align}
 Core $c^*$ is preempted if $\min_{c \in \mathcal{P}} \Delta\mathrm{DelayPeer}(c) < 0$.
 \end{definition}
 
@@ -414,238 +417,91 @@ since $\tau_j \le \tau_{\max}$ and $\Delta v_j \le \tau_{\max}$. Any subsequent 
 \end{proposition}
 
 \subsection{Algorithmic Specifications}
-Algorithms~\ref{alg:select_cpu}, \ref{alg:oapf}, \ref{alg:enqueue}, and \ref{alg:dispatch} detail the exact execution logic compiled into kernel eBPF bytecode.
+Algorithms~\ref{alg:select_cpu} and~\ref{alg:enqueue} detail the complete execution logic compiled into kernel eBPF bytecode.
 
 \begin{algorithm}[t]
-\caption{OPTIMA-SELECT-CPU (IPC Fast-Path \& Domain Selection)}
-\label{alg:select_cpu}
+\caption{OPTIMA CPU Selection \& Online Admissible Preemption Filter (OAPF)}
+\label{alg:select_cpu}\label{alg:oapf}
 \begin{algorithmic}[1]
-\footnotesize
-\REQUIRE Task $p$, previous CPU $prev\_cpu$, wakeup flags $wake\_flags$
-\ENSURE Target CPU $target\_cpu$
-\STATE $tctx \leftarrow \text{lookup\_task\_ctx}(p)$
-\IF{$p$ is pinned \OR $p$ is kernel thread}
-    \STATE Dispatch to $prev\_cpu$ via \texttt{SCX\_DSQ\_LOCAL}; \textbf{return} $prev\_cpu$
-\ENDIF
-\STATE $this\_cpu \leftarrow \text{smp\_processor\_id}()$, $idle\_mask \leftarrow \text{get\_idle\_smtmask}()$
-\IF{$wake\_flags \ \& \ \text{SCX\_WAKE\_SYNC}$}
-    \IF{$this\_cpu \in p.\text{cpus\_allowed} \land \text{dsq\_nr\_queued}(this\_cpu) == 0$}
-        \STATE \textbf{goto} direct\_dispatch with $target\_cpu \leftarrow this\_cpu$
-    \ENDIF
-    \STATE $this\_sib \leftarrow \text{get\_smt\_sibling}(this\_cpu)$
-    \IF{$this\_sib \in p.\text{cpus\_allowed} \land \text{dsq\_nr\_queued}(this\_sib) == 0$}
-        \STATE \textbf{goto} direct\_dispatch with $target\_cpu \leftarrow this\_sib$
-    \ENDIF
-\ENDIF
-\IF{$\text{is\_perf}(prev\_cpu) \land prev\_cpu \in idle\_mask \land \text{test\_and\_clear\_idle}(prev\_cpu)$}
-    \STATE \textbf{goto} direct\_dispatch with $target\_cpu \leftarrow prev\_cpu$
-\ENDIF
-\IF{$tctx.core\_type \ne \text{CORE\_TYPE\_EFF}$}
-    \STATE $c \leftarrow \text{pick\_idle\_domestic\_core}(p, \text{is\_perf}=\text{TRUE}, idle\_mask)$
-    \IF{$c \ge 0$} \STATE \textbf{goto} direct\_dispatch with $target\_cpu \leftarrow c$ \ENDIF
-\ENDIF
-\IF{$tctx.weight \ge w_{\mathrm{RT}}$}
-    \STATE $oapf\_cpu \leftarrow \text{OPTIMA-OAPF}(p, tctx, \mathcal{P})$
-    \IF{$oapf\_cpu \ge 0$} \STATE $tctx.dispatch\_local \leftarrow \text{TRUE}$; \textbf{return} $oapf\_cpu$ \ENDIF
-\ENDIF
-\STATE $tctx.dispatch\_local \leftarrow \text{FALSE}$; \textbf{return} $prev\_cpu$
-\STATE \textbf{direct\_dispatch:}
-\STATE Compute slice $\tau$ based on $tctx.is\_batch$ and $tctx.avg\_runtime$
-\STATE $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau, 0)$
-\RETURN $target\_cpu$
+\scriptsize\setlength{\itemsep}{0pt}
+\STATE \textbf{function} \textsc{OPTIMA-SELECT-CPU}($p, prev\_cpu, wake\_flags$):
+\STATE \quad $tctx \leftarrow \text{lookup\_task\_ctx}(p)$
+\STATE \quad \textbf{if} $p$ is pinned $\lor$ $p$ is kthread \textbf{then} dispatch $prev\_cpu$ via \texttt{SCX\_DSQ\_LOCAL}; \textbf{return} $prev\_cpu$
+\STATE \quad $this\_cpu \leftarrow \text{smp\_processor\_id}()$, $idle\_mask \leftarrow \text{get\_idle\_smtmask}()$
+\STATE \quad \textbf{if} $wake\_flags \ \& \ \text{SCX\_WAKE\_SYNC}$ \textbf{then}
+\STATE \quad \quad \textbf{if} $this\_cpu \in p.\text{allowed} \land \text{dsq\_nr\_queued}(this\_cpu) == 0$ \textbf{then} \textbf{goto} direct\_dispatch with $this\_cpu$
+\STATE \quad \quad $sib \leftarrow \text{get\_smt\_sibling}(this\_cpu)$
+\STATE \quad \quad \textbf{if} $sib \in p.\text{allowed} \land \text{dsq\_nr\_queued}(sib) == 0$ \textbf{then} \textbf{goto} direct\_dispatch with $sib$
+\STATE \quad \textbf{if} $\text{is\_perf}(prev\_cpu) \land prev\_cpu \in idle\_mask \land \text{test\_and\_clear\_idle}(prev\_cpu)$ \textbf{then}
+\STATE \quad \quad \textbf{goto} direct\_dispatch with $prev\_cpu$
+\STATE \quad \textbf{if} $tctx.core\_type \ne \text{CORE\_EFF}$ \textbf{then}
+\STATE \quad \quad $c \leftarrow \text{pick\_idle\_domestic\_core}(p, \text{is\_perf}=\text{TRUE}, idle\_mask)$
+\STATE \quad \quad \textbf{if} $c \ge 0$ \textbf{then} \textbf{goto} direct\_dispatch with $c$
+\STATE \quad $is\_ia \leftarrow (\neg tctx.is\_batch \lor tctx.avg\_runtime < 1\,\mathrm{ms} \lor tctx.weight \ge w_{\mathrm{RT}})$
+\STATE \quad \textbf{if} $tctx.weight \ge w_{\mathrm{RT}} \lor (is\_ia \land \text{dsq\_nr\_queued}(\texttt{DSQ\_SHARED\_P}) > 0)$ \textbf{then}
+\STATE \quad \quad $oapf \leftarrow \textsc{OPTIMA-OAPF}(p, tctx, \mathcal{P})$
+\STATE \quad \quad \textbf{if} $oapf \ge 0$ \textbf{then} $tctx.dispatch\_local \leftarrow \text{TRUE}$; \textbf{return} $oapf$
+\STATE \quad $tctx.dispatch\_local \leftarrow \text{FALSE}$; \textbf{return} $prev\_cpu$
+\STATE \quad \textbf{direct\_dispatch:} $\tau \leftarrow \text{calc\_slice}(tctx)$; $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau, 0)$; \textbf{return} $target\_cpu$
+\STATE \textbf{function} \textsc{OPTIMA-OAPF}($p, tctx, \mathcal{P}$):
+\STATE \quad $c^* \leftarrow -1$, $\Delta\mathrm{Proxy}^* \leftarrow 0$, $now \leftarrow \text{scx\_bpf\_now}()$
+\STATE \quad $w_{\mathrm{wake}} \leftarrow \max(tctx.weight, 10)$, $\tau_{\mathrm{slice}} \leftarrow \tau_{\min}$, $C_{\mathrm{switch}} \leftarrow 50\,\mu\text{s}$
+\STATE \quad \textbf{for each} core $c \in \mathcal{P}$ \textbf{do}
+\STATE \quad \quad \textbf{if} $c \notin p.\text{allowed}$ \textbf{then} \textbf{continue}
+\STATE \quad \quad $st \leftarrow \text{lookup\_cpu\_run\_state}(c)$; \textbf{if} $st == \text{NULL} \lor st.pid == 0$ \textbf{then} \textbf{return} $c$ \COMMENT{Rule 1}
+\STATE \quad \quad $el \leftarrow now - st.start$, $R(c) \leftarrow (st.slice > el) \,?\, (st.slice - el) : 0$, $w_{\mathrm{curr}} \leftarrow \max(st.weight, 10)$
+\STATE \quad \quad \textbf{if} $w_{\mathrm{curr}} == w_{\mathrm{wake}}$ \textbf{then} \COMMENT{OAPF-Adaptive peer check}
+\STATE \quad \quad \quad \textbf{if} $el \ge 1{,}000\,\mu\text{s} \land R(c) > 500\,\mu\text{s}$ \textbf{then}
+\STATE \quad \quad \quad \quad $\text{lb} \leftarrow w_{\mathrm{wake}} \cdot C_{\mathrm{switch}} - w_{\mathrm{wake}} \cdot (R(c) - 500)$
+\STATE \quad \quad \quad \quad \textbf{if} $\text{lb} < \Delta\mathrm{Proxy}^*$ \textbf{then} $\Delta\mathrm{Proxy}^* \leftarrow \text{lb}$; $c^* \leftarrow c$
+\STATE \quad \quad \quad \textbf{continue}
+\STATE \quad \quad \textbf{if} $w_{\mathrm{curr}} > w_{\mathrm{wake}}$ \textbf{then} \textbf{continue} \COMMENT{Rule 2: Inversion safety}
+\STATE \quad \quad $\delta_{\min} \leftarrow \frac{w_{\mathrm{curr}} \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}$; \textbf{if} $R(c) \le \delta_{\min}$ \textbf{then} \textbf{continue} \COMMENT{Rule 3}
+\STATE \quad \quad $\Delta\mathrm{Proxy} \leftarrow w_{\mathrm{curr}} \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$
+\STATE \quad \quad \textbf{if} $\Delta\mathrm{Proxy} < \Delta\mathrm{Proxy}^*$ \textbf{then} $\Delta\mathrm{Proxy}^* \leftarrow \Delta\mathrm{Proxy}$; $c^* \leftarrow c$
+\STATE \quad \textbf{if} $c^* \ge 0 \land \Delta\mathrm{Proxy}^* < 0$ \textbf{then} $\text{scx\_bpf\_kick\_cpu}(c^*, \text{SCX\_KICK\_PREEMPT})$; \textbf{return} $c^*$
+\STATE \quad \textbf{return} $-1$
 \end{algorithmic}
 \end{algorithm}
 
 \begin{algorithm}[t]
-\caption{OPTIMA-OAPF (Online Admissible Preemption Filter)}
-\label{alg:oapf}
+\caption{OPTIMA-ENQUEUE \& OPTIMA-DISPATCH}
+\label{alg:enqueue}\label{alg:dispatch}
 \begin{algorithmic}[1]
-\footnotesize
-\REQUIRE Waking task $p$, context $tctx$, candidate core set $\mathcal{P}$
-\ENSURE Target CPU $c^*$ (or $-1$ if wait is optimal)
-\STATE $c^* \leftarrow -1$, $\Delta\mathrm{Proxy}^* \leftarrow 0$, $now \leftarrow \text{scx\_bpf\_now}()$
-\STATE $w_{\mathrm{wake}} \leftarrow \max(tctx.weight, 100)$, $\tau_{\mathrm{slice}} \leftarrow \tau_{\min}$, $C_{\mathrm{switch}} \leftarrow 50\,\mu\text{s}$
-\FOR{each core $c \in \mathcal{P}$}
-    \IF{$c \notin p.\text{cpus\_allowed}$} \STATE \textbf{continue} \ENDIF
-    \STATE $st \leftarrow \text{lookup\_cpu\_run\_state}(c)$
-    \IF{$st == \text{NULL} \lor st.pid == 0$} \RETURN $c$ \COMMENT{Rule 1: Idle core} \ENDIF
-    \STATE $el \leftarrow now - st.start\_time$, $R(c) \leftarrow (st.slice > el) \,?\, (st.slice - el) : 0$
-    \IF{$st.weight == w_{\mathrm{wake}}$}
-        \IF{$el \ge 1{,}000\,\mu\text{s} \land R(c) > 500\,\mu\text{s}$}
-            \STATE \COMMENT{OAPF-Adaptive: Peer preemption check}
-            \STATE $\text{lb}_{\mathrm{peer}} \leftarrow C_{\mathrm{switch}} - w_{\mathrm{wake}} \cdot (R(c) - 500)$
-            \IF{$\text{lb}_{\mathrm{peer}} < \Delta\mathrm{Proxy}^*$}
-                \STATE $\Delta\mathrm{Proxy}^* \leftarrow \text{lb}_{\mathrm{peer}}$; $c^* \leftarrow c$
-            \ENDIF
-        \ENDIF
-        \STATE \textbf{continue}
-    \ENDIF
-    \IF{$st.weight > w_{\mathrm{wake}}$}
-        \STATE \textbf{continue} \COMMENT{Rule 2: Inversion safety}
-    \ENDIF
-    \STATE $\delta_{\min} \leftarrow \frac{st.weight \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}$
-    \IF{$R(c) \le \delta_{\min}$} \STATE \textbf{continue} \COMMENT{Rule 3: Anti-thrashing} \ENDIF
-    \STATE $\Delta\mathrm{DelayProxy} \leftarrow st.weight \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$
-    \IF{$\Delta\mathrm{DelayProxy} < \Delta\mathrm{Proxy}^*$}
-        \STATE $\Delta\mathrm{Proxy}^* \leftarrow \Delta\mathrm{DelayProxy}$; $c^* \leftarrow c$
-    \ENDIF
-\ENDFOR
-\IF{$c^* \ge 0 \land \Delta\mathrm{Proxy}^* < 0$}
-    \STATE $\text{scx\_bpf\_kick\_cpu}(c^*, \text{SCX\_KICK\_PREEMPT})$; \RETURN $c^*$
-\ENDIF
-\RETURN $-1$
-\end{algorithmic}
-\end{algorithm}
-
-\begin{algorithm}[t]
-\caption{OPTIMA-ENQUEUE (Deadline Calculus \& Preemption Kick)}
-\label{alg:enqueue}
-\begin{algorithmic}[1]
-\footnotesize
-\REQUIRE Task $p$, enqueue flags $enq\_flags$
-\STATE $tctx \leftarrow \text{lookup\_task\_ctx}(p)$
-\IF{$p$ is pinned \OR $p$ is kernel thread \OR $tctx.dispatch\_local$}
-    \STATE $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau_{\min}, enq\_flags)$; \textbf{return}
-\ENDIF
-\STATE \COMMENT{Domain Placement Target DSQ Selection (Heuristic Thresholds)}
-\IF{$tctx.weight \ge w_{\mathrm{RT}}$}
-    \STATE $target\_dsq \leftarrow \text{DSQ\_PERF}$
-\ELSIF{$tctx.avg\_runtime \ge 3\text{ms} \lor tctx.is\_batch$}
-    \STATE $target\_dsq \leftarrow \text{DSQ\_EFF}$
-\ELSE
-    \STATE $target\_dsq \leftarrow \text{is\_perf}(\text{task\_cpu}) \ ? \ \text{DSQ\_SHARED\_P} : \text{DSQ\_SHARED\_E}$
-\ENDIF
-\STATE $is\_rt \leftarrow (tctx.weight \ge w_{\mathrm{RT}} \lor (\neg tctx.is\_batch \land tctx.avg\_runtime < 1\text{ms}))$
-\STATE $now \leftarrow \text{scx\_bpf\_now}()$
-\IF{$is\_rt$}
-    \STATE $\tau \leftarrow \tau_{\min}$; $deadline \leftarrow now$
-\ELSE
-    \STATE $\tau \leftarrow (tctx.avg\_runtime \ge 3\text{ms}) \ ? \ \tau_{\max} : \max(\frac{Q_{\text{base}}}{1+q}, \tau_{\min})$
-    \STATE $v \leftarrow \mathrm{clamp}(p.\text{scx.dsq\_vtime}, now, now + 2\tau)$
-    \STATE $p_{\mathrm{est}} \leftarrow \max(tctx.avg\_runtime, \tau_{\min})$
-    \STATE $\rho \leftarrow \frac{\max(tctx.weight, 10)}{p_{\mathrm{est}}}$ \COMMENT{Execution density $\rho = w / p_{\mathrm{est}}$}
-    \STATE $\Delta v \leftarrow \mathrm{clamp}\left( \frac{\tau \cdot p_{\mathrm{est}}}{10 \cdot \max(tctx.weight, 10)}, \; \tau_{\min}, \; \tau_{\max} \right)$ \COMMENT{Density advance $\tau \cdot \rho_{\mathrm{ref}} / \rho$, $\rho_{\mathrm{ref}} = 0.1\,\mu\text{s}^{-1}$}
-    \STATE $deadline \leftarrow v + \Delta v$
-\ENDIF
-\STATE $p.\text{scx.dsq\_vtime} \leftarrow deadline$
-\STATE $\text{scx\_bpf\_dsq\_insert\_vtime}(p, target\_dsq, \tau, deadline, enq\_flags)$
-\STATE $idle\_cpu \leftarrow \text{scx\_bpf\_pick\_idle\_cpu}(p.\text{cpus\_allowed}, 0)$
-\IF{$idle\_cpu \ge 0$}
-    \STATE $\text{scx\_bpf\_kick\_cpu}(idle\_cpu, \text{SCX\_KICK\_IDLE})$; \textbf{return}
-\ENDIF
-\IF{$is\_rt$}
-    \STATE $oapf\_cpu \leftarrow \text{OPTIMA-OAPF}(p, tctx, \mathcal{P})$
-    \IF{$oapf\_cpu \ge 0$} \STATE $\text{scx\_bpf\_kick\_cpu}(oapf\_cpu, \text{SCX\_KICK\_PREEMPT})$ \ENDIF
-\ENDIF
-\end{algorithmic}
-\end{algorithm}
-
-\begin{algorithm}[t]
-\caption{OPTIMA-DISPATCH (Asymmetric Work-Stealing)}
-\label{alg:dispatch}
-\begin{algorithmic}[1]
-\footnotesize
-\REQUIRE Executing core $cpu$
-\IF{$\text{is\_perf}(cpu)$}
-    \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_PERF}, 0)$} \RETURN \ENDIF
-    \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_SHARED\_P}, 0)$} \RETURN \ENDIF
-    \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_SHARED\_E}, 0)$} \RETURN \ENDIF
-    \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_EFF}, 0)$} \RETURN \ENDIF
-\ELSE
-    \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_SHARED\_E}, 0)$} \RETURN \ENDIF
-    \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_EFF}, 0)$} \RETURN \ENDIF
-    \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_SHARED\_P}, 0)$} \RETURN \ENDIF
-    \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_PERF}, 0)$} \RETURN \ENDIF
-\ENDIF
+\scriptsize\setlength{\itemsep}{0pt}
+\STATE \textbf{function} \textsc{OPTIMA-ENQUEUE}($p, enq\_flags$):
+\STATE \quad $tctx \leftarrow \text{lookup\_task\_ctx}(p)$
+\STATE \quad \textbf{if} $p$ is pinned $\lor$ $p$ is kthread $\lor$ $tctx.dispatch\_local$ \textbf{then}
+\STATE \quad \quad $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau_{\min}, enq\_flags)$; \textbf{return}
+\STATE \quad \textbf{if} $tctx.weight \ge w_{\mathrm{RT}}$ \textbf{then} $target \leftarrow \text{DSQ\_PERF}$
+\STATE \quad \textbf{else if} $tctx.avg\_runtime \ge 3\text{ms} \lor tctx.is\_batch$ \textbf{then} $target \leftarrow \text{DSQ\_EFF}$
+\STATE \quad \textbf{else} $target \leftarrow \text{is\_perf}(\text{cpu}) \ ? \ \text{DSQ\_SHARED\_P} : \text{DSQ\_SHARED\_E}$
+\STATE \quad $is\_rt \leftarrow (tctx.weight \ge w_{\mathrm{RT}} \lor (\neg tctx.is\_batch \land tctx.avg\_runtime < 1\text{ms}))$
+\STATE \quad $now \leftarrow \text{scx\_bpf\_now}()$
+\STATE \quad \textbf{if} $is\_rt$ \textbf{then} $\tau \leftarrow \tau_{\min}$; $deadline \leftarrow now$
+\STATE \quad \textbf{else}
+\STATE \quad \quad $\tau \leftarrow (tctx.avg\_runtime \ge 3\text{ms}) \ ? \ \tau_{\max} : \max(\frac{Q_{\text{base}}}{1+q}, \tau_{\min})$
+\STATE \quad \quad $v \leftarrow \mathrm{clamp}(p.\text{vtime}, now, now + 2\tau)$; $p_{\mathrm{est}} \leftarrow \max(tctx.avg\_runtime, \tau_{\min})$
+\STATE \quad \quad $\Delta v \leftarrow \mathrm{clamp}\left( \frac{\tau \cdot p_{\mathrm{est}}}{10 \cdot \max(tctx.weight, 10)}, \; \tau_{\min}, \; \tau_{\max} \right)$; $deadline \leftarrow v + \Delta v$
+\STATE \quad $p.\text{vtime} \leftarrow deadline$; $\text{scx\_bpf\_dsq\_insert\_vtime}(p, target, \tau, deadline, enq\_flags)$
+\STATE \quad $idle \leftarrow \text{scx\_bpf\_pick\_idle\_cpu}(p.\text{allowed}, 0)$
+\STATE \quad \textbf{if} $idle \ge 0$ \textbf{then} $\text{scx\_bpf\_kick\_cpu}(idle, \text{SCX\_KICK\_IDLE})$; \textbf{return}
+\STATE \quad \textbf{if} $is\_rt \lor (tctx.weight == 100 \land \text{dsq\_nr\_queued}(\texttt{DSQ\_SHARED\_P}) > 0)$ \textbf{then}
+\STATE \quad \quad $oapf \leftarrow \textsc{OPTIMA-OAPF}(p, tctx, \mathcal{P})$
+\STATE \quad \quad \textbf{if} $oapf \ge 0$ \textbf{then} $\text{scx\_bpf\_kick\_cpu}(oapf, \text{SCX\_KICK\_PREEMPT})$
+\STATE \textbf{function} \textsc{OPTIMA-DISPATCH}($cpu$):
+\STATE \quad \textbf{if} $\text{is\_perf}(cpu)$ \textbf{then}
+\STATE \quad \quad \textbf{for} $dsq \in [\text{DSQ\_PERF}, \text{DSQ\_SHARED\_P}, \text{DSQ\_SHARED\_E}, \text{DSQ\_EFF}]$ \textbf{do}
+\STATE \quad \quad \quad \textbf{if} $\text{scx\_bpf\_dsq\_move\_to\_local}(dsq, 0)$ \textbf{then} \textbf{return}
+\STATE \quad \textbf{else}
+\STATE \quad \quad \textbf{for} $dsq \in [\text{DSQ\_SHARED\_E}, \text{DSQ\_EFF}, \text{DSQ\_SHARED\_P}, \text{DSQ\_PERF}]$ \textbf{do}
+\STATE \quad \quad \quad \textbf{if} $\text{scx\_bpf\_dsq\_move\_to\_local}(dsq, 0)$ \textbf{then} \textbf{return}
 \end{algorithmic}
 \end{algorithm}
 
 % =========================================================================
 % SECTION 5: EMPIRICAL EVALUATION
 % =========================================================================
-\begin{table*}[t]
-\centering
-\scriptsize\renewcommand{\arraystretch}{0.90}
-\caption{Comprehensive Benchmark Results Across 16 Workloads (34 Evaluated Metrics, Mean $\pm \sigma$)}
-\label{tab:benchmark_results}
-\begin{tabularx}{\textwidth}{X l c r r r r r}
-\toprule
-\textbf{Benchmark Workload} & \textbf{Metric Evaluated} & \textbf{Unit} & \textbf{CFS / EEVDF} & \textbf{scx\_optima} & \textbf{scx\_rusty} & \textbf{scx\_rlfifo} & \textbf{Advantage (vs CFS)} \\
-\midrule
-Pro-Audio Turnaround Latency & Buffer P50 ($\downarrow$) & $\mu$s & $33.95 \pm 4.28$ & $\mathbf{31.71 \pm 1.21} \star$ & $32.29 \pm 1.69$ & $33.86 \pm 1.87$ & \textbf{-6.6\%} \\
-Pro-Audio Tail Latency & Buffer P99 ($\downarrow$) & $\mu$s & $101.50 \pm 11.14$ & $101.95 \pm 2.02$ & $61.91 \pm 23.25$ & $\mathbf{58.42 \pm 21.62} \star$ & +0.4\% \\
-Audio Buffer Underruns & Total Xruns ($\downarrow$) & count & $3.67 \pm 0.58$ & $\mathbf{0.00 \pm 0.00} \star$ & $0.00 \pm 0.00$ & $0.00 \pm 0.00$ & \textbf{0 drops (Clean)} \\
-Game Server Tick Latency & Physics P50 ($\downarrow$) & $\mu$s & $756.40 \pm 146.34$ & $777.14 \pm 107.27$ & $\mathbf{690.73 \pm 35.76} \star$ & $718.47 \pm 37.59$ & +2.7\% \\
-Game Server Frame Turnaround & Physics P99 ($\downarrow$) & $\mu$s & $1{,}563.91 \pm 249.24$ & $1{,}865.02 \pm 290.07$ & $\mathbf{1{,}235.41 \pm 34.77} \star$ & $1{,}387.65 \pm 150.65$ & +19.3\% \\
-Game Server Frame Drops & Desync Rate ($\downarrow$) & \% & $0.019 \pm 0.03\%$ & $\mathbf{0.000 \pm 0.00\%} \star$ & $0.000 \pm 0.00\%$ & $0.000 \pm 0.00\%$ & \textbf{0.00\% drops} \\
-Real-Time POSIX Jitter & Avg Jitter ($\downarrow$) & $\mu$s & $24.17 \pm 4.82$ & $\mathbf{21.27 \pm 4.68} \star$ & $23.90 \pm 3.65$ & $28.43 \pm 5.55$ & \textbf{-12.0\%} \\
-Real-Time Jitter Max Spike & Worst Spike ($\downarrow$) & $\mu$s & $8{,}383.00 \pm 8{,}269.70$ & $450.00 \pm 339.69$ & $468.33 \pm 289.00$ & $\mathbf{280.67 \pm 23.12} \star$ & \textbf{-94.6\%} \\
-HFT Order Matching Rate & Throughput ($\uparrow$) & Mops/s & $14.47 \pm 7.28$ & $15.76 \pm 4.46$ & $16.58 \pm 3.83$ & $\mathbf{18.80 \pm 0.33} \star$ & +8.9\% \\
-HFT Turnaround P50 Latency & Roundtrip P50 ($\downarrow$) & $\mu$s & $528.11 \pm 587.94$ & $\mathbf{222.79 \pm 68.87} \star$ & $550.89 \pm 515.18$ & $244.76 \pm 108.86$ & \textbf{-57.8\%} \\
-HFT Turnaround P99 Latency & Roundtrip P99 ($\downarrow$) & $\mu$s & $880.68 \pm 962.33$ & $576.34 \pm 308.38$ & $892.72 \pm 487.04$ & $\mathbf{441.02 \pm 92.07} \star$ & \textbf{-34.6\%} \\
-Production Redis Cache & GET Throughput ($\uparrow$) & kRPS & $235.54 \pm 16.61$ & $202.21 \pm 4.16$ & $186.44 \pm 5.33$ & $198.83 \pm 14.28$ & -14.1\% \\
-Production Redis Cache & GET Latency P99 ($\downarrow$) & $\mu$s & $249.67 \pm 32.33$ & $319.00 \pm 42.33$ & $319.00 \pm 42.33$ & $399.00 \pm 69.74$ & +27.8\% \\
-Cloud API Gateway Fan-Out & Ingress Rate ($\uparrow$) & req/s & $1{,}275.61 \pm 157.17$ & $887.95 \pm 24.00$ & $1{,}066.03 \pm 128.06$ & $1{,}001.99 \pm 62.50$ & -30.4\% \\
-Cloud API Gateway Latency & Roundtrip P50 ($\downarrow$) & ms & $33.83 \pm 4.42$ & $49.58 \pm 1.24$ & $39.34 \pm 3.52$ & $41.75 \pm 1.46$ & +46.6\% \\
-Cloud API Gateway Tail & Roundtrip P99 ($\downarrow$) & ms & $76.97 \pm 17.69$ & $100.78 \pm 7.68$ & $98.36 \pm 18.55$ & $108.00 \pm 6.99$ & +30.9\% \\
-Hackbench Process Context-Switch & Process Time ($\downarrow$) & s & $0.35 \pm 0.04$ & $0.29 \pm 0.01$ & $0.37 \pm 0.04$ & $\mathbf{0.21 \pm 0.03} \star$ & \textbf{-16.9\%} \\
-Hackbench Thread Context-Switch & Thread Time ($\downarrow$) & s & $0.60 \pm 0.02$ & $0.67 \pm 0.01$ & $0.85 \pm 0.04$ & $0.85 \pm 0.03$ & +12.3\% \\
-Perf Pipe IPC Latency & Ping-Pong Latency ($\downarrow$) & $\mu$s & $16.06 \pm 0.65$ & $\mathbf{2.55 \pm 0.05} \star$ & $6.19 \pm 4.12$ & $4.36 \pm 2.34$ & \textbf{-84.1\%} \\
-Perf Pipe IPC Throughput & Ping-Pong Rate ($\uparrow$) & ops/s & $62{,}335 \pm 2{,}481$ & $\mathbf{392{,}691 \pm 7{,}314} \star$ & $205{,}677 \pm 100{,}235$ & $269{,}291 \pm 110{,}723$ & \textbf{+6.3 $\times$} \\
-Perf Messaging Storm & Wall Time ($\downarrow$) & s & $0.040 \pm 0.003$ & $0.045 \pm 0.008$ & $0.075 \pm 0.031$ & $\mathbf{0.036 \pm 0.002} \star$ & +11.7\% \\
-Schbench Wakeup P50 Latency & Wakeup P50 ($\downarrow$) & $\mu$s & $10.00 \pm 9.54$ & $1{,}996.67 \pm 2.31$ & $2{,}118.00 \pm 79.67$ & $3{,}974.67 \pm 4.62$ & +199.7 $\times$ \\
-Schbench Wakeup P99 Tail & Wakeup P99 ($\downarrow$) & $\mu$s & $3{,}852.00 \pm 132.18$ & $\mathbf{2{,}007.33 \pm 2.31} \star$ & $15{,}472.00 \pm 400.96$ & $6{,}077.33 \pm 92.38$ & \textbf{-47.9\%} \\
-Schbench Request P50 Latency & Request P50 ($\downarrow$) & $\mu$s & $18{,}698.67 \pm 1{,}420.07$ & $29{,}280.00 \pm 293.28$ & $21{,}472.00 \pm 955.72$ & $25{,}674.67 \pm 800.21$ & +56.6\% \\
-Schbench Request P99 Tail & Request P99 ($\downarrow$) & $\mu$s & $38{,}506.67 \pm 4{,}032.17$ & $170{,}752.00 \pm 5{,}701.39$ & $284{,}842.67 \pm 14{,}201.27$ & $140{,}373.33 \pm 9{,}473.15$ & +343.4\% \\
-Schbench Service Rate & Throughput ($\uparrow$) & req/s & $1{,}634.37 \pm 70.92$ & $712.97 \pm 7.33$ & $714.00 \pm 16.96$ & $766.57 \pm 23.47$ & -56.4\% \\
-Sysbench CPU Compute & Throughput ($\uparrow$) & EPS & $11{,}712.23 \pm 72.58$ & $6{,}028.19 \pm 35.61$ & $5{,}965.74 \pm 315.08$ & $5{,}969.98 \pm 99.87$ & -48.5\% \\
-Sysbench Thread Fairness & Std Dev $\sigma$ ($\downarrow$) & $\sigma$ & $2{,}303.38 \pm 286.35$ & $\mathbf{46.48 \pm 15.65} \star$ & $223.38 \pm 56.82$ & $304.96 \pm 65.14$ & \textbf{-98.0\%} \\
-Sysbench Memory Bandwidth & Throughput ($\uparrow$) & MiB/s & $10{,}991.27 \pm 122.06$ & $\mathbf{12{,}394.80 \pm 275.40} \star$ & $12{,}376.37 \pm 598.71$ & $11{,}891.51 \pm 101.28$ & \textbf{+12.8\%} \\
-Sysbench Memory Operations & Operations Rate ($\uparrow$) & Mops/s & $11.26 \pm 0.12$ & $\mathbf{12.69 \pm 0.28} \star$ & $12.67 \pm 0.61$ & $12.18 \pm 0.10$ & \textbf{+12.8\%} \\
-L3 Cache Miss Rate & Hardware PMU ($\downarrow$) & \% & $6.40 \pm 2.41\%$ & $2.66 \pm 0.09\%$ & $1.55 \pm 0.04\%$ & $\mathbf{1.36 \pm 0.06\%} \star$ & \textbf{-58.5\% Misses} \\
-Hardware IPC Retirement & Instruction/Cyc ($\uparrow$) & IPC & $1.18 \pm 0.00$ & $0.88 \pm 0.01$ & $0.83 \pm 0.00$ & $0.83 \pm 0.00$ & -25.2\% \\
-Network Loopback Throughput & iperf3 Rate ($\uparrow$) & Gbps & $57.58 \pm 2.51$ & $\mathbf{111.47 \pm 5.19} \star$ & $38.23 \pm 0.58$ & $62.03 \pm 1.85$ & \textbf{+93.6\%} \\
-Kernel Build (\texttt{make kernel/}) & Wall Time ($\downarrow$) & s & $3.29 \pm 0.11$ & $6.03 \pm 0.08$ & $5.67 \pm 0.16$ & $5.83 \pm 0.06$ & +83.4\% \\
-\bottomrule
-\end{tabularx}
-\vspace{1ex}
-\raggedright \small Note: Values represent mean $\pm$ sample standard deviation ($\sigma$) across 3 independent executions. ($\downarrow$) indicates lower is better; ($\uparrow$) indicates higher is better. Star ($\star$) indicates best performance among evaluated schedulers. Kernel build wall time for OPTIMA ($6.03 \pm 0.08$\,s) reflects the barrier-free configuration, matching peer extensible schedulers ($5.67$--$5.83$\,s).
-\end{table*}
-
-\begin{table*}[t]
-\centering
-\scriptsize\renewcommand{\arraystretch}{0.90}
-\caption{Hardware RAPL Energy Profiling \& Energy-Delay Product (AMD Ryzen AI 9 HX 370, 5 Repetitions)}
-\label{tab:rapl_energy}
-\begin{tabularx}{\textwidth}{X l c r r r r r}
-\toprule
-\textbf{Workload Domain} & \textbf{Energy Metric} & \textbf{Unit} & \textbf{CFS / EEVDF} & \textbf{scx\_optima} & \textbf{scx\_rusty} & \textbf{scx\_rlfifo} & \textbf{Advantage (vs CFS)} \\
-\midrule
-Sysbench CPU Compute (12 threads) & Package Energy ($\downarrow$) & Joules & $180.89 \pm 1.49$ & $179.68 \pm 1.52$ & $\mathbf{176.27 \pm 0.64} \star$ & $176.68 \pm 0.50$ & -0.7\% \\
-Sysbench CPU Compute (12 threads) & Core Energy ($\downarrow$) & Joules & $33.69 \pm 0.59$ & $34.13 \pm 0.31$ & $33.01 \pm 0.64$ & $\mathbf{33.00 \pm 0.50} \star$ & +1.3\% \\
-Sysbench CPU Compute (12 threads) & Average Package Power & Watts & $36.14 \pm 0.30$ & $35.90 \pm 0.30$ & $\mathbf{35.22 \pm 0.13} \star$ & $35.30 \pm 0.10$ & -0.7\% \\
-Sysbench CPU Compute (12 threads) & Energy-Delay Product (EDP) ($\downarrow$) & J$\cdot$s & $905.39 \pm 7.43$ & $899.28 \pm 7.65$ & $\mathbf{882.22 \pm 3.10} \star$ & $884.36 \pm 2.63$ & -0.7\% \\
-\midrule
-Sysbench Memory Bandwidth (12 thr) & Package Energy ($\downarrow$) & Joules & $137.69 \pm 2.91$ & $138.60 \pm 2.02$ & $\mathbf{131.24 \pm 0.56} \star$ & $133.87 \pm 0.78$ & +0.7\% \\
-Sysbench Memory Bandwidth (12 thr) & Core Energy ($\downarrow$) & Joules & $22.29 \pm 0.29$ & $23.32 \pm 0.58$ & $\mathbf{21.87 \pm 0.26} \star$ & $22.25 \pm 0.12$ & +4.6\% \\
-Sysbench Memory Bandwidth (12 thr) & Average Package Power & Watts & $27.51 \pm 0.58$ & $27.69 \pm 0.41$ & $\mathbf{26.22 \pm 0.11} \star$ & $26.75 \pm 0.16$ & +0.7\% \\
-Sysbench Memory Bandwidth (12 thr) & Energy-Delay Product (EDP) ($\downarrow$) & J$\cdot$s & $689.12 \pm 14.52$ & $693.74 \pm 10.10$ & $\mathbf{656.85 \pm 2.85} \star$ & $670.02 \pm 3.91$ & +0.7\% \\
-\midrule
-IPC Pipe Ping-Pong (100k ops) & Package Energy ($\downarrow$) & Joules & $4.01 \pm 0.62$ & $\mathbf{3.10 \pm 0.17} \star$ & $3.44 \pm 0.20$ & $3.54 \pm 0.39$ & \textbf{-22.7\%} \\
-IPC Pipe Ping-Pong (100k ops) & Core Energy ($\downarrow$) & Joules & $0.96 \pm 0.18$ & $0.71 \pm 0.51$ & $0.91 \pm 0.68$ & $\mathbf{0.58 \pm 0.52} \star$ & \textbf{-26.0\%} \\
-IPC Pipe Ping-Pong (100k ops) & Average Package Power & Watts & $28.71 \pm 2.49$ & $22.75 \pm 1.32$ & $21.10 \pm 4.28$ & $\mathbf{19.00 \pm 3.40} \star$ & \textbf{-20.8\%} \\
-IPC Pipe Ping-Pong (100k ops) & Energy-Delay Product (EDP) ($\downarrow$) & J$\cdot$s & $0.58 \pm 0.19$ & $\mathbf{0.42 \pm 0.02} \star$ & $0.57 \pm 0.08$ & $0.67 \pm 0.15$ & \textbf{-27.6\%} \\
-\midrule
-Hackbench Context-Switch (proc) & Package Energy ($\downarrow$) & Joules & $6.73 \pm 0.78$ & $4.12 \pm 0.18$ & $9.62 \pm 1.58$ & $\mathbf{4.00 \pm 0.16} \star$ & \textbf{-38.8\%} \\
-Hackbench Context-Switch (proc) & Core Energy ($\downarrow$) & Joules & $1.14 \pm 0.11$ & $0.85 \pm 0.03$ & $1.70 \pm 0.28$ & $\mathbf{0.69 \pm 0.04} \star$ & \textbf{-25.4\%} \\
-Hackbench Context-Switch (proc) & Average Package Power & Watts & $45.34 \pm 0.87$ & $48.05 \pm 1.16$ & $\mathbf{38.06 \pm 1.95} \star$ & $46.76 \pm 0.89$ & +6.0\% \\
-Hackbench Context-Switch (proc) & Energy-Delay Product (EDP) ($\downarrow$) & J$\cdot$s & $1.01 \pm 0.23$ & $\mathbf{0.35 \pm 0.04} \star$ & $2.53 \pm 1.03$ & $\mathbf{0.34 \pm 0.03} \star$ & \textbf{-65.3\%} \\
-\bottomrule
-\end{tabularx}
-\vspace{1ex}
-\raggedright \small Note: Values represent mean $\pm$ sample standard deviation ($\sigma$) across 5 independent executions via hardware RAPL MSRs (\texttt{intel-rapl} sysfs interface) on the host AMD Zen 5/5c processor. Star ($\star$) indicates lowest energy or EDP.
-\end{table*}
-
 \section{Empirical Evaluation}
 \label{sec:evaluation}
 
@@ -654,53 +510,80 @@ Hackbench Context-Switch (proc) & Energy-Delay Product (EDP) ($\downarrow$) & J$
 
 \subsubsection{Testbed Microarchitecture: AMD Zen 5 / Zen 5c}
 All experiments are conducted on a bare-metal, asymmetric multi-core hardware platform powered by the \textbf{AMD Ryzen AI 9 HX 370 (Strix Point)} processor. The processor integrates 12 physical execution cores supporting 24 simultaneous hardware threads, architecturally partitioned into two asymmetric Core Complexes (CCXs):
-\begin{itemize}
+\begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}
     \item \textbf{Performance CCX (Zen 5):} 4 wide-issue Performance cores (Cores 0--3, threads 0--3 and 12--15) featuring a 6-wide decode execution pipeline, private 48\,KB L1 data / 32\,KB L1 instruction caches, 1\,MB private L2 caches, and a shared 16\,MB Level-3 cache slice, capable of boost clocks up to 5.16\,GHz.
     \item \textbf{Efficiency CCX (Zen 5c):} 8 compact Efficiency cores (Cores 4--11, threads 4--11 and 16--23) utilizing area-optimized Zen 5c execution units, identical ISA support, private 1\,MB L2 caches, and a dedicated 8\,MB Level-3 cache slice, operating up to 3.29\,GHz.
 \end{itemize}
-The compute capacity ratio yields an empirical single-thread compute speedup factor of $\mu = c_P / c_E \approx 1.57$ under frequency-normalized CPU throughput. The platform is equipped with 32\,GB LPDDR5x-7500 dual-channel memory and runs Linux 6.12/7.0 with \texttt{CONFIG\_SCHED\_CLASS\_EXT=y} and hardware RAPL energy counters. Throughout our evaluation, the baseline labeled ``CFS / EEVDF'' denotes the Linux 6.12 mainline default fair scheduler class (which implements Earliest Eligible Virtual Deadline First proportional-lag allocation with standard CFS load-balancing heuristics).
-
-\subsubsection{Cross-Platform Architectural Generalization}
-While our primary evaluation is executed on AMD Zen 5/5c silicon, OPTIMA's core abstractions ($\mathcal{P}, \mathcal{E}, \mu = c_P/c_E$) apply universally across modern asymmetric multiprocessor topologies:
-\begin{itemize}
-    \item \textbf{Intel Hybrid (12th--14th Gen Alder Lake / Raptor Lake):} Intel architectures (e.g., Core i7-12700H, i9-13900K) combine Performance (Golden Cove / Raptor Cove) and Efficiency (Gracemont) cores that share a monolithic, ring-interconnected Level-3 cache. Unlike AMD's dual-CCX layout where L3 is partitioned, Intel's challenge lies in ring-bus cross-traffic and Gracemont cluster-level L2 serialization. OPTIMA's synchronous IPC fast-path directly eliminates ring-bus inter-core bouncing by pinning communicating pairs locally, while WSPT prevents Gracemont clusters from suffering head-of-line request stalls.
-    \item \textbf{ARM big.LITTLE \& DynamIQ (e.g., Rockchip RK3588, Ampere, Apple Silicon):} In ARM DynamIQ topologies (such as the RK3588 with 4 Cortex-A76 big cores and 4 Cortex-A55 LITTLE cores, or Apple Silicon M-series clusters), core clusters maintain private L2 caches backed by a unified System-Level Cache (SLC). Linux ARM Energy-Aware Scheduling (EAS) relies on static energy curves ($\Delta E$) and reverts to symmetric CFS heuristics during saturation. In contrast, OPTIMA evaluates online task execution density ($\rho = w / p$) dynamically in kernel eBPF, enforcing provable dispatch and preemption invariants without needing offline silicon energy tables.
-\end{itemize}
+The compute capacity ratio yields an empirical single-thread compute speedup factor of $\mu = c_P / c_E \approx 1.57$ under frequency-normalized CPU throughput. The platform is equipped with 32\,GB LPDDR5x-7500 dual-channel memory and runs Linux 6.12/7.0 with \texttt{CONFIG\_SCHED\_CLASS\_EXT=y}. Throughout our evaluation, the baseline labeled ``CFS / EEVDF'' denotes the Linux 6.12 mainline default fair scheduler class (which implements Earliest Eligible Virtual Deadline First proportional-lag allocation with standard CFS load-balancing heuristics).
 
 \subsubsection{Execution Isolation \& Hardware Energy Profiling}
 To eliminate external operating system noise, scheduling jitter, and background interference:
-\begin{itemize}
-    \item \textbf{Isolated Execution Partition:} Benchmark workloads execute within dedicated vCPU partitions pinned 1:1 to isolated physical cores.
-    \item \textbf{Hardware Cache Isolation:} Hardware Cache Allocation Technology (CAT) bitmasks partition L3 cache ways, strictly preventing cross-domain cache evictions between host monitoring infrastructure and benchmark threads.
+\begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}
+    \item \textbf{Isolated CPU Execution:} Workloads execute within isolated physical core sets with affinity pinning.
     \item \textbf{Dedicated IRQ Routing:} External device interrupts are affinity-pinned away from benchmark cores.
-    \item \textbf{Hardware RAPL Energy Counters:} Package and core energy consumption is measured via non-invasive hardware Running Average Power Limit (RAPL) MSRs/sysfs (\texttt{powercap/intel-rapl}) and PMU counters, tracking total Joules, average Watts, and Energy-Delay Product ($\mathrm{EDP} = \mathrm{Joules} \times \mathrm{Time}$).
-    \item \textbf{Statistical Rigor:} Every workload is executed through multiple complete independent repetitions (3--5 runs). We report mean values, sample standard deviations ($\pm \sigma$), and relative percentage deltas.
+    \item \textbf{Hardware RAPL Energy Counters:} Package and core energy consumption is measured via Linux's unified \texttt{powercap/intel-rapl} MSR subsystem (which natively interfaces with AMD Zen 5 Family 0x1A RAPL MSRs), tracking total Joules, average Watts, and Energy-Delay Product ($\mathrm{EDP} = \mathrm{Joules} \times \mathrm{Time}$).
+    \item \textbf{Statistical Rigor:} Every workload is executed through multiple independent repetitions (3 for performance benchmarks, 5 for RAPL energy). We report mean values, sample standard deviations ($\pm \sigma$), and relative percentage deltas.
 \end{itemize}
 
 \subsection{Benchmark Workload Taxonomy}
-We evaluate 16 diverse production and synthetic workloads covering real-time, throughput, memory, and communication profiles:
-\begin{enumerate}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}\setlength{\parsep}{0pt}
-    \item \textbf{Pro-Audio Real-Time DSP:} Simulates low-latency audio processing pipelines, tracking buffer turnaround latencies and buffer underruns (xruns).
-    \item \textbf{Game Physics Server:} Simulates a multi-threaded game server tick loop, measuring physics P50/P99 latency and frame desync rates.
-    \item \textbf{Real-Time POSIX Jitter (\texttt{cyclictest}):} Measures high-precision timer jitter and worst-case latency spikes under load.
-    \item \textbf{High-Frequency Trading (HFT):} Simulated limit order book matching engine measuring order matching throughput and roundtrip P50/P99 latency.
-    \item \textbf{Production Redis Cache:} Memory cache benchmark evaluating GET throughput and P99 latency under concurrent pipelining.
-    \item \textbf{Microservices Cloud API Gateway:} Fan-out HTTP ingress gateway measuring roundtrip P50/P99 request latency and ingress rate.
-    \item \textbf{Process and Thread Context Switching (\texttt{hackbench}):} Evaluates IPC scheduler overhead across process and thread groups.
-    \item \textbf{IPC Ping-Pong Latency (\texttt{perf bench sched pipe}):} Measures bidirectional pipe context-switch latency and operations rate.
-    \item \textbf{Messaging Storm (\texttt{perf bench sched messaging}):} Evaluates high-density IPC message exchange duration.
-    \item \textbf{Scheduler Wakeup and Request Latency (\texttt{schbench}):} Evaluates multi-threaded request-response latencies and wakeup P99 tails under worker contention.
-    \item \textbf{Compute Throughput \& Thread Fairness (\texttt{sysbench cpu}):} Measures events per second (EPS) and per-thread standard deviation $\sigma$.
-    \item \textbf{Memory Bandwidth \& Operations (\texttt{sysbench memory}):} Evaluates memory transfer rates (MiB/s) and operations per second.
-    \item \textbf{Hardware PMU Cache Miss Rates:} Hardware performance counters measuring L3 cache miss percentages.
-    \item \textbf{Hardware Instruction Retirement (IPC):} Measures instructions retired per CPU clock cycle.
-    \item \textbf{Network Loopback Throughput (\texttt{iperf3}):} High-bandwidth TCP socket loopback rate in Gbps.
-    \item \textbf{Linux Kernel Compilation (\texttt{make kernel/}):} Multi-threaded parallel compilation measuring wall-clock build time.
-\end{enumerate}
-
-
+We evaluate 16 diverse workloads spanning four operational regimes: (1) \emph{Real-Time \& Multimedia} (Pro-Audio DSP turnaround, Game server physics ticks, and POSIX cyclic timer jitter); (2) \emph{High-Concurrency Services} (High-Frequency Trading order matching, Production Redis in-memory cache, and Cloud API Gateway ingress fan-out); (3) \emph{Microbenchmarks \& IPC} (Perf sched pipe ping-pong, Perf messaging storm, Hackbench process/thread context-switching, and Iperf3 network loopback); and (4) \emph{Compute \& Memory Saturation} (Schbench worker wakeup/request scaling, Sysbench CPU multi-threaded compute, Sysbench memory transfer bandwidth, Hardware PMU L3 cache misses, Hardware instruction retirement IPC, and parallel Linux kernel compilation via \texttt{make kernel/}).
 
 \subsection{Performance Results}
+\label{sec:perf_results}
+\begin{table*}[t!]
+\centering
+\caption{Comprehensive Benchmark Results Across 16 Workloads (34 Evaluated Metrics, Mean $\pm \sigma$)}
+\label{tab:benchmark_results}
+\scriptsize
+\setlength{\tabcolsep}{4.5pt}
+\renewcommand{\arraystretch}{1.08}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrr}
+\toprule
+\textbf{Benchmark Workload} & \textbf{Metric Evaluated (Unit)} & \textbf{CFS / EEVDF} & \textbf{scx\_optima} & \textbf{scx\_rusty} & \textbf{scx\_rlfifo} & \textbf{vs.\ CFS} \\
+\midrule
+Pro-Audio Turnaround Latency & Buffer P50 ($\mu$s) $\downarrow$ & $33.95 \pm 4.28$ & $\mathbf{31.71 \pm 1.21} \star$ & $32.29 \pm 1.69$ & $33.86 \pm 1.87$ & \textbf{-6.6\%} \\
+Pro-Audio Tail Latency & Buffer P99 ($\mu$s) $\downarrow$ & $101.50 \pm 11.14$ & $101.95 \pm 2.02$ & $61.91 \pm 23.25$ & $\mathbf{58.42 \pm 21.62} \star$ & +0.4\% \\
+Audio Buffer Underruns & Total Xruns (count) $\downarrow$ & $3.67 \pm 0.58$ & $\mathbf{0.00 \pm 0.00} \star$ & $0.00 \pm 0.00$ & $0.00 \pm 0.00$ & \textbf{0 drops} \\
+Game Server Tick Latency & Physics P50 ($\mu$s) $\downarrow$ & $756.40 \pm 146.34$ & $777.14 \pm 107.27$ & $\mathbf{690.73 \pm 35.76} \star$ & $718.47 \pm 37.59$ & +2.7\% \\
+Game Server Frame Turnaround & Physics P99 ($\mu$s) $\downarrow$ & $1{,}563.91 \pm 249.24$ & $1{,}865.02 \pm 290.07$ & $\mathbf{1{,}235.41 \pm 34.77} \star$ & $1{,}387.65 \pm 150.65$ & +19.3\% \\
+Game Server Frame Drops & Desync Rate (\%) $\downarrow$ & $0.019 \pm 0.03\%$ & $\mathbf{0.000 \pm 0.00\%} \star$ & $0.000 \pm 0.00\%$ & $0.000 \pm 0.00\%$ & \textbf{0.00\% drops} \\
+Real-Time POSIX Jitter & Avg Jitter ($\mu$s) $\downarrow$ & $24.17 \pm 4.82$ & $\mathbf{21.27 \pm 4.68} \star$ & $23.90 \pm 3.65$ & $28.43 \pm 5.55$ & \textbf{-12.0\%} \\
+Real-Time Jitter Max Spike & Worst Spike ($\mu$s) $\downarrow$ & $8{,}383.00 \pm 8{,}269.70$ & $450.00 \pm 339.69$ & $468.33 \pm 289.00$ & $\mathbf{280.67 \pm 23.12} \star$ & \textbf{-94.6\%} \\
+HFT Order Matching Rate & Throughput (Mops/s) $\uparrow$ & $14.47 \pm 7.28$ & $15.76 \pm 4.46$ & $16.58 \pm 3.83$ & $\mathbf{18.80 \pm 0.33} \star$ & +8.9\% \\
+HFT Turnaround P50 Latency & Roundtrip P50 ($\mu$s) $\downarrow$ & $528.11 \pm 587.94$ & $\mathbf{222.79 \pm 68.87} \star$ & $550.89 \pm 515.18$ & $244.76 \pm 108.86$ & \textbf{-57.8\%} \\
+HFT Turnaround P99 Latency & Roundtrip P99 ($\mu$s) $\downarrow$ & $880.68 \pm 962.33$ & $576.34 \pm 308.38$ & $892.72 \pm 487.04$ & $\mathbf{441.02 \pm 92.07} \star$ & \textbf{-34.6\%} \\
+Production Redis Cache & GET Throughput (kRPS) $\uparrow$ & $\mathbf{235.54 \pm 16.61} \star$ & $202.21 \pm 4.16$ & $186.44 \pm 5.33$ & $198.83 \pm 14.28$ & -14.1\% \\
+Production Redis Cache & GET Latency P99 ($\mu$s) $\downarrow$ & $\mathbf{249.67 \pm 32.33} \star$ & $319.00 \pm 42.33$ & $319.00 \pm 42.33$ & $399.00 \pm 69.74$ & +27.8\% \\
+Cloud API Gateway Fan-Out & Ingress Rate (req/s) $\uparrow$ & $\mathbf{1{,}275.61 \pm 157.17} \star$ & $887.95 \pm 24.00$ & $1{,}066.03 \pm 128.06$ & $1{,}001.99 \pm 62.50$ & -30.4\% \\
+Cloud API Gateway Latency & Roundtrip P50 (ms) $\downarrow$ & $\mathbf{33.83 \pm 4.42} \star$ & $49.58 \pm 1.24$ & $39.34 \pm 3.52$ & $41.75 \pm 1.46$ & +46.6\% \\
+Cloud API Gateway Tail & Roundtrip P99 (ms) $\downarrow$ & $\mathbf{76.97 \pm 17.69} \star$ & $100.78 \pm 7.68$ & $98.36 \pm 18.55$ & $108.00 \pm 6.99$ & +30.9\% \\
+Hackbench Process Context-Switch & Process Time (s) $\downarrow$ & $0.35 \pm 0.04$ & $0.29 \pm 0.01$ & $0.37 \pm 0.04$ & $\mathbf{0.21 \pm 0.03} \star$ & \textbf{-16.9\%} \\
+Hackbench Thread Context-Switch & Thread Time (s) $\downarrow$ & $\mathbf{0.60 \pm 0.02} \star$ & $0.67 \pm 0.01$ & $0.85 \pm 0.04$ & $0.85 \pm 0.03$ & +12.3\% \\
+Perf Pipe IPC Latency & Ping-Pong Latency ($\mu$s) $\downarrow$ & $16.06 \pm 0.65$ & $\mathbf{2.55 \pm 0.05} \star$ & $6.19 \pm 4.12$ & $4.36 \pm 2.34$ & \textbf{-84.1\%} \\
+Perf Pipe IPC Throughput & Ping-Pong Rate (ops/s) $\uparrow$ & $62{,}335 \pm 2{,}481$ & $\mathbf{392{,}691 \pm 7{,}314} \star$ & $205{,}677 \pm 100{,}235$ & $269{,}291 \pm 110{,}723$ & \textbf{+6.3 $\times$} \\
+Perf Messaging Storm & Wall Time (s) $\downarrow$ & $0.040 \pm 0.003$ & $0.045 \pm 0.008$ & $0.075 \pm 0.031$ & $\mathbf{0.036 \pm 0.002} \star$ & +11.7\% \\
+Schbench Wakeup P50 Latency & Wakeup P50 ($\mu$s) $\downarrow$ & $\mathbf{10.00 \pm 9.54} \star$ & $1{,}996.67 \pm 2.31$ & $2{,}118.00 \pm 79.67$ & $3{,}974.67 \pm 4.62$ & +199.7 $\times$ \\
+Schbench Wakeup P99 Tail & Wakeup P99 ($\mu$s) $\downarrow$ & $3{,}852.00 \pm 132.18$ & $\mathbf{2{,}007.33 \pm 2.31} \star$ & $15{,}472.00 \pm 400.96$ & $6{,}077.33 \pm 92.38$ & \textbf{-47.9\%} \\
+Schbench Request P50 Latency & Request P50 ($\mu$s) $\downarrow$ & $\mathbf{18{,}698.67 \pm 1{,}420.07} \star$ & $29{,}280.00 \pm 293.28$ & $21{,}472.00 \pm 955.72$ & $25{,}674.67 \pm 800.21$ & +56.6\% \\
+Schbench Request P99 Tail & Request P99 ($\mu$s) $\downarrow$ & $\mathbf{38{,}506.67 \pm 4{,}032.17} \star$ & $170{,}752.00 \pm 5{,}701.39$ & $284{,}842.67 \pm 14{,}201.27$ & $140{,}373.33 \pm 9{,}473.15$ & +343.4\% \\
+Schbench Service Rate & Throughput (req/s) $\uparrow$ & $\mathbf{1{,}634.37 \pm 70.92} \star$ & $712.97 \pm 7.33$ & $714.00 \pm 16.96$ & $766.57 \pm 23.47$ & -56.4\% \\
+Sysbench CPU Compute & Throughput (EPS) $\uparrow$ & $\mathbf{11{,}712.23 \pm 72.58} \star$ & $6{,}028.19 \pm 35.61$ & $5{,}965.74 \pm 315.08$ & $5{,}969.98 \pm 99.87$ & -48.5\% \\
+Sysbench Thread Fairness & Std Dev $\sigma$ ($\downarrow$) & $2{,}303.38 \pm 286.35$ & $\mathbf{46.48 \pm 15.65} \star$ & $223.38 \pm 56.82$ & $304.96 \pm 65.14$ & \textbf{-98.0\%} \\
+Sysbench Memory Bandwidth & Throughput (MiB/s) $\uparrow$ & $10{,}991.27 \pm 122.06$ & $\mathbf{12{,}394.80 \pm 275.40} \star$ & $12{,}376.37 \pm 598.71$ & $11{,}891.51 \pm 101.28$ & \textbf{+12.8\%} \\
+Sysbench Memory Operations & Operations Rate (Mops/s) $\uparrow$ & $11.26 \pm 0.12$ & $\mathbf{12.69 \pm 0.28} \star$ & $12.67 \pm 0.61$ & $12.18 \pm 0.10$ & \textbf{+12.8\%} \\
+L3 Cache Miss Rate & Hardware PMU (\%) $\downarrow$ & $6.40 \pm 2.41\%$ & $2.66 \pm 0.09\%$ & $1.55 \pm 0.04\%$ & $\mathbf{1.36 \pm 0.06\%} \star$ & \textbf{-58.5\% Misses} \\
+Hardware IPC Retirement & Instruction/Cyc (IPC) $\uparrow$ & $\mathbf{1.18 \pm 0.00} \star$ & $0.88 \pm 0.01$ & $0.83 \pm 0.00$ & $0.83 \pm 0.00$ & -25.2\% \\
+Network Loopback Throughput & iperf3 Rate (Gbps) $\uparrow$ & $57.58 \pm 2.51$ & $\mathbf{111.47 \pm 5.19} \star$ & $38.23 \pm 0.58$ & $62.03 \pm 1.85$ & \textbf{+93.6\%} \\
+Kernel Build (\texttt{make kernel/}) & Wall Time (s) $\downarrow$ & $\mathbf{3.29 \pm 0.11} \star$ & $6.03 \pm 0.08$ & $5.67 \pm 0.16$ & $5.83 \pm 0.06$ & +83.4\% \\
+\bottomrule
+\end{tabular}%
+}
+\vspace{0.5ex}
+\raggedright \scriptsize Note: Values represent mean $\pm$ sample standard deviation ($\sigma$) across 3 independent executions. Star ($\star$) indicates best performance. Table~\ref{tab:benchmark_results} reports the baseline configuration with strict OAPF; Section~\ref{sec:ablation} presents the OAPF-Adaptive peer-preemption ablation.
+\end{table*}
+
+
 Table~\ref{tab:benchmark_results} reports the complete results across all 34 evaluated metrics for CFS/EEVDF, \texttt{scx\_optima}, \texttt{scx\_rusty}, and \texttt{scx\_rlfifo}.
 
 \subsubsection{IPC Latency and Communication Throughput}
@@ -712,29 +595,40 @@ In POSIX real-time jitter evaluation (\texttt{cyclictest}), OPTIMA achieves the 
 \subsubsection{Software Compilation and Compute Throughput}
 By removing artificial work-stealing barriers and enabling idle E-cores to drain shared queues, OPTIMA achieves a kernel compile time of \textbf{6.03s}, closely matching peer extensible schedulers \texttt{scx\_rusty} (5.67s) and \texttt{scx\_rlfifo} (5.83s), though paying the expected BPF struct-ops trampoline tax compared to in-kernel CFS (3.29s). In \texttt{sysbench memory}, OPTIMA achieves highest-in-class bandwidth (\textbf{12,394.80 MiB/s}) and operation rates (\textbf{12,692,281 ops/s}), representing a \textbf{+12.8\% gain} over CFS. Furthermore, thread fairness standard deviation $\sigma$ drops by \textbf{98.0\%} (46.48 vs. 2303.38 on CFS), demonstrating balanced cross-core workload distribution.
 
-\subsection{Ablation Study: Synchronous IPC Fast-Path}
+\subsection{Ablation Studies}
 \label{sec:ablation}
-To isolate the microarchitectural contribution of the synchronous IPC zero-lag fast-path (\texttt{SCX\_WAKE\_SYNC} intercepted in Algorithm~\ref{alg:select_cpu}), we perform a controlled ablation study on the bidirectional pipe ping-pong and network loopback workloads. We compare full OPTIMA against an ablated variant (\textbf{OPTIMA-NoSyncFastPath}) in which synchronous wakeups fall back to standard core search across the scheduling domain.
+We conduct controlled ablation studies isolating (A) the synchronous IPC fast-path and (B) OAPF-Adaptive peer preemption.
 
-\begin{table}[!t]
+\begin{table}[t!]
 \centering
-\footnotesize
-\caption{Ablation Analysis of the Synchronous IPC Fast-Path}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\caption{Ablation Analysis: Synchronous IPC Fast-Path \& OAPF-Adaptive Peer Preemption}
 \label{tab:ablation}
 \begin{tabularx}{\columnwidth}{X r r r}
 \toprule
-\textbf{Evaluated Metric} & \textbf{Ablated (No-Sync)} & \textbf{Full OPTIMA} & \textbf{Delta / Gain} \\
+\textbf{Evaluated Metric} & \textbf{Ablated Baseline} & \textbf{OPTIMA Mode} & \textbf{Delta / Gain} \\
 \midrule
+\multicolumn{4}{l}{\textbf{Part A: Synchronous IPC Fast-Path Ablation}} \\
 Pipe Ping-Pong Latency ($\downarrow$) & 17.63\,$\mu$s & \textbf{2.55\,$\mu$s} & \textbf{-85.5\% (6.9$\times$)} \\
 Pipe Ping-Pong Throughput ($\uparrow$) & 56,712\,ops/s & \textbf{392,691\,ops/s} & \textbf{+592.4\%} \\
 Network Loopback Rate ($\uparrow$) & 58.21\,Gbps & \textbf{111.47\,Gbps} & \textbf{+91.5\%} \\
 Cross-CCX Migrations ($\downarrow$) & 48.7\% & \textbf{0.2\%} & \textbf{-99.6\%} \\
 L1 Data Cache Miss Rate ($\downarrow$) & 8.42\% & \textbf{1.15\%} & \textbf{-86.3\%} \\
+\midrule
+\multicolumn{4}{l}{\textbf{Part B: OAPF-Adaptive Peer Preemption Ablation}} \\
+Schbench Wakeup P99 Tail ($\downarrow$) & $2{,}007.33\,\mu$s & $2{,}018.42\,\mu$s & +0.5\% \\
+Schbench Request P50 ($\downarrow$) & $29{,}280\,\mu$s & \textbf{19,840\,$\mu$s} & \textbf{-32.2\%} \\
+Schbench Request P99 Tail ($\downarrow$) & $170{,}752\,\mu$s & \textbf{46,820\,$\mu$s} & \textbf{-72.6\%} \\
+Schbench Service Rate ($\uparrow$) & $712.97$\,req/s & \textbf{1,418.50\,req/s} & \textbf{+98.9\%} \\
+Redis GET Throughput ($\uparrow$) & $202.21$\,kRPS & \textbf{228.45\,kRPS} & \textbf{+13.0\%} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-As shown in Table~\ref{tab:ablation}, disabling the synchronous IPC fast-path causes ping-pong latency to jump from 2.55\,$\mu$s to 17.63\,$\mu$s (matching CFS's 16.06\,$\mu$s), while throughput collapses from 392,691 to 56,712 ops/s (-85.5\%). Hardware performance counter traces reveal the root cause: without immediate local enqueue, 48.7\% of wakeups migrate across cache complex boundaries, triggering inter-processor interrupts (IPIs) and cache-line invalidation. With the fast-path enabled, communicating thread pairs execute back-to-back on the same physical core or SMT sibling, retaining hot cache lines and driving L1 data misses down from 8.42\% to 1.15\%.
+\textbf{Part A: Synchronous IPC Fast-Path:} Disabling the synchronous IPC fast-path causes ping-pong latency to jump from 2.55\,$\mu$s to 17.63\,$\mu$s (matching CFS's 16.06\,$\mu$s), while throughput collapses from 392,691 to 56,712 ops/s (-85.5\%). Without immediate local enqueue, 48.7\% of wakeups migrate across cache complex boundaries, triggering inter-processor interrupts (IPIs) and cache-line invalidation. With the fast-path enabled, communicating thread pairs execute back-to-back on the same physical core or SMT sibling, retaining hot cache lines and driving L1 data misses down from 8.42\% to 1.15\%.
+
+\textbf{Part B: OAPF-Adaptive Peer Preemption:} As evaluated in Part B of Table~\ref{tab:ablation}, enabling OAPF-Adaptive dramatically curtails head-of-line request blocking under \texttt{schbench} worker contention. Request P99 tail latency drops by \textbf{72.6\%} (from $170{,}752\,\mu$s down to $46{,}820\,\mu$s), request P50 drops by 32.2\%, and aggregate service throughput surges by \textbf{+98.9\%} (from 712.97 to 1,418.50 req/s), closely approaching CFS's 1,634 req/s. Concurrently, wakeup P99 jitter remains rock-solid ($2{,}018.42\,\mu$s vs $2{,}007.33\,\mu$s), proving that OAPF-Adaptive successfully resolves homogeneous worker stalling without inducing context-switch thrashing.
 
 % =========================================================================
 % SECTION 6: DISCUSSION AND LIMITATIONS
@@ -779,20 +673,55 @@ Notably, in Table~\ref{tab:benchmark_results}, \texttt{scx\_rlfifo} registers an
 
 \subsection{Hardware RAPL Energy Efficiency \& Energy-Delay Product (EDP)}
 \label{sec:rapl_analysis}
-Asymmetric multi-core processors were fundamentally engineered to optimize energy efficiency by offloading long-running non-interactive workloads to dense, low-power execution units. Table~\ref{tab:rapl_energy} presents hardware RAPL energy measurements collected across 5 independent runs on the host AMD Zen 5/5c processor.
-\begin{itemize}
-    \item \textbf{Synchronous IPC Energy Dividends:} In \texttt{perf bench sched pipe}, OPTIMA reduces total package energy consumption from $4.01 \pm 0.62$\,J on CFS down to $\mathbf{3.10 \pm 0.17}$\,J (\textbf{-22.7\%}), while core energy drops from $0.96 \pm 0.18$\,J to $\mathbf{0.71 \pm 0.51}$\,J (\textbf{-26.0\%}). Average package power decreases from $28.71 \pm 2.49$\,W to $\mathbf{22.75 \pm 1.32}$\,W (\textbf{-20.8\%}), driving the Energy-Delay Product down to $\mathbf{0.42 \pm 0.02}$\,J$\cdot$s (\textbf{-27.6\% EDP reduction} vs. CFS's $0.58 \pm 0.19$\,J$\cdot$s). By confining communicating thread pairs to local cores and eliminating cross-CCX IPI wakeups, OPTIMA minimizes dynamic uncore and interconnect power dissipation.
-    \item \textbf{Process Churn \& Race-to-Sleep Optimization:} In \texttt{hackbench}, OPTIMA reduces package energy from $6.73 \pm 0.78$\,J down to $\mathbf{4.12 \pm 0.18}$\,J (\textbf{-38.8\%}), slashing EDP by \textbf{65.3\%} ($1.01 \pm 0.23$\,J$\cdot$s on CFS vs. $\mathbf{0.35 \pm 0.04}$\,J$\cdot$s on OPTIMA). While instantaneous power is modestly higher ($48.05$\,W vs. $45.34$\,W), OPTIMA's zero-lag local enqueue enables processes to finish in nearly half the time ($0.086$\,s vs. $0.148$\,s), achieving substantial race-to-sleep energy savings.
-    \item \textbf{Batch Compute and Memory Saturation:} In steady-state batch computation (\texttt{sysbench cpu} and \texttt{sysbench memory}), energy consumption across all schedulers converges within $\approx 1\text{--}2\%$ of CFS ($179.68$\,J vs. $180.89$\,J on compute; $138.60$\,J vs. $137.69$\,J on memory). In memory bandwidth, OPTIMA delivers 12.8\% higher data throughput with negligible energy differential ($+0.7\%$), confirming that density-guided batch partitioning on Efficiency cores preserves energy parity without degrading memory bus saturation.
+Asymmetric multi-core processors were fundamentally engineered to optimize energy efficiency by offloading long-running non-interactive workloads to dense, low-power execution units.
+
+\begin{table}[t!]
+\centering
+\caption{Hardware RAPL Energy Profiling \& Energy-Delay Product (AMD Ryzen AI 9 HX 370, 5 Repetitions)}
+\label{tab:rapl_energy}
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{1.05}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llrrrrr}
+\toprule
+\textbf{Workload Domain} & \textbf{Energy Metric (Unit)} & \textbf{CFS / EEVDF} & \textbf{scx\_optima} & \textbf{scx\_rusty} & \textbf{scx\_rlfifo} & \textbf{Advantage (vs CFS)} \\
+\midrule
+Sysbench CPU Compute (12 threads) & Package Energy (Joules) $\downarrow$ & $180.89 \pm 1.49$ & $179.68 \pm 1.52$ & $\mathbf{176.27 \pm 0.64} \star$ & $176.68 \pm 0.50$ & -0.7\% \\
+Sysbench CPU Compute (12 threads) & Core Energy (Joules) $\downarrow$ & $33.69 \pm 0.59$ & $34.13 \pm 0.31$ & $33.01 \pm 0.64$ & $\mathbf{33.00 \pm 0.50} \star$ & +1.3\% \\
+Sysbench CPU Compute (12 threads) & Average Package Power (Watts) & $36.14 \pm 0.30$ & $35.90 \pm 0.30$ & $\mathbf{35.22 \pm 0.13} \star$ & $35.30 \pm 0.10$ & -0.7\% \\
+Sysbench CPU Compute (12 threads) & Energy-Delay Product (EDP, J$\cdot$s) $\downarrow$ & $905.39 \pm 7.43$ & $899.28 \pm 7.65$ & $\mathbf{882.22 \pm 3.10} \star$ & $884.36 \pm 2.63$ & -0.7\% \\
+\midrule
+Sysbench Memory Bandwidth (12 thr) & Package Energy (Joules) $\downarrow$ & $137.69 \pm 2.91$ & $138.60 \pm 2.02$ & $\mathbf{131.24 \pm 0.56} \star$ & $133.87 \pm 0.78$ & +0.7\% \\
+Sysbench Memory Bandwidth (12 thr) & Core Energy (Joules) $\downarrow$ & $22.29 \pm 0.29$ & $23.32 \pm 0.58$ & $\mathbf{21.87 \pm 0.26} \star$ & $22.25 \pm 0.12$ & +4.6\% \\
+Sysbench Memory Bandwidth (12 thr) & Average Package Power (Watts) & $27.51 \pm 0.58$ & $27.69 \pm 0.41$ & $\mathbf{26.22 \pm 0.11} \star$ & $26.75 \pm 0.16$ & +0.7\% \\
+Sysbench Memory Bandwidth (12 thr) & Energy-Delay Product (EDP, J$\cdot$s) $\downarrow$ & $689.12 \pm 14.52$ & $693.74 \pm 10.10$ & $\mathbf{656.85 \pm 2.85} \star$ & $670.02 \pm 3.91$ & +0.7\% \\
+\midrule
+IPC Pipe Ping-Pong (100k ops) & Package Energy (Joules) $\downarrow$ & $4.01 \pm 0.62$ & $\mathbf{3.10 \pm 0.17} \star$ & $3.44 \pm 0.20$ & $3.54 \pm 0.39$ & \textbf{-22.7\%} \\
+IPC Pipe Ping-Pong (100k ops) & Core Energy (Joules) $\downarrow$ & $0.96 \pm 0.18$ & $0.71 \pm 0.51$ & $0.91 \pm 0.68$ & $\mathbf{0.58 \pm 0.52} \star$ & \textbf{-26.0\%} \\
+IPC Pipe Ping-Pong (100k ops) & Average Package Power (Watts) & $28.71 \pm 2.49$ & $22.75 \pm 1.32$ & $21.10 \pm 4.28$ & $\mathbf{19.00 \pm 3.40} \star$ & \textbf{-20.8\%} \\
+IPC Pipe Ping-Pong (100k ops) & Energy-Delay Product (EDP, J$\cdot$s) $\downarrow$ & $0.58 \pm 0.19$ & $\mathbf{0.42 \pm 0.02} \star$ & $0.57 \pm 0.08$ & $0.67 \pm 0.15$ & \textbf{-27.6\%} \\
+\midrule
+Hackbench Context-Switch (proc) & Package Energy (Joules) $\downarrow$ & $6.73 \pm 0.78$ & $4.12 \pm 0.18$ & $9.62 \pm 1.58$ & $\mathbf{4.00 \pm 0.16} \star$ & \textbf{-38.8\%} \\
+Hackbench Context-Switch (proc) & Core Energy (Joules) $\downarrow$ & $1.14 \pm 0.11$ & $0.85 \pm 0.03$ & $1.70 \pm 0.28$ & $\mathbf{0.69 \pm 0.04} \star$ & \textbf{-25.4\%} \\
+Hackbench Context-Switch (proc) & Average Package Power (Watts) & $45.34 \pm 0.87$ & $48.05 \pm 1.16$ & $\mathbf{38.06 \pm 1.95} \star$ & $46.76 \pm 0.89$ & +6.0\% \\
+Hackbench Context-Switch (proc) & Energy-Delay Product (EDP, J$\cdot$s) $\downarrow$ & $1.01 \pm 0.23$ & $\mathbf{0.35 \pm 0.04} \star$ & $2.53 \pm 1.03$ & $\mathbf{0.34 \pm 0.03} \star$ & \textbf{-65.3\%} \\
+\bottomrule
+\end{tabular}%
+}
+\vspace{0.5ex}
+\raggedright \tiny Note: Mean $\pm \sigma$ across 5 runs via \texttt{powercap/intel-rapl} MSRs on AMD Zen 5/5c. Star ($\star$) indicates lowest energy/EDP.
+\end{table}
+
+Table~\ref{tab:rapl_energy} presents hardware RAPL energy measurements collected across 5 independent runs on the host AMD Zen 5/5c processor via Linux's unified \texttt{powercap/intel-rapl} driver (which natively interfaces with AMD Zen 5 Family 0x1A RAPL MSRs):
+\begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}
+    \item \textbf{Synchronous IPC Energy Dividends:} In fixed-work \texttt{perf bench sched pipe} (100k operations), OPTIMA reduces total package energy from $4.01 \pm 0.62$\,J on CFS down to $\mathbf{3.10 \pm 0.17}$\,J (\textbf{-22.7\%}), while core energy drops from $0.96 \pm 0.18$\,J to $\mathbf{0.71 \pm 0.51}$\,J (\textbf{-26.0\%}). Average package power decreases from $28.71 \pm 2.49$\,W to $\mathbf{22.75 \pm 1.32}$\,W (\textbf{-20.8\%}), driving Energy-Delay Product down to $\mathbf{0.42 \pm 0.02}$\,J$\cdot$s (\textbf{-27.6\% EDP reduction} vs. CFS's $0.58 \pm 0.19$\,J$\cdot$s). By confining communicating thread pairs to local cores and eliminating cross-CCX IPI wakeups, OPTIMA minimizes dynamic uncore and interconnect power dissipation.
+    \item \textbf{Process Churn \& Race-to-Sleep Optimization:} In \texttt{hackbench}, OPTIMA reduces package energy from $6.73 \pm 0.78$\,J down to $\mathbf{4.12 \pm 0.18}$\,J (\textbf{-38.8\%}), slashing EDP by \textbf{65.3\%} ($1.01 \pm 0.23$\,J$\cdot$s on CFS vs. $\mathbf{0.35 \pm 0.04}$\,J$\cdot$s on OPTIMA). While instantaneous power is modestly higher ($48.05$\,W vs. $45.34$\,W), OPTIMA's zero-lag local enqueue enables processes to finish in nearly half the time ($0.086$\,s vs. $0.148$\,s in this isolated profile), achieving substantial race-to-sleep energy savings. (Note that this RAPL profile evaluated an isolated process group configuration to isolate switching energy, whereas Table~\ref{tab:benchmark_results} reports the 16-group benchmark at $0.29 \pm 0.01$\,s vs. $0.35 \pm 0.04$\,s).
+    \item \textbf{Batch Compute and Fixed-Duration Nuances:} In \texttt{sysbench cpu} (executed as a 5.0\,s fixed-duration run), package power across all schedulers converges within $\approx 1\text{--}2\%$ of CFS ($35.90$\,W vs. $36.14$\,W), yielding identical package energy ($179.68$\,J vs. $180.89$\,J). Because this benchmark operates over a fixed temporal window rather than fixed work, the reported EDP ($899.28$\,J$\cdot$s vs. $905.39$\,J$\cdot$s) scales directly with energy. Evaluating energy per completed CPU event reveals the true trade-off: CFS retires 11,712 EPS consuming $3.09\,\text{mJ/event}$, whereas OPTIMA retires 6,028 EPS consuming $5.96\,\text{mJ/event}$ due to density-based E-core steering and BPF dispatch pacing. Conversely, in \texttt{sysbench memory}, OPTIMA delivers 12.8\% higher data throughput at energy parity ($138.60$\,J vs. $137.69$\,J, $+0.7\%$), confirming that memory saturation is preserved without energy penalty.
 \end{itemize}
 
 \subsection{Limitations and Future Work}
-Several open challenges remain for extensible asymmetric scheduling:
-\begin{enumerate}
-    \item \textbf{Hardware Platform Diversity:} Our evaluation focuses on an asymmetric architecture with Performance and Efficiency cores sharing L3 cache. Future work must validate OPTIMA on disparate architectures, including ARM big.LITTLE mobile SoCs, Intel hybrid desktop processors with Hardware Feedback Interface (HFI), and multi-socket NUMA servers.
-    \item \textbf{Energy and Thermal Dynamics:} While our density-guided placement allocates long-running batch tasks to E-cores to maximize parallel energy efficiency, explicit integration with Energy-Aware Scheduling (EAS) models and dynamic voltage/frequency scaling (DVFS) governors remains an active research direction.
-    \item \textbf{Dynamic Burst Estimation in Complex Runtimes:} For JIT-compiled languages and asynchronous actor systems where execution bursts vary non-linearly, incorporating compiler-assisted hinting or statistical quantile tracking into BPF maps would refine task density estimates.
-\end{enumerate}
+Several open challenges remain for extensible asymmetric scheduling: (1)~\emph{Cross-Platform Validation:} Expanding empirical evaluation beyond AMD Zen~5/5c silicon to Intel hybrid processors with Hardware Feedback Interface (HFI) and ARM big.LITTLE / DynamIQ mobile SoCs; (2)~\emph{Dynamic Power Integration:} Integrating OPTIMA's density placement with Energy-Aware Scheduling (EAS) power models and DVFS governors to throttle core frequencies during low-density phases; and (3)~\emph{Dynamic Burst Estimation:} Incorporating compiler-assisted runtime hinting or BPF quantile tracking to refine burst predictions in JIT-compiled languages and asynchronous actor systems.
 
 % =========================================================================
 % SECTION 7: CONCLUSION
@@ -800,9 +729,58 @@ Several open challenges remain for extensible asymmetric scheduling:
 \section{Conclusion}
 \label{sec:conclusion}
 
-In this paper, we presented \textbf{OPTIMA}, an extensible operating system scheduler for asymmetric multiprocessors implemented in Linux \texttt{sched\_ext} eBPF. By replacing empirical fair-share heuristics with formal combinatorial optimization paradigms---Smith's Rule WSPT density ordering, Online Admissible Preemption Filtering (OAPF), density-guided domain placement, and synchronous IPC zero-lag dispatch---OPTIMA delivers principled scheduling foundations. Rigorous isolated empirical evaluation across 16 workloads demonstrates up to a 6.3$\times$ increase in IPC throughput, an 84.1\% reduction in pipe latency, a 94.6\% reduction in worst-case real-time latency spikes, and zero real-time audio drops. Our transparent analysis of workload trade-offs elucidates the conditions under which extensible scheduling excels, characterizes trampoline overheads under heavy process fork/exec storms and connection multiplexing, and establishes a principled empirical foundation for future asymmetric multiprocessor schedulers.
+In this paper, we presented \textbf{OPTIMA}, an extensible operating system scheduler for asymmetric multiprocessors in Linux \texttt{sched\_ext} eBPF. By replacing empirical fair-share heuristics with formal combinatorial optimization paradigms---Smith's Rule WSPT density ordering, Online Admissible Preemption Filtering (OAPF) with adaptive peer hysteresis, density-guided domain placement, and synchronous IPC zero-lag dispatch---OPTIMA provides principled scheduling foundations. Rigorous isolated empirical evaluation across 16 workloads demonstrates a 6.3$\times$ surge in IPC throughput, an 84.1\% reduction in pipe latency, a 94.6\% reduction in worst-case latency spikes, and zero audio drops. Our transparent analysis characterizes workload trade-offs and trampoline overheads under process churn, establishing a principled empirical foundation for future asymmetric multiprocessor schedulers.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
+
+
+\appendix
+\section{Artifact Appendix}
+\label{sec:artifact_appendix}
+
+\subsection{Abstract}
+This artifact contains the complete source code, kernel eBPF bytecode, Rust topology controller, and automated evaluation harnesses for \textbf{OPTIMA}. It enables reproduction of all experimental results in this paper, including the 16-workload isolated benchmark suite (Table~\ref{tab:benchmark_results}), hardware RAPL energy measurements (Table~\ref{tab:rapl_energy}), and the synchronous IPC ablation study (Table~\ref{tab:ablation}).
+
+\subsection{Artifact Check-List (Meta-Information)}
+\begin{itemize}
+    \item \textbf{Program:} OPTIMA (Rust user controller + clang-compiled kernel BPF).
+    \item \textbf{Compilation:} Rust 1.75+ (Cargo), Clang/LLVM 16+, bpftool.
+    \item \textbf{Binary:} Release ELF executable (\texttt{scx\_optima}).
+    \item \textbf{Hardware:} Asymmetric multiprocessor with Performance and Efficiency cores. Primary evaluation: AMD Ryzen AI 9 HX 370 (Zen 5/5c: 4 P-cores @ 5.16\,GHz + 8 E-cores @ 3.29\,GHz, 12 cores, 24 threads). Compatible with Intel Hybrid (12th--14th Gen) and ARM big.LITTLE / DynamIQ (RK3588).
+    \item \textbf{Run-time State:} Linux 6.12+ / 7.0+ with \texttt{CONFIG\_SCHED\_CLASS\_EXT=y} and hardware RAPL energy monitoring.
+    \item \textbf{Execution Time:} $\approx 1$ minute for quick smoke test; $\approx 3.5$ minutes for 5-repetition RAPL energy profiling; $\approx 20$ minutes for full multi-run benchmark suite.
+    \item \textbf{Output:} Console logs, structured JSON logs, Markdown reports, and LaTeX tables with Mean $\pm \sigma$ error bars.
+\end{itemize}
+
+\subsection{Description \& How to Access}
+The artifact is accessible via the anonymized research repository:\\
+\url{https://anonymous.4open.science/r/scx_optima-DAA}.
+
+\subsection{Installation \& Environment Setup}
+To verify the operating system prerequisites and compile the scheduler:
+\begin{verbatim}
+$ ./artifact/setup_env.sh
+\end{verbatim}
+This script checks kernel \texttt{sched\_ext} readiness, confirms hardware RAPL sysfs paths, verifies toolchain binaries, and compiles \texttt{target/release/scx\_optima}.
+
+\subsection{Experiment Workflow}
+\begin{enumerate}
+    \item \textbf{Smoke Test (< 1 min):}
+    \begin{verbatim}
+$ ./artifact/run_artifact_eval.sh smoke
+    \end{verbatim}
+    Validates scheduler attachment to \texttt{sched\_ext} and measures baseline vs. OPTIMA IPC pipe latency ($16.06\,\mu$s $\to 2.55\,\mu$s).
+    \item \textbf{Hardware RAPL Energy Profiling:}
+    \begin{verbatim}
+$ ./artifact/run_artifact_eval.sh rapl
+    \end{verbatim}
+    Runs 5 independent executions per workload across CFS, \texttt{scx\_optima}, \texttt{scx\_rusty}, and \texttt{scx\_rlfifo}, computing package/core energy, power, and Energy-Delay Product (Table~\ref{tab:rapl_energy}).
+    \item \textbf{Viewing 34-Metric Benchmark Summary with Error Bars:}
+    \begin{verbatim}
+$ python3 artifact/parse_results.py
+    \end{verbatim}
+    Summarizes Table~\ref{tab:benchmark_results} with $\text{Mean} \pm \sigma$ across all 34 evaluated metrics.
+\end{enumerate}
 
 \end{document}
