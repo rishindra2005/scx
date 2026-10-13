@@ -1,0 +1,27 @@
+{
+  "sample_rate": 48000,
+  "buffer_size": 64,
+  "frame_deadline_us": 1333.333,
+  "total_frames": 15000,
+  "xruns": 0,
+  "xrun_rate_pct": 0.0000,
+  "max_consecutive_xruns": 0,
+  "processing_time_us": {
+    "p50": 18.96,
+    "p95": 38.88,
+    "p99": 45.85,
+    "max": 82.51
+  },
+  "turnaround_time_us": {
+    "p50": 34.63,
+    "p95": 59.90,
+    "p99": 82.84,
+    "max": 143.35
+  },
+  "wake_jitter_us": {
+    "p50": 15.65,
+    "p95": 22.29,
+    "p99": 34.51,
+    "max": 101.42
+  }
+}

@@ -79,11 +79,24 @@ enable_isolation() {
     echo "      Kernel sched_domain rebuilt. cpuset.cpus.isolated = $(cat /sys/fs/cgroup/cpuset.cpus.isolated 2>/dev/null || echo 'None')"
     echo "      benchmark.slice partition state                  = $(cat "$CGROUP_PATH/cpuset.cpus.partition")"
 
-    echo "[3/4] Rerouting Hardware Device Interrupts (IRQs)..."
+    echo "[3/4] Rerouting Hardware Device Interrupts (IRQs) & Kernel Workqueues..."
     echo "$HOST_IRQ_MASK" > /proc/irq/default_smp_affinity 2>/dev/null || true
+    echo "$HOST_IRQ_MASK" > /sys/devices/virtual/workqueue/cpumask 2>/dev/null || true
     echo "      Default IRQ affinity mask set to host cores ($HOST_CPUS)."
+    echo "      Kernel workqueue cpumask restricted to host cores ($HOST_CPUS)."
 
-    echo "[4/4] Isolation Fully Operational!"
+    echo "[4/5] Confining All Host System & User Daemons..."
+    systemctl set-property user.slice AllowedCPUs="$HOST_CPUS" 2>/dev/null || true
+    systemctl set-property system.slice AllowedCPUs="$HOST_CPUS" 2>/dev/null || true
+    systemctl set-property init.scope AllowedCPUs="$HOST_CPUS" 2>/dev/null || true
+    # Actively migrate any existing threads away from isolated cores
+    for t in /proc/[0-9]*/task/*; do
+        tid="${t##*/}"
+        taskset -cp "$HOST_CPUS" "$tid" >/dev/null 2>&1 || true
+    done
+    echo "      All existing host userspace threads migrated to host cores ($HOST_CPUS)."
+
+    echo "[5/5] Isolation Fully Operational!"
     echo "      Dedicated CPUs: $ISO_CPUS (4 P-threads, 8 E-threads)"
     echo "      Host OS CPUs:   $HOST_CPUS (Desktop & OS noise-free)"
     echo "================================================================="
@@ -103,7 +116,7 @@ disable_isolation() {
             done < "$CGROUP_PATH/cgroup.procs"
         fi
         echo "member" > "$CGROUP_PATH/cpuset.cpus.partition" 2>/dev/null || true
-        # Remove any sub-cgroups created by Docker
+        # Remove any sub-cgroups created by Docker or VM
         find "$CGROUP_PATH" -mindepth 1 -maxdepth 2 -type d 2>/dev/null | tac | xargs -r -n1 rmdir 2>/dev/null || true
         rmdir "$CGROUP_PATH" 2>/dev/null || true
     fi
@@ -114,6 +127,8 @@ disable_isolation() {
     fi
 
     echo "$DEFAULT_IRQ_MASK" > /proc/irq/default_smp_affinity 2>/dev/null || true
+    echo "$DEFAULT_IRQ_MASK" > /sys/devices/virtual/workqueue/cpumask 2>/dev/null || true
+    systemctl revert user.slice system.slice init.scope 2>/dev/null || true
 
     echo "  Kernel cpuset.cpus.isolated: $(cat /sys/fs/cgroup/cpuset.cpus.isolated 2>/dev/null || echo 'None')"
     echo "  L3 Cache Schemata:           $(grep L3 /sys/fs/resctrl/schemata 2>/dev/null | tr -d ' ' || echo 'Default')"

@@ -97,14 +97,15 @@ fn detect_heterogeneous_topology() -> (Vec<usize>, Vec<usize>, [u64; 8], [u64; 8
         }
     }
 
-    // Fallback if all cores are homogeneous: partition first half to P, second to E
-    if e_cores.is_empty() {
+    // Fallback if inside VMs/QEMU (freq unavailable) or homogeneous: allocate first 4 cores to P, rest to E
+    if p_cores.is_empty() || e_cores.is_empty() || max_freq == 0 {
         p_cores.clear();
         e_cores.clear();
         p_mask = [0u64; 8];
         e_mask = [0u64; 8];
+        let p_core_count = if nr_cpus >= 12 { 4 } else { (nr_cpus / 2).max(1) };
         for cpu in 0..nr_cpus {
-            if cpu < nr_cpus / 2 {
+            if cpu < p_core_count {
                 p_cores.push(cpu);
                 p_mask[cpu / 64] |= 1u64 << (cpu % 64);
             } else {

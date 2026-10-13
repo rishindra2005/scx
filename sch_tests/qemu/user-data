@@ -1,0 +1,50 @@
+#cloud-config
+users:
+  - name: root
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKOcgQoC9GyK4dZhz+e7bBlBPiXT5jE0vW3w/oLROQZu rishi@rishi
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN/Yi04v8/NWcmTxOFbYXI2SVSiy5vvxtdcj+3bAAb92 rishindra.hackbox@gmail.com
+    shell: /bin/bash
+  - name: rishi
+    gecos: Rishi
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: users, admin, sudo
+    shell: /bin/bash
+    plain_text_passwd: ubuntu
+    lock_passwd: false
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKOcgQoC9GyK4dZhz+e7bBlBPiXT5jE0vW3w/oLROQZu rishi@rishi
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN/Yi04v8/NWcmTxOFbYXI2SVSiy5vvxtdcj+3bAAb92 rishindra.hackbox@gmail.com
+
+ssh_pwauth: true
+disable_root: false
+
+package_update: true
+packages:
+  - sysbench
+  - iperf3
+  - redis-server
+  - redis-tools
+  - build-essential
+  - libelf-dev
+  - zlib1g-dev
+  - libbpf-dev
+  - pkg-config
+  - python3
+  - python3-pip
+  - python3-aiohttp
+  - python3-redis
+  - git
+  - curl
+  - wget
+  - rsync
+  - bc
+  - rt-tests
+  - linux-tools-common
+  - linux-tools-generic
+
+runcmd:
+  - sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - sed -i 's/^PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - echo "PermitRootLogin yes" >> /etc/ssh/sshd_config.d/01-root.conf
+  - systemctl restart ssh || systemctl restart sshd

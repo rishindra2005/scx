@@ -239,7 +239,7 @@ static inline s32 pick_idle_domestic_core(struct task_struct *p, bool perf, cons
  * Helper: Find wholly idle physical core or idle CPU on a DIFFERENT physical core
  * Avoids placing communicating sync pairs on SMT siblings of the same core.
  */
-static inline s32 pick_idle_different_core(struct task_struct *p, bool perf, s32 avoid_cpu, const struct cpumask *idle_smtmask)
+static inline __maybe_unused s32 pick_idle_different_core(struct task_struct *p, bool perf, s32 avoid_cpu, const struct cpumask *idle_smtmask)
 {
 	s32 avoid_sib = get_smt_sibling(avoid_cpu);
 	s32 cpu;
@@ -312,58 +312,39 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 	const struct cpumask *idle_smtmask = scx_bpf_get_idle_smtmask();
 	s32 this_cpu = bpf_get_smp_processor_id();
 	bool prev_perf = is_perf_core(prev_cpu);
-	bool this_perf = is_perf_core(this_cpu);
+	bool __maybe_unused this_perf = is_perf_core(this_cpu);
 	s32 target_cpu = -1;
 
 	/*
 	 * 2. Synchronous Wakeup (SCX_WAKE_SYNC):
-	 * For high-throughput IPC, socket pairs, and iperf3 loopback.
+	 * For high-throughput IPC, socket pairs, and perf bench sched pipe.
+	 * When a task is woken with SCX_WAKE_SYNC, the waker is yielding or going
+	 * to sleep immediately.
+	 * Directly dispatching to this_cpu preserves L1/L2 cache warmth and eliminates
+	 * cross-core cache invalidations and IPI overhead.
 	 */
 	if (wake_flags & SCX_WAKE_SYNC) {
 		s32 this_sib = get_smt_sibling(this_cpu);
 
-		/* If waker is on an E-core, but an idle P-core exists, promote sync pair to Zen 5 @ 5.16 GHz! */
-		if (!this_perf && tctx->core_type != CORE_TYPE_EFF) {
-			s32 p_core = pick_idle_domestic_core(p, true, idle_smtmask);
-			if (p_core >= 0) {
-				target_cpu = p_core;
-				goto direct_dispatch;
-			}
-			s32 p_cpu = pick_idle_domestic_cpu(p, true);
-			if (p_cpu >= 0) {
-				target_cpu = p_cpu;
-				goto direct_dispatch;
-			}
-		}
-
-		/* Priority 1: Keep on prev_cpu if idle, in the SAME CCX as waker, and on a distinct physical core */
-		if (prev_perf == this_perf && prev_cpu != this_cpu &&
-		    (this_sib < 0 || prev_cpu != this_sib) &&
-		    bpf_cpumask_test_cpu(prev_cpu, p->cpus_ptr) &&
-		    scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
-			target_cpu = prev_cpu;
-			goto direct_dispatch;
-		}
-
-		/* Priority 2: Wholly idle physical core in the SAME CCX as waker!
-		 * Guarantees sender and receiver stay on the same CCX with zero Infinity Fabric overhead! */
-		s32 dom_idle = pick_idle_different_core(p, this_perf, this_cpu, idle_smtmask);
-		if (dom_idle >= 0) {
-			target_cpu = dom_idle;
-			goto direct_dispatch;
-		}
-
-		/* Priority 3: Any idle logical CPU in the SAME CCX as waker */
-		s32 dom_cpu = pick_idle_domestic_cpu(p, this_perf);
-		if (dom_cpu >= 0 && dom_cpu != this_cpu) {
-			target_cpu = dom_cpu;
-			goto direct_dispatch;
-		}
-
-		/* Priority 4: Sequential ping-pong fallback on this_cpu if domestic CCX is full and local DSQ empty */
+		/* Priority 1: If this_cpu has no queued tasks and is allowed, dispatch directly to this_cpu! */
 		if (bpf_cpumask_test_cpu(this_cpu, p->cpus_ptr) &&
 		    scx_bpf_dsq_nr_queued(SCX_DSQ_LOCAL_ON | this_cpu) == 0) {
 			target_cpu = this_cpu;
+			goto direct_dispatch;
+		}
+
+		/* Priority 2: Try SMT sibling this_sib for close L1/L2/L3 cache locality */
+		if (this_sib >= 0 && bpf_cpumask_test_cpu(this_sib, p->cpus_ptr) &&
+		    scx_bpf_dsq_nr_queued(SCX_DSQ_LOCAL_ON | this_sib) == 0) {
+			scx_bpf_test_and_clear_cpu_idle(this_sib);
+			target_cpu = this_sib;
+			goto direct_dispatch;
+		}
+
+		/* Priority 3: Try prev_cpu if idle and allowed */
+		if (prev_cpu >= 0 && bpf_cpumask_test_cpu(prev_cpu, p->cpus_ptr) &&
+		    scx_bpf_test_and_clear_cpu_idle(prev_cpu)) {
+			target_cpu = prev_cpu;
 			goto direct_dispatch;
 		}
 	}
@@ -411,7 +392,8 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 	 * If no backlog, STAY on P-core queue to preserve warm 16MB L3 and 5.16 GHz speed.
 	 */
 	if (prev_perf && bpf_cpumask_test_cpu(prev_cpu, p->cpus_ptr)) {
-		if (scx_bpf_dsq_nr_queued(DSQ_SHARED_P) > 0) {
+		if (scx_bpf_dsq_nr_queued(DSQ_SHARED_P) > 0 ||
+		    (tctx->is_batch && tctx->avg_runtime >= 3000000ULL)) {
 			s32 e_core = pick_idle_domestic_core(p, false, idle_smtmask);
 			if (e_core >= 0) {
 				target_cpu = e_core;
@@ -472,7 +454,13 @@ s32 BPF_STRUCT_OPS(optima_select_cpu, struct task_struct *p, s32 prev_cpu, u64 w
 direct_dispatch:
 	stat_add(OPTIMA_STAT_DIRECT_DISPATCH, 1);
 	scx_bpf_put_idle_cpumask(idle_smtmask);
-	u64 d_slice = (tctx->is_batch && tctx->avg_runtime >= 3000000ULL) ? MAX_SLICE_NS : DEFAULT_SLICE_NS;
+	u64 d_slice;
+	if (tctx->is_batch && tctx->avg_runtime >= 3000000ULL)
+		d_slice = MAX_SLICE_NS;
+	else if (!tctx->is_batch || tctx->avg_runtime < 1000000ULL)
+		d_slice = MIN_SLICE_NS;
+	else
+		d_slice = default_slice_ns;
 	scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, d_slice, 0);
 	return target_cpu;
 }
@@ -495,7 +483,8 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 	/* Pinned tasks, kernel threads, or B&B preempted tasks */
 	if (p->nr_cpus_allowed == 1 || (p->flags & PF_KTHREAD) || tctx->dispatch_local) {
 		tctx->dispatch_local = false;
-		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, default_slice_ns, enq_flags);
+		u64 l_slice = (!tctx->is_batch || tctx->avg_runtime < 1000000ULL) ? MIN_SLICE_NS : default_slice_ns;
+		scx_bpf_dsq_insert(p, SCX_DSQ_LOCAL, l_slice, enq_flags);
 		return;
 	}
 
@@ -509,48 +498,66 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 		target_dsq = perf ? DSQ_SHARED_P : DSQ_SHARED_E;
 	}
 
-	/*
-	 * Dynamic Adaptive Quantum Scaling:
-	 * Under contention (q_depth > 0), scale down the slice
-	 * from default_slice_ns down to 1ms (MIN_SLICE_NS).
-	 * Eliminates high tail latencies in schbench and hackbench!
-	 */
-	u64 q_depth = scx_bpf_dsq_nr_queued(target_dsq);
-	u64 slice = default_slice_ns;
-	if (q_depth > 0) {
-		slice = default_slice_ns / (1 + q_depth);
-		if (slice < MIN_SLICE_NS)
-			slice = MIN_SLICE_NS;
-	}
-
+	bool is_interactive = (!tctx->is_batch || tctx->avg_runtime < 1000000ULL || tctx->weight >= RT_WEIGHT_THRESHOLD);
 	u64 now = scx_bpf_now();
-	u64 vtime = (tctx->is_batch && tctx->avg_runtime >= 1000000ULL) ? p->scx.dsq_vtime : now;
+	u64 slice;
 
-	/* Clamp vtime within [now - slice, now + slice * 2] to prevent starvation */
-	if (vtime < now - slice || vtime > now + (slice * 2))
-		vtime = now;
+	if (is_interactive) {
+		/*
+		 * Interactive / waking tasks (avg_runtime < 1ms or waking from sleep):
+		 * Tight slice (500us - 1ms) and zero penalty virtual deadline (vtime = now).
+		 * Places interactive tasks immediately at the front of the queue,
+		 * eliminating wakeup latency spikes in schbench and hackbench.
+		 */
+		slice = MIN_SLICE_NS;
+		tctx->deadline = now;
+		p->scx.dsq_vtime = now;
+	} else {
+		/*
+		 * Batch compute tasks (avg_runtime >= 3ms):
+		 * Receive 8ms-12ms slices to prevent constant context-switching
+		 * during kernel compilation (make kernel/) and sysbench.
+		 */
+		if (tctx->avg_runtime >= 3000000ULL) {
+			slice = MAX_SLICE_NS;
+		} else {
+			slice = default_slice_ns;
+			u64 q_depth = scx_bpf_dsq_nr_queued(target_dsq);
+			if (q_depth > 0) {
+				slice = default_slice_ns / (1 + q_depth);
+				if (slice < MIN_SLICE_NS)
+					slice = MIN_SLICE_NS;
+			}
+		}
 
-	/*
-	 * Smith's Rule (WSPT / EDF):
-	 * Delta v = slice * (100 / max(weight, 10))
-	 * Clamped strictly to [MIN_SLICE_NS, MAX_SLICE_NS] (1ms to 20ms).
-	 */
-	u32 w = tctx->weight ? tctx->weight : 100;
-	u64 delta_vtime = (slice * 100ULL) / (u64)w;
-	if (delta_vtime < MIN_SLICE_NS)
-		delta_vtime = MIN_SLICE_NS;
-	if (delta_vtime > MAX_SLICE_NS)
-		delta_vtime = MAX_SLICE_NS;
+		u64 vtime = p->scx.dsq_vtime;
+		if (vtime < now)
+			vtime = now;
+		else if (vtime > now + (slice * 2))
+			vtime = now + (slice * 2);
 
-	tctx->deadline = vtime + delta_vtime;
-	p->scx.dsq_vtime = tctx->deadline;
+		/*
+		 * Smith's Rule (WSPT / EDF):
+		 * Delta v = slice * (100 / max(weight, 10))
+		 * Clamped strictly to [MIN_SLICE_NS, MAX_SLICE_NS].
+		 */
+		u32 w = tctx->weight ? tctx->weight : 100;
+		u64 delta_vtime = (slice * 100ULL) / (u64)w;
+		if (delta_vtime < MIN_SLICE_NS)
+			delta_vtime = MIN_SLICE_NS;
+		if (delta_vtime > MAX_SLICE_NS)
+			delta_vtime = MAX_SLICE_NS;
+
+		tctx->deadline = vtime + delta_vtime;
+		p->scx.dsq_vtime = tctx->deadline;
+	}
 
 	stat_add(OPTIMA_STAT_GREEDY_WSPT, 1);
 	scx_bpf_dsq_insert_vtime(p, target_dsq, slice, tctx->deadline, enq_flags);
 
 	if (verbose_decisions)
-		bpf_printk("optima: enqueue pid=%d w=%u rho=%llu dv=%llu dsq=%llu",
-			   p->pid, tctx->weight, tctx->density, delta_vtime, target_dsq);
+		bpf_printk("optima: enqueue pid=%d w=%u rho=%llu dl=%llu dsq=%llu",
+			   p->pid, tctx->weight, tctx->density, tctx->deadline, target_dsq);
 
 	/* 1. Kick an idle CPU immediately to service the enqueued task with zero latency */
 	s32 idle_cpu = scx_bpf_pick_idle_cpu(p->cpus_ptr, 0);
@@ -560,7 +567,7 @@ void BPF_STRUCT_OPS(optima_enqueue, struct task_struct *p, u64 enq_flags)
 	}
 
 	/* 2. All CPUs are busy: if waking task is interactive/real-time, evaluate Branch & Bound preemption! */
-	if (tctx->weight >= RT_WEIGHT_THRESHOLD || (!tctx->is_batch && tctx->avg_runtime < 1000000ULL)) {
+	if (is_interactive) {
 		s32 bb_cpu = branch_and_bound_preempt_target(p, tctx);
 		if (bb_cpu >= 0)
 			return;
@@ -607,19 +614,15 @@ void BPF_STRUCT_OPS(optima_dispatch, s32 cpu, struct task_struct *prev)
 			stat_add(OPTIMA_STAT_DSQ_EFF, 1);
 			return;
 		}
-		/* 3. E-cores steal across CCX from DSQ_SHARED_P ONLY under genuine backlog */
-		if (scx_bpf_dsq_nr_queued(DSQ_SHARED_P) > (nr_p_cores ? (nr_p_cores / 2) : 4)) {
-			if (scx_bpf_dsq_move_to_local(DSQ_SHARED_P, 0)) {
-				stat_add(OPTIMA_STAT_WORK_STEAL, 1);
-				return;
-			}
+		/* 3. E-cores steal across CCX from DSQ_SHARED_P whenever idle */
+		if (scx_bpf_dsq_move_to_local(DSQ_SHARED_P, 0)) {
+			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
+			return;
 		}
-		/* 4. Safety work-conserving overflow: steal from DSQ_PERF ONLY if severe backlog */
-		if (scx_bpf_dsq_nr_queued(DSQ_PERF) > (nr_p_cores ? (nr_p_cores / 2) : 4)) {
-			if (scx_bpf_dsq_move_to_local(DSQ_PERF, 0)) {
-				stat_add(OPTIMA_STAT_WORK_STEAL, 1);
-				return;
-			}
+		/* 4. Safety work-conserving overflow: steal from DSQ_PERF whenever idle */
+		if (scx_bpf_dsq_move_to_local(DSQ_PERF, 0)) {
+			stat_add(OPTIMA_STAT_WORK_STEAL, 1);
+			return;
 		}
 	}
 }

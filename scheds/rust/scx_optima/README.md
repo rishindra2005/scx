@@ -89,21 +89,62 @@ Complete mathematical proofs for all theorems are provided in **[`PROOF_DAA.md`]
 cargo build --release -p scx_optima
 ```
 
-### Run
+### Run (Foreground)
 ```bash
+# Standard run (silent, maximum throughput, 0ns userspace polling overhead)
 sudo ./target/release/scx_optima
+
+# Run with live telemetry dashboard every 1s
+sudo ./target/release/scx_optima --stats 1
 ```
 
-### Options
+### Verbosity Modes (-v, -vv, -vvv)
+```bash
+# -v: Detailed per-queue dispatch breakdown (Direct, DSQ_PERF, DSQ_EFF, Steals, Fallbacks)
+sudo ./target/release/scx_optima --stats 1 -v
+
+# -vv: In-kernel real-time trace streaming (attaches to /sys/kernel/tracing/trace_pipe)
+sudo ./target/release/scx_optima -vv
+
+# -vv with stats: Kernel trace decisions + 1s telemetry dashboard
+sudo ./target/release/scx_optima --stats 1 -vv
+
+# -vvv: Enable libbpf verifier debug logging for kernel development
+sudo ./target/release/scx_optima -vvv
+```
+
+### Run (Background / Daemon)
+```bash
+# Start in background with log output
+sudo nohup ./target/release/scx_optima --stats 1 > /tmp/scx_optima.log 2>&1 &
+
+# View live background logs
+tail -f /tmp/scx_optima.log
+```
+
+### Stop / Unregister Scheduler
+```bash
+# Foreground: Press Ctrl+C (clean graceful unregistration via SIGINT)
+
+# Background / from another shell:
+sudo killall -SIGINT scx_optima
+# or
+sudo pkill -2 scx_optima
+
+# Verify graceful fallback to Linux default CFS/EEVDF:
+dmesg | grep -E "sched_ext|scx_optima" | tail -n 5
+```
+
+### Complete CLI Options
 ```text
 Usage: scx_optima [OPTIONS]
 
 Options:
-  -s, --slice-us <SLICE_US>          Base time slice in microseconds [default: 2000]
+  -s, --slice-us <SLICE_US>          Base scheduling quantum in microseconds [default: 3000]
+      --stats <STATS>                Live telemetry interval in seconds (0 = disabled) [default: 0]
       --dp-threshold <DP_THRESHOLD>  Task density threshold for DP P-core partitioning [default: 500000]
-      --dp-capacity <DP_CAPACITY>    P-core capacity limit before DP offloads to E-cores [default: 8]
-      --stats <STATS>                Display live algorithmic statistics interval (s) [default: 1]
-  -v, --verbose...                   Verbose BPF debug output
+      --dp-capacity <DP_CAPACITY>    P-core queue capacity limit before DP offloads [default: 8]
+  -v, --verbose...                   Verbose logging (-v: stats detail, -vv: kernel trace_pipe, -vvv: libbpf)
   -h, --help                         Print help
 ```
 

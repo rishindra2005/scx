@@ -1,0 +1,17 @@
+{
+  "total_orders": 100000,
+  "wall_time_sec": 0.0057,
+  "throughput_ops": 17695140.68,
+  "trades_executed": 62191,
+  "volume_matched": 1727660,
+  "latency_turnaround_us": {
+    "min": 0.10,
+    "avg": 166.82,
+    "p50": 184.07,
+    "p90": 318.63,
+    "p95": 333.75,
+    "p99": 341.40,
+    "p999": 344.39,
+    "max": 344.77
+  }
+}

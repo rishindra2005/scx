@@ -47,7 +47,7 @@ enum consts {
 	/* Default Algorithmic Parameters */
 	DEFAULT_SLICE_NS	= 3000000ULL,	/* 3ms base time slice (low latency, high interactivity) */
 	MIN_SLICE_NS		= 500000ULL,	/* 500us minimum time slice (sub-millisecond turnaround) */
-	MAX_SLICE_NS		= 8000000ULL,	/* 8ms maximum time slice for batch compute */
+	MAX_SLICE_NS		= 12000000ULL,	/* 12ms maximum time slice for batch compute */
 
 	/* Real-Time Priority Inversion Threshold */
 	RT_WEIGHT_THRESHOLD	= 500,		/* High-priority task threshold */

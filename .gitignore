@@ -22,3 +22,11 @@ CLAUDE.md
 *.log
 benchmarks/docker/
 benchmarks/production_apps/04_hft_matching/matching_engine
+sch_tests/qemu/*.img
+sch_tests/qemu/*.qcow2
+sch_tests/qemu/*.iso
+sch_tests/qemu/initrd*
+sch_tests/qemu/vmlinuz
+sch_tests/qemu/initrd_unpack/
+sch_tests/qemu/qemu_key*
+sch_tests/qemu/*.log
