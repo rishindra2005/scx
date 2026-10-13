@@ -239,4 +239,9 @@ L.~Georgiadis, M.~J. Neely, and L.~Tassiulas, ``Resource allocation and
   cross-layer control in wireless networks,'' \emph{Foundations and Trends in
   Networking}, vol.~1, no.~1, pp. 1--144, 2006.
 
+\bibitem{bruno1974sequencing}
+J.~Bruno, E.~G. Coffman, and R.~Sethi, ``Sequencing problems with partial
+  ordered tasks and alternative processors,'' \emph{Journal of the ACM},
+  vol.~21, no.~4, pp. 667--676, 1974.
+
 \end{thebibliography}

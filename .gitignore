@@ -30,3 +30,6 @@ sch_tests/qemu/vmlinuz
 sch_tests/qemu/initrd_unpack/
 sch_tests/qemu/qemu_key*
 sch_tests/qemu/*.log
+*.aux
+*.out
+*.blg

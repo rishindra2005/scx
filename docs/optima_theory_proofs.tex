@@ -29,7 +29,7 @@ Asymmetric multiprocessor architectures, combining high-throughput Performance (
 
 We formalize the asymmetric scheduling problem under a dual objective: minimizing total weighted completion time $\sum w_j C_j$ while providing latency-critical prioritization and bounded queuing delay under non-overloaded regimes. We rigorously prove that Weighted Shortest Processing Time (WSPT) sequencing via Smith's Rule is optimal for isolated, single-core non-preemptive queues at time zero ($1 || \sum w_j C_j$). We explicitly acknowledge that the generalized online problem with arbitrary release dates, preemption, and asymmetric parallel machines ($R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard; accordingly, we cite the classical Kawaguchi-Kyan bound ($\alpha \le 1.207$) strictly as an identical-machine reference bound and characterize OPTIMA's density-based virtual deadline list scheduling as an online approximation heuristic. Using the Hardy-Littlewood-P\'olya Rearrangement Inequality and continuous Dantzig knapsack relaxation, we prove that matching tasks with higher execution density to Performance cores maximizes the instantaneous backlog weight retirement rate.
 
-Furthermore, we formalize an Online Admissible Preemption Filter (OAPF) based on a dimensionally consistent net cost metric $\Delta\text{Cost}(c) = w_{\text{curr}}(c) \cdot (p_{\text{wake}} + C_{\text{switch}}) - w_{\text{wake}} \cdot R(c)$. We prove that this greedy filter enforces priority inversion safety, eliminates context-switch thrashing, and guarantees locally bounded regret under one-step horizons. Finally, using a quadratic Lyapunov drift formulation with an exact cross-term expansion, we prove that OPTIMA's adaptive quantum scaling and hierarchical work-stealing maintain strong queue stability ($\limsup \frac{1}{T} \sum \mathbb{E}[q_k(t)] < \infty$) under all strictly admissible workloads ($\sum \lambda_k \bar{p}_k \le C_{\text{total}} - \epsilon_0$). By bounding virtual deadline advancement ($v_j \le t + 10 \tau_{\max}$), we reconcile strict priority queuing with guaranteed starvation freedom for every admitted task. Complete algorithmic specifications in kernel eBPF hot-paths are provided.
+Furthermore, we formalize an Online Admissible Preemption Filter (OAPF) based on a dimensionally consistent weighted one-step dispatch delay proxy $\Delta\mathrm{DelayProxy}(c) = w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$. We prove that this greedy filter enforces priority inversion safety, eliminates context-switch thrashing, and guarantees strict local one-step dispatch delay reduction. Finally, using a quadratic Lyapunov drift formulation with an exact cross-term expansion, we prove that OPTIMA's adaptive quantum scaling and hierarchical work-stealing maintain strong queue stability ($\limsup \frac{1}{T} \sum \mathbb{E}[q_k(t)] < \infty$) under all strictly admissible workloads ($\sum \lambda_k \bar{p}_k \le C_{\text{total}} - \epsilon_0$). By bounding virtual deadline advancement ($v_j \le t + 10 \tau_{\max}$), we reconcile strict priority queuing with guaranteed starvation freedom for every admitted task. Complete algorithmic specifications in kernel eBPF hot-paths are provided.
 \end{abstract}
 
 % =========================================================================
@@ -332,102 +332,83 @@ For each candidate Performance core $c \in \mathcal{P}$, let $J_{\mathrm{curr}}(
     \item $C_{\mathrm{switch}}$ be the context-switch and cache invalidation penalty in time units.
 \end{itemize}
 
-\begin{definition}[Preemption Cost and Gain Formulation]
+\begin{definition}[Weighted One-Step Dispatch Delay Proxy]
 \label{def:deltacost}
-If the scheduler chooses \textbf{Option 1 (Wait)}, waking task $J_{\mathrm{wake}}$ is delayed by remaining slice $R(c)$, incurring a priority-weighted latency cost:
+Consider candidate core $c \in \mathcal{P}$ currently executing task $J_{\mathrm{curr}}(c)$ with remaining quantum $R(c) > 0$. Let waking task $J_{\mathrm{wake}}$ have weight $w_{\mathrm{wake}}$ and allocated time slice $\tau_{\mathrm{slice}} = \tau_{\min}$. If the scheduler chooses \textbf{Option 1 (Wait)}, waking task $J_{\mathrm{wake}}$ is delayed by $R(c)$, incurring weighted dispatch delay:
 \begin{equation}
-\mathrm{Cost}_{\mathrm{wait}}(c) = w_{\mathrm{wake}} \cdot R(c)
+\mathrm{Delay}_{\mathrm{wait}}(c) = w_{\mathrm{wake}} \cdot R(c)
 \end{equation}
-If the scheduler chooses \textbf{Option 2 (Preempt)}, $J_{\mathrm{wake}}$ executes immediately, eliminating the wait of $R(c)$ (saving $w_{\mathrm{wake}} \cdot R(c)$). However, running task $J_{\mathrm{curr}}(c)$ is suspended during the execution of $J_{\mathrm{wake}}$ ($p_{\mathrm{wake}}$ time units) plus the context switch overhead $C_{\mathrm{switch}}$. Thus, $J_{\mathrm{curr}}(c)$ is delayed by $(p_{\mathrm{wake}} + C_{\mathrm{switch}})$, incurring a priority-weighted penalty:
+If the scheduler chooses \textbf{Option 2 (Preempt)}, $J_{\mathrm{wake}}$ executes immediately with 0 delay. However, running task $J_{\mathrm{curr}}(c)$ is suspended during $J_{\mathrm{wake}}$'s slice ($\tau_{\mathrm{slice}}$ time units) plus context-switch overhead $C_{\mathrm{switch}}$, incurring weighted delay penalty:
 \begin{equation}
-\mathrm{Penalty}_{\mathrm{preempt}}(c) = w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})
+\mathrm{Delay}_{\mathrm{preempt}}(c) = w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})
 \end{equation}
 
-The net schedule cost differential incurred by preempting core $c$ instead of waiting is:
+The net differential in one-step weighted dispatch delay is:
 \begin{align}
 \label{eq:deltacost}
-\Delta\mathrm{Cost}(c) &\triangleq \mathrm{Penalty}_{\mathrm{preempt}}(c) - \mathrm{Cost}_{\mathrm{wait}}(c) \nonumber \\
-&= w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)
+\Delta\mathrm{DelayProxy}(c) &\triangleq \mathrm{Delay}_{\mathrm{preempt}}(c) - \mathrm{Delay}_{\mathrm{wait}}(c) \nonumber \\
+&= w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)
 \end{align}
 \end{definition}
 
-\begin{remark}[Dimensional Consistency]
+\begin{remark}[Dimensional Consistency and Overhead Grounding]
 In~\eqref{eq:deltacost}, both terms possess unified physical dimensions of $[\mathrm{weight} \times \mathrm{time}]$ (priority-weighted delay units):
 \begin{itemize}
-    \item $w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})$ has units $[w] \times [t]$.
+    \item $w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})$ has units $[w] \times [t]$.
     \item $w_{\mathrm{wake}} \cdot R(c)$ has units $[w] \times [t]$.
 \end{itemize}
-Alternatively, if context switch cost is expressed directly in priority-weighted delay units $C_{\mathrm{switch}}^{\mathrm{weighted}} \triangleq w_{\mathrm{curr}} C_{\mathrm{switch}}$, the formulation is identically dimensioned.
+$C_{\mathrm{switch}}$ is nominally set to $50\,\mu\text{s}$ (with an effective operational sensitivity range of $20\text{--}100\,\mu\text{s}$), reflecting microarchitectural cache-line reload and TLB refill penalties on modern superscalar cores.
 \end{remark}
 
 \subsection{Online Admissible Pruning Invariants}
-OPTIMA evaluates $\Delta\mathrm{Cost}(c)$ across candidate cores using four pruning invariants:
+OPTIMA evaluates $\Delta\mathrm{DelayProxy}(c)$ across candidate cores using four pruning invariants:
 
 \begin{enumerate}
-    \item \textbf{Invariant 1 (Idle Core Trivial Minimum):} If candidate core $c$ is idle ($w_{\mathrm{curr}}(c) = 0$), then $\mathrm{Penalty}_{\mathrm{preempt}}(c) = 0$ (no task is displaced). Thus:
+    \item \textbf{Invariant 1 (Idle Core Trivial Minimum):} If candidate core $c$ is idle ($w_{\mathrm{curr}}(c) = 0$), then $\mathrm{Delay}_{\mathrm{preempt}}(c) = 0$ (no task is displaced). Thus:
     \begin{equation}
-    \Delta\mathrm{Cost}(c) = -w_{\mathrm{wake}} \cdot R(c) < 0
+    \Delta\mathrm{DelayProxy}(c) = -w_{\mathrm{wake}} \cdot R(c) < 0
     \end{equation}
     Core $c$ is immediately selected for dispatch without preemption.
     
-    \item \textbf{Invariant 2 (Priority Inversion Safety):} If $w_{\mathrm{curr}}(c) \ge w_{\mathrm{wake}}$, preempting core $c$ would displace an equal- or higher-priority running task to execute a lower-priority waking task, causing priority inversion. Furthermore, since $p_{\mathrm{wake}} + C_{\mathrm{switch}} \ge R(c)$ in typical quantum regimes, $\Delta\mathrm{Cost}(c) \ge 0$. The candidate is strictly inadmissible and pruned.
+    \item \textbf{Invariant 2 (Priority Inversion Safety):} If $w_{\mathrm{curr}}(c) \ge w_{\mathrm{wake}}$, preempting core $c$ would displace an equal- or higher-priority running task to execute a lower-priority waking task, causing priority inversion. Furthermore, since $\tau_{\mathrm{slice}} + C_{\mathrm{switch}} \ge R(c)$ in typical quantum regimes, $\Delta\mathrm{DelayProxy}(c) \ge 0$. The candidate is strictly inadmissible and pruned.
     
-    \item \textbf{Invariant 3 (Granularity / Anti-Thrashing Threshold):} Preempting core $c$ yields a net cost reduction ($\Delta\mathrm{Cost}(c) < 0$) if and only if:
+    \item \textbf{Invariant 3 (Granularity / Anti-Thrashing Threshold):} Preempting core $c$ yields a net delay reduction ($\Delta\mathrm{DelayProxy}(c) < 0$) if and only if:
     \begin{equation}
     \label{eq:thrash_threshold}
-    R(c) > \delta_{\min}(c) \triangleq \frac{w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}
+    R(c) > \delta_{\min}(c) \triangleq \frac{w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}
     \end{equation}
     If $R(c) \le \delta_{\min}(c)$, the execution gain is insufficient to amortize displacement and context-switch penalties. The candidate is safely pruned.
     
-    \item \textbf{Invariant 4 (Incumbent Greedy Cutoff):} Maintain the best incumbent cost reduction $\Delta\mathrm{Cost}^* \triangleq \min_{j \in \mathrm{visited}} \Delta\mathrm{Cost}(j)$, initialized to 0. If $\Delta\mathrm{Cost}(c) \ge \Delta\mathrm{Cost}^*$, candidate core $c$ cannot improve upon the best discovered candidate. The candidate is pruned.
+    \item \textbf{Invariant 4 (Incumbent Greedy Cutoff):} Maintain the best incumbent delay reduction $\Delta\mathrm{Proxy}^* \triangleq \min_{j \in \mathrm{visited}} \Delta\mathrm{DelayProxy}(j)$, initialized to 0. If $\Delta\mathrm{DelayProxy}(c) \ge \Delta\mathrm{Proxy}^*$, candidate core $c$ cannot improve upon the best discovered candidate. The candidate is pruned.
 \end{enumerate}
 
-\subsection{Local One-Step Cost Reduction and Anti-Thrashing Heuristic}
+\subsection{Local One-Step Dispatch Delay Reduction}
 
-\begin{theorem}[Local One-Step Cost Reduction under Admissible Preemption]
+\begin{theorem}[Local One-Step Dispatch Delay Reduction under Admissible Preemption]
 \label{thm:oapf_optimality}
 Let $\mathcal{P}_{\mathrm{admissible}} \subseteq \mathcal{P}$ be the set of candidate Performance cores satisfying:
 \begin{enumerate}
     \item Priority superiority: $w_{\mathrm{wake}} > w_{\mathrm{curr}}(c)$;
     \item Anti-thrashing remaining runtime: $R(c) > \delta_{\min}(c)$, where
     \begin{equation}
-    \delta_{\min}(c) \triangleq \frac{w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}
+    \delta_{\min}(c) \triangleq \frac{w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}
     \end{equation}
 \end{enumerate}
-If $\mathcal{P}_{\mathrm{admissible}} \ne \emptyset$, selecting core $c^* = \arg\min_{c \in \mathcal{P}_{\mathrm{admissible}}} \Delta\mathrm{Cost}(c)$ and preempting $J_{\mathrm{curr}}(c^*)$ guarantees that under the local one-step horizon (assuming no further task arrivals occur during $[t, \, t + R(c^*) + p_{\mathrm{wake}}]$), preemption strictly decreases the total weighted completion time:
+If $\mathcal{P}_{\mathrm{admissible}} \ne \emptyset$, selecting core $c^* = \arg\min_{c \in \mathcal{P}_{\mathrm{admissible}}} \Delta\mathrm{DelayProxy}(c)$ and preempting $J_{\mathrm{curr}}(c^*)$ guarantees that the one-step weighted dispatch delay is strictly reduced:
 \begin{equation}
-\Delta\Phi = \Delta\mathrm{Cost}(c^*) < 0
+\Delta\mathrm{DelayProxy}(c^*) < 0
 \end{equation}
 Conversely, if $\mathcal{P}_{\mathrm{admissible}} = \emptyset$ or candidate cores satisfy $R(c) \le \delta_{\min}(c)$, preemption is suppressed, bounding priority inversion to at most $\tau(c) \le \tau_{\max}$.
 \end{theorem}
 
 \begin{proof}
-Let $\mathcal{S}_{\mathrm{wait}}$ denote the schedule where $J_{\mathrm{wake}}$ waits for $J_{\mathrm{curr}}(c^*)$ to finish $R(c^*)$, and let $\mathcal{S}_{\mathrm{preempt}}$ denote the schedule where $J_{\mathrm{curr}}(c^*)$ is preempted immediately for $J_{\mathrm{wake}}$.
+Under non-preemptive wait, $J_{\mathrm{wake}}$ incurs waiting delay $R(c^*)$, while $J_{\mathrm{curr}}(c^*)$ incurs 0 delay, yielding weighted delay $\mathrm{Delay}_{\mathrm{wait}} = w_{\mathrm{wake}} R(c^*)$. Under preemption, $J_{\mathrm{wake}}$ incurs 0 dispatch delay, while $J_{\mathrm{curr}}(c^*)$ incurs delay $(\tau_{\mathrm{slice}} + C_{\mathrm{switch}})$, yielding weighted delay $\mathrm{Delay}_{\mathrm{preempt}} = w_{\mathrm{curr}}(c^*) (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})$.
 
-Under $\mathcal{S}_{\mathrm{wait}}$, completion times of the two affected tasks are:
-\begin{align}
-C_{\mathrm{curr}}(\mathcal{S}_{\mathrm{wait}}) &= t + R(c^*) \\
-C_{\mathrm{wake}}(\mathcal{S}_{\mathrm{wait}}) &= t + R(c^*) + p_{\mathrm{wake}}
-\end{align}
-Under $\mathcal{S}_{\mathrm{preempt}}$, $J_{\mathrm{wake}}$ executes first during $[t, t + p_{\mathrm{wake}}]$, followed by a context switch of duration $C_{\mathrm{switch}}$, after which $J_{\mathrm{curr}}(c^*)$ resumes and completes its remaining $R(c^*)$ execution:
-\begin{align}
-C_{\mathrm{wake}}(\mathcal{S}_{\mathrm{preempt}}) &= t + p_{\mathrm{wake}} \\
-C_{\mathrm{curr}}(\mathcal{S}_{\mathrm{preempt}}) &= t + p_{\mathrm{wake}} + C_{\mathrm{switch}} + R(c^*)
-\end{align}
-The completion times of all other tasks in the system are invariant under the local horizon.
-
-Evaluating the change in the objective function $\Phi(\mathcal{S}) = \sum w_j C_j$:
-\begin{align}
-\Delta\Phi &= \Phi(\mathcal{S}_{\mathrm{preempt}}) - \Phi(\mathcal{S}_{\mathrm{wait}}) \nonumber \\
-&= w_{\mathrm{wake}} \Big( C_{\mathrm{wake}}(\mathcal{S}_{\mathrm{preempt}}) - C_{\mathrm{wake}}(\mathcal{S}_{\mathrm{wait}}) \Big) \nonumber \\
-&\quad + w_{\mathrm{curr}}(c^*) \Big( C_{\mathrm{curr}}(\mathcal{S}_{\mathrm{preempt}}) - C_{\mathrm{curr}}(\mathcal{S}_{\mathrm{wait}}) \Big) \nonumber \\
-&= w_{\mathrm{wake}} \Big( (t + p_{\mathrm{wake}}) - (t + R(c^*) + p_{\mathrm{wake}}) \Big) \nonumber \\
-&\quad + w_{\mathrm{curr}}(c^*) \Big( (t + p_{\mathrm{wake}} + C_{\mathrm{switch}} + R(c^*)) \nonumber \\
-&\qquad\qquad\qquad\quad - (t + R(c^*)) \Big) \nonumber \\
-&= -w_{\mathrm{wake}} \cdot R(c^*) + w_{\mathrm{curr}}(c^*) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}}) \nonumber \\
-&= \Delta\mathrm{Cost}(c^*)
-\end{align}
-Since $c^* \in \mathcal{P}_{\mathrm{admissible}}$, $R(c^*) > \delta_{\min}(c^*)$, which implies $w_{\mathrm{wake}} R(c^*) > w_{\mathrm{curr}}(c^*) (p_{\mathrm{wake}} + C_{\mathrm{switch}})$, ensuring $\Delta\mathrm{Cost}(c^*) < 0$ and $\Delta\Phi < 0$.
+Computing $\Delta\mathrm{DelayProxy}(c^*) = \mathrm{Delay}_{\mathrm{preempt}} - \mathrm{Delay}_{\mathrm{wait}}$:
+\begin{equation}
+\Delta\mathrm{DelayProxy}(c^*) = w_{\mathrm{curr}}(c^*) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c^*)
+\end{equation}
+Since $c^* \in \mathcal{P}_{\mathrm{admissible}}$, $R(c^*) > \delta_{\min}(c^*)$, which implies $w_{\mathrm{wake}} R(c^*) > w_{\mathrm{curr}}(c^*) (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})$, ensuring $\Delta\mathrm{DelayProxy}(c^*) < 0$.
 
 When preemption is suppressed (e.g., $w_{\mathrm{curr}}(c) \ge w_{\mathrm{wake}}$ or $R(c) \le \delta_{\min}(c)$), the waking task waits for quantum expiration. Because each executing slice is clamped to $\tau(c) \le \tau_{\max}$, the maximum waiting delay is bounded by $\tau_{\max}$, guaranteeing bounded priority inversion while protecting cache locality and pipeline execution.
 \end{proof}
@@ -447,10 +428,10 @@ Algorithm~\ref{alg:oapf} presents the complete, verified logic of the Online Adm
 \REQUIRE Waking task $J_{\mathrm{wake}}$, task context $tctx$, candidate core set $\mathcal{P}$
 \ENSURE Target preemption CPU $c^*$ (or $-1$ if wait is optimal)
 \STATE $c^* \leftarrow -1$
-\STATE $\Delta\mathrm{Cost}^* \leftarrow 0$ \COMMENT{Incumbent threshold: must yield net cost reduction}
+\STATE $\Delta\mathrm{Proxy}^* \leftarrow 0$ \COMMENT{Incumbent threshold: must yield net delay reduction}
 \STATE $now \leftarrow \text{scx\_bpf\_now}()$
 \STATE $w_{\mathrm{wake}} \leftarrow \max(tctx.weight, 100)$
-\STATE $p_{\mathrm{wake}} \leftarrow \tau_{\min}$ \COMMENT{Execution slice allocated to waking task}
+\STATE $\tau_{\mathrm{slice}} \leftarrow \tau_{\min}$ \COMMENT{Execution slice allocated to waking task}
 \STATE $C_{\mathrm{switch}} \leftarrow 50\,\mu\text{s}$ \COMMENT{Context-switch and cache displacement overhead}
 
 \FOR{each core $c \in \mathcal{P}$}
@@ -466,18 +447,18 @@ Algorithm~\ref{alg:oapf} presents the complete, verified logic of the Online Adm
     \ENDIF
     \STATE $elapsed \leftarrow now - st.start\_time$
     \STATE $R(c) \leftarrow (st.slice > elapsed) \ ? \ (st.slice - elapsed) : 0$
-    \STATE $\delta_{\min} \leftarrow \dfrac{st.weight \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}$
+    \STATE $\delta_{\min} \leftarrow \dfrac{st.weight \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}$
     \IF{$R(c) \le \delta_{\min}$}
         \STATE \textbf{continue} \COMMENT{Rule 3: Anti-thrashing; candidate pruned}
     \ENDIF
-    \STATE $\Delta\mathrm{Cost} \leftarrow st.weight \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$
-    \IF{$\Delta\mathrm{Cost} < \Delta\mathrm{Cost}^*$}
-        \STATE $\Delta\mathrm{Cost}^* \leftarrow \Delta\mathrm{Cost}$
+    \STATE $\Delta\mathrm{DelayProxy} \leftarrow st.weight \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$
+    \IF{$\Delta\mathrm{DelayProxy} < \Delta\mathrm{Proxy}^*$}
+        \STATE $\Delta\mathrm{Proxy}^* \leftarrow \Delta\mathrm{DelayProxy}$
         \STATE $c^* \leftarrow c$
     \ENDIF
 \ENDFOR
 
-\IF{$c^* \ge 0$ \AND $\Delta\mathrm{Cost}^* < 0$}
+\IF{$c^* \ge 0$ \AND $\Delta\mathrm{Proxy}^* < 0$}
     \STATE $\text{scx\_bpf\_kick\_cpu}(c^*, \text{SCX\_KICK\_PREEMPT})$
     \RETURN $c^*$
 \ENDIF
@@ -781,14 +762,14 @@ We formalize OPTIMA's core scheduling operations implemented in Linux \texttt{sc
     \STATE $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau_{\min}, enq\_flags)$; \textbf{return}
 \ENDIF
 \STATE \COMMENT{Dantzig Knapsack Target DSQ Selection}
-\IF{$tctx.weight \ge w_{\mathrm{RT}}$ \OR $tctx.core\_type == \text{CORE\_TYPE\_PERF}$}
+\IF{$tctx.weight \ge w_{\mathrm{RT}} \lor tctx.core\_type == \text{CORE\_TYPE\_PERF}$}
     \STATE $target\_dsq \leftarrow \text{DSQ\_PERF}$
-\ELSIF{$tctx.core\_type == \text{CORE\_TYPE\_EFF}$}
+\ELSIF{$tctx.avg\_runtime \ge 3\text{ms} \lor tctx.is\_batch \lor tctx.core\_type == \text{CORE\_TYPE\_EFF}$}
     \STATE $target\_dsq \leftarrow \text{DSQ\_EFF}$
 \ELSE
     \STATE $target\_dsq \leftarrow \text{is\_perf\_core}(task\_cpu) \ ? \ \text{DSQ\_SHARED\_P} : \text{DSQ\_SHARED\_E}$
 \ENDIF
-\STATE $is\_rt \leftarrow (tctx.weight \ge w_{\mathrm{RT}} \lor \neg tctx.is\_batch \lor tctx.avg\_runtime < 1\text{ms})$
+\STATE $is\_rt \leftarrow (tctx.weight \ge w_{\mathrm{RT}} \lor (\neg tctx.is\_batch \land tctx.avg\_runtime < 1\text{ms}))$
 \STATE $now \leftarrow \text{scx\_bpf\_now}()$
 \IF{$is\_rt$}
     \STATE $\tau \leftarrow \tau_{\min}$, \quad $deadline \leftarrow now$
@@ -800,8 +781,9 @@ We formalize OPTIMA's core scheduling operations implemented in Linux \texttt{sc
         \STATE $\tau \leftarrow \max\left( \dfrac{Q_{\mathrm{base}}}{1 + q}, \; \tau_{\min} \right)$
     \ENDIF
     \STATE $v \leftarrow \mathrm{clamp}(p.\text{scx.dsq\_vtime}, now, now + 2\tau)$
-    \STATE $w \leftarrow \max(tctx.weight, 10)$
-    \STATE $\Delta v \leftarrow \mathrm{clamp}\left( \dfrac{\tau \cdot 100}{w}, \; \tau_{\min}, \; \tau_{\max} \right)$
+    \STATE $p_{\mathrm{est}} \leftarrow \max(tctx.avg\_runtime, \tau_{\min})$
+    \STATE $\rho \leftarrow \dfrac{\max(tctx.weight, 10)}{p_{\mathrm{est}}}$ \COMMENT{WSPT execution density}
+    \STATE $\Delta v \leftarrow \mathrm{clamp}\left( \dfrac{\tau \cdot 100}{\rho \cdot \tau_{\min}}, \; \tau_{\min}, \; \tau_{\max} \right)$
     \STATE $deadline \leftarrow v + \Delta v$
 \ENDIF
 \STATE $p.\text{scx.dsq\_vtime} \leftarrow deadline$
