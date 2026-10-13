@@ -18,7 +18,10 @@
 
 \title{OPTIMA: Mathematical Foundations and Scheduling Theory for Asymmetric Multiprocessors via Density-Based Sequencing and Online Admissible Preemption Filtering}
 
-\author{\IEEEauthorblockN{Risheendra MN}}
+\author{\IEEEauthorblockN{Risheendra MN}
+\IEEEauthorblockA{\textit{Systems Research} \\
+rishindra.hackbox@gmail.com}
+}
 
 \begin{document}
 
@@ -203,7 +206,7 @@ While Smith's Rule provides an exact, polynomial-time solution for the static si
 Using standard Graham notation $\alpha | \beta | \gamma$:
 \begin{enumerate}
     \item \textbf{Release Dates on a Single Core ($1 | r_j | \sum w_j C_j$):} Introducing dynamic task release dates makes the single-core non-preemptive problem strongly NP-hard, as proven by Lenstra, Rinnooy Kan, and Brucker (1977).
-    \item \textbf{Preemptive Scheduling with Release Dates ($1 | r_j, \text{pmtn} | \sum w_j C_j$):} Even when arbitrary preemption is permitted, minimizing total weighted completion time with dynamic arrivals remains strongly NP-hard (Lenstra, Rinnooy Kan, and Brucker, 1977; Bruno, Coffman, and Sethi, 1974).
+    \item \textbf{Preemptive Scheduling with Release Dates ($1 | r_j, \text{pmtn} | \sum w_j C_j$):} Even when arbitrary preemption is permitted, minimizing total weighted completion time with dynamic arrivals remains strongly NP-hard, as proven by Lenstra, Rinnooy Kan, and Brucker (1977). (Bruno, Coffman, and Sethi, 1974, established NP-completeness for precedence-constrained task graphs on identical processors).
     \item \textbf{Parallel Machines ($P || \sum w_j C_j$):} Scheduling independent jobs without release dates on identical parallel machines is strongly NP-hard (Garey and Johnson, 1979).
     \item \textbf{Asymmetric / Unrelated Parallel Machines ($R | r_j, \text{pmtn} | \sum w_j C_j$):} Scheduling dynamic tasks on asymmetric machines with disparate core capacities ($c_P \ne c_E$), arbitrary release dates, and preemption is strongly NP-hard.
 \end{enumerate}
@@ -412,15 +415,15 @@ Under non-preemptive wait, $J_{\mathrm{wake}}$ incurs waiting delay $R(c^*)$, wh
 
 Computing $\Delta\mathrm{DelayProxy}(c^*) = \mathrm{Delay}_{\mathrm{preempt}} - \mathrm{Delay}_{\mathrm{wait}}$:
 \begin{equation}
-\Delta\mathrm{DelayProxy}(c^*) = w_{\mathrm{curr}}(c^*) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c^*)
+\Delta\mathrm{DelayProxy}(c^*) = w_{\mathrm{curr}}(c^*) (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} R(c^*)
 \end{equation}
 Since $c^* \in \mathcal{P}_{\mathrm{admissible}}$, $R(c^*) > \delta_{\min}(c^*)$, which implies $w_{\mathrm{wake}} R(c^*) > w_{\mathrm{curr}}(c^*) (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})$, ensuring $\Delta\mathrm{DelayProxy}(c^*) < 0$.
 
 When preemption is suppressed (e.g., $w_{\mathrm{curr}}(c) \ge w_{\mathrm{wake}}$ or $R(c) \le \delta_{\min}(c)$), the waking task waits for quantum expiration. Because each executing slice is clamped to $\tau(c) \le \tau_{\max}$, the maximum waiting delay is bounded by $\tau_{\max}$, guaranteeing bounded priority inversion while protecting cache locality and pipeline execution.
 \end{proof}
 
-\begin{remark}[Microarchitectural Justification of $C_{\mathrm{switch}} = 50\,\mu\text{s}$]
-While low-level CPU register context switches require only $1\text{--}2\,\mu\text{s}$, evicting warm L1/L2 cache lines and invalidating translation lookaside buffer (TLB) entries imposes a substantial cache refill penalty. In modern multi-gigahertz architectures with multi-megabyte cache hierarchies, cache line reload times and pipeline stall latencies under memory-intensive workloads measure between $30\text{--}50\,\mu\text{s}$. Setting $C_{\mathrm{switch}} = 50\,\mu\text{s}$ in eBPF ensures that preemption is triggered only when the priority advantage is large enough to amortize full microarchitectural warm-up overhead.
+\begin{remark}[Tunable Anti-Thrashing Dampening Penalty $C_{\mathrm{switch}} = 50\,\mu\text{s}$]
+While raw CPU register context switches require only $1\text{--}2\,\mu\text{s}$ and individual cache line reloads require tens to hundreds of nanoseconds, repeatedly displacing and reloading a memory-intensive working set introduces cumulative pipeline stalls across thousands of cycles. In OPTIMA, $C_{\mathrm{switch}}$ serves strictly as a \emph{tunable anti-thrashing dampening penalty} nominally set to $50\,\mu\text{s}$ (with an effective operational sensitivity range of $20\text{--}100\,\mu\text{s}$). Rather than modeling a single hardware cache miss, $C_{\mathrm{switch}}$ enforces an algorithmic hysteresis barrier, ensuring that preemption is triggered only when the waking task's priority advantage is sufficiently pronounced to justify evicting the incumbent thread and disrupting pipeline throughput.
 \end{remark}
 
 \subsection{Pseudocode for Online Admissible Preemption Filter}
@@ -504,6 +507,15 @@ Here $\tau_j(t)$ is the adaptive scheduling quantum computed as:
 \end{equation}
 where $q_k(t)$ denotes current queue depth of target queue $k$, $Q_{\mathrm{base}}$ is base nominal quantum, and $\tau_{\min}, \tau_{\max}$ are hardware enforcement boundaries.
 \end{definition}
+
+\begin{remark}[Decoupling Domain Placement from Intra-Queue Virtual-Deadline Ordering]
+\label{rem:domain_vs_density_theory}
+We explicitly decouple coarse-grained domain placement from fine-grained intra-queue scheduling:
+\begin{enumerate}
+    \item \textbf{Domain Placement (Algorithm~\ref{alg:enqueue}):} Tasks are routed to target DSQs using simple heuristic thresholds: tasks with $w_j \ge w_{\mathrm{RT}}$ route to \texttt{DSQ\_PERF}, long-running batch jobs ($p_{\mathrm{est},j} \ge 3\,\mathrm{ms}$ or \texttt{is\_batch}) route to \texttt{DSQ\_EFF}, and general interactive tasks route to domestic shared queues (\texttt{DSQ\_SHARED\_P} or \texttt{DSQ\_SHARED\_E}) preserving CPU stickiness. Domain routing does not evaluate $\rho = w/p$ directly.
+    \item \textbf{Intra-Queue Scheduling (Algorithm~\ref{alg:enqueue}):} Task density $\rho_j$ and reference density $\rho_{\mathrm{ref}}$ are evaluated exclusively within the virtual deadline calculus ($\Delta v_j \propto \rho_{\mathrm{ref}}/\rho_j$) to establish the execution order ($\le_v$) within shared dispatch queues, prioritizing higher-density tasks ahead of lower-density competitors.
+\end{enumerate}
+\end{remark}
 
 For interactive tasks ($w_j \ge w_{\mathrm{RT}}$ or $p_j < \tau_{\min}$), $v_j(t) = t$, placing them at the front of the DSQ priority heap. For batch tasks, virtual deadlines advance monotonically in proportion to quantum consumed scaled inversely by execution density ($\Delta v_j \propto 1/\rho_j = p_{\mathrm{est},j}/w_j$), maintaining Generalized Processor Sharing (GPS) fairness while approximating Smith's density ordering.
 
@@ -627,37 +639,36 @@ The arrival workload is class-admissible if:
     \item Aggregate workload demand is strictly within total multiprocessor capacity:
     \begin{equation}
     \label{eq:capacity_constraint}
-    \sum_{k=1}^4 \lambda_k \bar{p}_k \le C_{\mathrm{total}} - \epsilon_0 = \Big( M_P c_P + M_E c_E \Big) - \epsilon_0, \quad \epsilon_0 > 0
+    \sum_{k=1}^4 \lambda_k \bar{p}_k \le C_{\mathrm{total}} - \epsilon_0, \quad \epsilon_0 > 0
     \end{equation}
 \end{enumerate}
-where $\lambda_k = \mathbb{E}[a_k(t)]$ and $\bar{p}_k$ is the mean nominal execution requirement of tasks arriving in queue $k$.
+where $C_{\mathrm{total}} = M_P c_P + M_E c_E$, $\lambda_k = \mathbb{E}[a_k(t)]$, and $\bar{p}_k$ is the mean nominal execution requirement of tasks arriving in queue $k$.
 \end{definition}
 
-\begin{theorem}[Aggregate Queue Stability via Lyapunov Drift]
+\begin{theorem}[Conditional Multi-Queue Stability via Foster-Lyapunov Drift]
 \label{thm:stability}
-Under any class-admissible workload satisfying Definition~\ref{def:class_admissible}, OPTIMA's adaptive quantum scaling~\eqref{eq:adaptive_slice} and hierarchical work-conserving work-stealing maintain a negative Lyapunov drift:
+Let the multi-queue backlog $\mathbf{Q}(t)$ evolve under an aggregate-admissible workload (Definition~\ref{def:class_admissible}). If the dispatch and hierarchical work-stealing policy guarantees a positive service slack across all active non-empty queues:
+\begin{equation}
+\label{eq:slack_cond}
+\mathbb{E}\big[ s_k(t) - a_k(t) \;\big|\; \mathbf{Q}(t) \big] \ge \delta > 0, \quad \forall k: q_k(t) > 0
+\end{equation}
+then the quadratic Lyapunov function satisfies the negative drift condition:
 \begin{equation}
 \label{eq:negative_drift}
 \Delta L(\mathbf{Q}(t)) \le B - \delta \sum_{k=1}^4 q_k(t)
 \end{equation}
-for some strictly positive constant $\delta > 0$. Consequently, the queue backlog process $\mathbf{Q}(t)$ is positive recurrent, with bounded time-average queue depth:
+for finite positive constant $B = \frac{1}{2} \sum_{k=1}^4 \mathbb{E}[a_k(t)^2 + s_k(t)^2 \mid \mathbf{Q}(t)] < \infty$. Consequently, the queue backlog process $\mathbf{Q}(t)$ is Foster-Lyapunov stable (positive recurrent), with bounded time-average queue depth:
 \begin{equation}
 \limsup_{T \to \infty} \frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\delta} < \infty
 \end{equation}
 \end{theorem}
 
 \begin{proof}
-We first establish the negative drift condition:
-\begin{enumerate}
-    \item \textbf{Work-Conservation:} Under OPTIMA's dispatch and work-stealing architecture, no processor core $C_k \in \mathcal{M}$ is ever idle while any queue $q_j(t) > 0$. If a core's local and domestic queues are empty, it executes hierarchical cross-domain work-stealing from remote queues. Thus, whenever $\sum_{k=1}^4 q_k(t) > 0$, the aggregate service rate delivered across the multiprocessor satisfies $\sum_{k=1}^4 \mathbb{E}[s_k(t) \mid \mathbf{Q}(t)] \bar{p}_k \ge C_{\mathrm{total}}$.
-    \item \textbf{Adaptive Quantum Scaling:} As queue depth $q_k(t)$ increases, $\tau(q_k) = \max\left(\frac{Q_{\mathrm{base}}}{1 + q_k(t)}, \tau_{\min}\right)$ dynamically compresses the time quantum by up to $\frac{Q_{\mathrm{base}}}{\tau_{\min}} = 6\times$. Because each slice expiration triggers a new scheduling pass, effective task retirement rate scales inversely with slice duration, accelerating throughput during congestion.
-\end{enumerate}
-
-Because the aggregate workload is admissible ($\sum \lambda_k \bar{p}_k \le C_{\mathrm{total}} - \epsilon_0$) and real-time demand does not saturate the Performance partition ($\lambda_1 \bar{p}_1 \le M_P c_P - \epsilon_1$), the effective service rate strictly exceeds the arrival rate across active queues:
+From Lemma~\ref{lem:drift_bound}, the one-step Lyapunov drift satisfies:
 \begin{equation}
-\mathbb{E}\Big[ s_k(t) - a_k(t) \;\Big|\; \mathbf{Q}(t) \Big] \ge \delta > 0, \quad \forall k \text{ such that } q_k(t) > 0
+\Delta L(\mathbf{Q}(t)) \le B - \sum_{k=1}^4 q_k(t) \, \mathbb{E}\big[ s_k(t) - a_k(t) \;\big|\; \mathbf{Q}(t) \big]
 \end{equation}
-Substituting this directly into Lemma~\ref{lem:drift_bound} yields:
+Under the stated conditional per-queue service slack condition~\eqref{eq:slack_cond}, $\mathbb{E}[s_k(t) - a_k(t) \mid \mathbf{Q}(t)] \ge \delta > 0$ for all queues with $q_k(t) > 0$. Substituting this directly into the drift bound yields:
 \begin{equation}
 \Delta L(\mathbf{Q}(t)) \le B - \sum_{k=1}^4 q_k(t) \cdot \delta = B - \delta \sum_{k=1}^4 q_k(t)
 \end{equation}
@@ -677,9 +688,19 @@ Taking the limit superior as $T \to \infty$ establishes strong aggregate queue s
 \end{equation}
 \end{proof}
 
-\begin{proposition}[Virtual Deadline Bounding and Inter-Batch Starvation Protection]
+\begin{remark}[Architectural Realization of the Service Slack Condition]
+In multi-queue systems with strict priorities, global capacity admissibility ($\sum \lambda_k \bar{p}_k \le C_{\mathrm{total}} - \epsilon_0$) is a necessary condition for aggregate stability, but does not independently ensure per-queue service slack~\eqref{eq:slack_cond} if high-priority queues can monopolize all cores. OPTIMA establishes this per-queue condition through structural partitioning:
+(1) dedicated Efficiency cores provide guaranteed domestic compute capacity to batch queues (\texttt{DSQ\_EFF}), preventing high-priority P-core traffic from completely starving throughput work; and
+(2) dynamic quantum scaling $\tau(q_k) = \max(\frac{Q_{\mathrm{base}}}{1+q_k}, \tau_{\min})$ dynamically compresses time slices during congestion, accelerating task dispatch and preemption frequency.
+\end{remark}
+
+\begin{proposition}[Virtual Deadline Bounding and Starvation Protection]
 \label{prop:starvation}
-Under OPTIMA's virtual deadline calculus, every admitted task $J_j$ enqueued into a batch or interactive queue (\texttt{DSQ\_SHARED\_P}, \texttt{DSQ\_SHARED\_E}, \texttt{DSQ\_EFF}) at time $t$ has its virtual deadline clamped by $v_j(t) \le t + 2 \tau_{\max}$ (with incremental advance $\Delta v_j \le \tau_{\max}$). Any subsequent task $J_{j'}$ arriving at timestamp $t' > t + 2 \tau_{\max}$ receives $v_{j'}(t') \ge t' > v_j(t)$ and cannot supersede $J_j$. Since aggregate queue backlog is stable ($\limsup_{T \to \infty} \frac{1}{T}\sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\delta} < \infty$) and domestic Efficiency cores provide dedicated service capacity to batch queues, batch tasks are protected against indefinite starvation. Latency-critical tasks ($w \ge w_{\mathrm{RT}}$) receive immediate priority ($v_j = t$); under sustainable arrival intensity ($\lambda_1 \bar{p}_1 \le M_P c_P - \epsilon_1$), both latency-critical and batch queues achieve finite expected waiting times.
+Under OPTIMA's virtual deadline calculus (Algorithm~\ref{alg:enqueue}), for every admitted task $J_j$ enqueued into a batch or interactive queue (\texttt{DSQ\_SHARED\_P}, \texttt{DSQ\_SHARED\_E}, \texttt{DSQ\_EFF}) at time $t$, its assigned virtual deadline satisfies:
+\begin{equation}
+v_j(t) = \operatorname{clamp}(v_{\mathrm{time}}, t, t + 2\tau_j) + \Delta v_j \le t + 3\tau_{\max}
+\end{equation}
+since $\tau_j \le \tau_{\max}$ and $\Delta v_j \le \tau_{\max}$. Any subsequent batch task $J_{j'}$ arriving at timestamp $t' > t + 3\tau_{\max}$ receives $v_{j'}(t') \ge t' > v_j(t)$ and cannot be scheduled ahead of $J_j$. While a batch task arriving earlier ($t' \le t + 3\tau_{\max}$) with higher density may receive an earlier deadline, $v_j(t) \le t + 3\tau_{\max}$ strictly bounds relative queue advancement lag. Under the conditional service rate condition ($\mathbb{E}[s_k - a_k \mid \mathbf{Q}] \ge \delta > 0$) of Theorem~\ref{thm:stability}, every admitted batch task is guaranteed dispatch within finite time. Furthermore, latency-critical tasks ($w \ge w_{\mathrm{RT}}$) receive immediate priority ($v_j = t$) and always supersede batch tasks; when preemption is suppressed by OAPF, the immediate waiting delay imposed by the running task is bounded by $\tau_{\max}$, ensuring bounded priority inversion.
 \end{proposition}
 
 % =========================================================================

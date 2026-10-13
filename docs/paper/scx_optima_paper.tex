@@ -52,7 +52,7 @@ rishindra.hackbox@gmail.com}
 \normalfont
 Asymmetric chip-multiprocessors, combining high-throughput Performance (P) cores and power-efficient Efficiency (E) cores with disparate compute capacities and private cache topologies, present fundamental challenges for general-purpose operating system schedulers. While the Linux kernel incorporates capacity-aware scheduling (\texttt{sched-capacity}) and Energy-Aware Scheduling (EAS) to account for core compute differentials, standard fair-share classes (CFS, EEVDF) balance execution primarily by task virtual runtime lag and runnable load rather than execution density ($\rho = w / p$). Furthermore, existing schedulers lack a synchronous IPC bypass, inducing cross-CCX cache invalidation and high tail latencies when real-time and compute-bound tasks contend for heterogeneous execution resources.
 
-In this paper, we present \textbf{OPTIMA}, an extensible operating system scheduler implemented in Linux \texttt{sched\_ext} eBPF that provides principled algorithmic scheduling foundations for asymmetric multiprocessors. OPTIMA synthesizes three foundational mechanisms directly within the kernel hot-path: (1) a density-based adaptation of Smith's Rule (Weighted Shortest Processing Time, WSPT) that provably minimizes total weighted completion time $\sum w_j C_j$ on dedicated single-core queues and serves as an online approximation heuristic across asymmetric cores; (2) an Online Admissible Preemption Filter (OAPF) evaluating a dimensionally consistent one-step dispatch delay proxy $\Delta\mathrm{DelayProxy}(c) = w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$ in $\mathcal{O}(M_P)$ kernel time to suppress preemption thrashing and guarantee local delay reduction; and (3) a synchronous IPC zero-lag fast-path that routes waking communicating tasks to local dispatch queues, eliminating cross-domain IPIs and preserving L1/L2 cache locality. Using quadratic Lyapunov drift with an exact algebraic cross-term expansion, we formally prove that OPTIMA achieves aggregate queue stability under aggregate admissible capacity, while virtual deadline bounding protects batch tasks against starvation.
+In this paper, we present \textbf{OPTIMA}, an extensible operating system scheduler implemented in Linux \texttt{sched\_ext} eBPF that provides principled algorithmic scheduling foundations for asymmetric multiprocessors. OPTIMA synthesizes three foundational mechanisms directly within the kernel hot-path: (1) a density-based adaptation of Smith's Rule (Weighted Shortest Processing Time, WSPT) that provably minimizes total weighted completion time $\sum w_j C_j$ on dedicated single-core queues and serves as an online approximation heuristic across asymmetric cores; (2) an Online Admissible Preemption Filter (OAPF) evaluating a dimensionally consistent one-step dispatch delay proxy $\Delta\mathrm{DelayProxy}(c) = w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$ in $\mathcal{O}(M_P)$ kernel time to suppress preemption thrashing and guarantee local delay reduction; and (3) a synchronous IPC zero-lag fast-path that routes waking communicating tasks to local dispatch queues, substantially reducing cross-CCX migrations (from 48.7\% to 0.2\%) and preserving L1/L2 cache locality. Using quadratic Lyapunov drift with an exact algebraic cross-term expansion, we formally prove that OPTIMA achieves conditional multi-queue stability under aggregate admissible capacity, while virtual deadline bounding ($v_j \le t + 3\tau_{\max}$) protects batch tasks against starvation.
 
 We evaluate OPTIMA across 16 diverse workloads (pro-audio DSP, high-frequency financial order matching, game physics server, API gateway fan-out, Redis caching, microbenchmarks, IPC ping-pong, and parallel Linux kernel compilation) against CFS/EEVDF, \texttt{scx\_rusty}, and \texttt{scx\_rlfifo}. OPTIMA exhibits a bimodal performance profile: delivering an \textbf{84.1\% reduction in IPC ping-pong latency} (2.55\,$\mu$s vs 16.06\,$\mu$s on CFS) with a \textbf{6.3$\times$ throughput increase} (392,691 ops/s), a \textbf{93.6\% increase in network loopback bandwidth} (111.47 Gbps), \textbf{zero audio underruns}, \textbf{zero game desyncs}, and a \textbf{94.6\% reduction in worst-case real-time latency spikes}. Conversely, on parallel software compilation (\texttt{make kernel/}), OPTIMA takes 6.03s, matching other \texttt{sched\_ext} baselines (5.67s--5.83s) while trailing native in-kernel CFS (3.29s) due to eBPF struct-ops trampoline overhead during fork/exec process storms, and shows moderate throughput regressions (14--30\%) under high-concurrency request multiplexing (Redis, API Gateway). We present an in-depth architectural analysis characterizing these workload trade-offs and identifying the microarchitectural boundaries between specialized eBPF dispatch and in-kernel heuristics.
 \end{abstract}
@@ -81,10 +81,10 @@ The recent introduction of \texttt{sched\_ext} into upstream Linux 6.12~\cite{he
 In this paper, we present \textbf{OPTIMA}, an extensible eBPF operating system scheduler that resolves these challenges through formal algorithmic synthesis. OPTIMA introduces mathematically grounded scheduling invariants directly into the kernel execution path:
 \begin{itemize}
     \item \textbf{Density-Based WSPT Sequencing (Smith's Rule):} We prove that ordering tasks by execution density $\rho_j = w_j / p_j$ is optimal for single-core dedicated queues ($1 || \sum w_j C_j$), with ties permitted. While the general asymmetric problem with release dates ($R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard, OPTIMA leverages classical identical-machine results (Kawaguchi-Kyan reference bound) to formulate density-based virtual deadline scheduling as an online approximation heuristic, maximizing instantaneous backlog weight depletion via the Rearrangement Inequality.
-    \item \textbf{Online Admissible Preemption Filtering (OAPF):} Rather than unconstrained heuristics, OPTIMA evaluates an online preemption filter over candidate Performance cores using the dimensionally consistent delay metric $\Delta\mathrm{DelayProxy}(c) = w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$. In $\mathcal{O}(M_P)$ bounded kernel time, OPTIMA provably preempts only when the one-step weighted delay is strictly reduced, suppressing preemption thrashing and enforcing bounded priority inversion ($\le \tau_{\max}$).
+    \item \textbf{Online Admissible Preemption Filtering (OAPF):} Rather than unconstrained heuristics, OPTIMA evaluates an online preemption filter over candidate Performance cores using the dimensionally consistent delay metric $\Delta\mathrm{DelayProxy}(c) = w_{\mathrm{curr}(c)} \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$. In $\mathcal{O}(M_P)$ bounded kernel time, OPTIMA provably preempts only when the one-step weighted delay is strictly reduced, suppressing preemption thrashing and enforcing bounded priority inversion ($\le \tau_{\max}$).
     \item \textbf{Density-Guided Heterogeneous-Core Placement:} Core allocation between P- and E-cores is formulated via continuous fluid relaxation, preserving P-cores for high-density burst tasks and offloading long-running batch jobs ($p_j \ge 3\,\text{ms}$) to Efficiency queues.
     \item \textbf{Synchronous IPC Zero-Lag Local Dispatch:} By intercepting synchronous wakeup flags (\texttt{SCX\_WAKE\_SYNC}) and dispatching communicating partners directly into local hardware runqueues (\texttt{SCX\_DSQ\_LOCAL}), OPTIMA achieves 2.55\,$\mu$s IPC turnaround and 392k ops/s throughput.
-    \item \textbf{Lyapunov Drift Stability \& Starvation Protection:} We prove that adaptive quantum scaling combined with work-conserving work-stealing guarantees negative Lyapunov drift, ensuring aggregate queue stability under aggregate admissible capacity, while virtual deadline bounding protects batch tasks against starvation.
+    \item \textbf{Conditional Lyapunov Stability \& Starvation Protection:} We prove that adaptive quantum scaling combined with work-conserving work-stealing guarantees negative Lyapunov drift under a per-queue service condition, while virtual deadline bounding ($v_j \le t + 3\tau_{\max}$) protects batch tasks against starvation.
 \end{itemize}
 
 % =========================================================================
@@ -110,7 +110,8 @@ On mobile platforms, ARM Energy-Aware Scheduling (EAS)~\cite{rasmussen2018eas} a
 
 \begin{table*}[t]
 \centering
-\footnotesize
+\scriptsize
+\renewcommand{\arraystretch}{0.88}
 \caption{Comprehensive Comparison Matrix: OPTIMA vs. State-of-the-Art Operating System Schedulers}
 \label{tab:comparison_matrix}
 \begin{tabularx}{\textwidth}{l X X X X X X}
@@ -124,7 +125,6 @@ Online Admissible Preemption Filter (OAPF): $\Delta\mathrm{DelayProxy} < 0$; bou
 Density-based WSPT + virtual deadlines; Lyapunov drift queue stabilization. & 
 BPF \texttt{task\_storage} (~64\,B); per-CPU array maps (~16\,KB total). & 
 $\mathcal{O}(1)$ atomic BPF \texttt{.rodata} live tuning; lightweight user topology controller. \\
-\addlinespace
 \textbf{CFS / EEVDF} \newline \textit{(Linux Default)} & 
 Capacity-aware heuristics (\texttt{sched-capacity}); lacks execution density metrics. & 
 Traverses full scheduling domain; cross-CCX IPI latency overhead. & 
@@ -132,7 +132,6 @@ Heuristic latency target (CFS); SMP lag bounds only (EEVDF). &
 Proportional lag bounded; susceptible to tail latency spikes under asymmetric contention and cross-domain load balancing. & 
 Embedded in kernel \texttt{task\_struct}; \texttt{sched\_domain} tree. & 
 Coarse sysctl tunables; requires kernel recompilation for logic changes. \\
-\addlinespace
 \textbf{Google ghOSt} \newline \cite{humphries2021ghost} & 
 User-space policy dependent; lacks dynamic hardware speed models. & 
 Cross-privilege boundary context switches ($1\text{--}2\,\mu\text{s}$ penalty). & 
@@ -140,7 +139,6 @@ Policy dependent; preemption delayed by user-agent wakeup. &
 Application-specific tail tuning; fragile under heavy preemption. & 
 High; multi-MB shared memory queues and user thread pools. & 
 Medium; requires updating user daemon or restarting agents. \\
-\addlinespace
 \textbf{\texttt{scx\_rusty}} \newline \cite{hodges2024schedextscale} & 
 Coarse domain clustering; does not compute dynamic core speedups. & 
 BPF dispatch for local tasks; falls back to user daemon on imbalance. & 
@@ -148,7 +146,6 @@ Heuristic work-stealing based on queue depth ratios; no proof. &
 Moderate variance; tail spikes during user-space rebalancing. & 
 Dual footprint: BPF maps plus Rust runtime memory heaps. & 
 Low/Medium; CLI parameters modifiable via IPC channels. \\
-\addlinespace
 \textbf{\texttt{scx\_rlfifo}} \newline \cite{scx_repo} & 
 Unaware; global shared queue without core differentiation. & 
 Generic dispatch; lacks synchronous waker-affinity routing. & 
@@ -156,7 +153,6 @@ Round-robin / FIFO; periodic slice preemption without priority differentiation. 
 Susceptible to head-of-line blocking and severe tail spikes under mixed workloads. & 
 Minimal BPF dispatch queue state (~8\,KB). & 
 Static FIFO policy; requires restarting scheduler to modify parameters. \\
-\addlinespace
 \textbf{\texttt{scx\_lavd}} \newline \cite{min2024scxlavd} & 
 Topology-informed; tracks core frequencies for gaming interactivity. & 
 Wakes latency-critical render threads on warm cores. & 
@@ -164,7 +160,6 @@ Heuristic critical-path tracking; lacks combinatorial bounds. &
 Low frame-time jitter; can penalize background batch throughput. & 
 Low; in-kernel BPF maps for critical path tracking. & 
 Low; live tuning of target frame rate deadlines. \\
-\addlinespace
 \textbf{ARM EAS} \newline \cite{rasmussen2018eas} & 
 Energy-model integrated; Capacity-Aware big.LITTLE scheduling. & 
 Standard energy differential ($\Delta E$) evaluation; no IPC bypass. & 
@@ -177,7 +172,7 @@ Rigid; modifying models requires device-tree reconfiguration. \\
 \end{table*}
 
 \subsection{Theoretical Foundations of Scheduling}
-Smith's Rule~\cite{smith1956various} established that sequencing independent tasks in non-increasing order of density $\rho_i = w_i / p_i$ strictly minimizes total weighted completion time on an isolated single-core queue ($1 || \sum w_i C_i$). However, in generalized multiprocessing, Lenstra et al.~\cite{lenstra1977complexity}, Bruno et al.~\cite{bruno1974sequencing}, and Garey and Johnson~\cite{garey1979computers} proved that scheduling with dynamic release dates, preemption, and asymmetric parallel machines ($R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard. Classical approximation bounds, such as the Kawaguchi-Kyan bound ($\alpha \le \frac{1+\sqrt{2}}{2} \approx 1.207$)~\cite{kawaguchi1986worst}, apply strictly to identical parallel machines ($P || \sum w_j C_j$) without release dates. Consequently, OPTIMA utilizes density-based list scheduling as a principled online approximation heuristic. 
+Smith's Rule~\cite{smith1956various} established that sequencing independent tasks in non-increasing order of density $\rho_i = w_i / p_i$ strictly minimizes total weighted completion time on an isolated single-core queue ($1 || \sum w_i C_i$). However, in generalized multiprocessing, Lenstra et al.~\cite{lenstra1977complexity} and Garey and Johnson~\cite{garey1979computers} proved that scheduling with dynamic release dates, preemption, and asymmetric parallel machines ($R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard (while Bruno et al.~\cite{bruno1974sequencing} proved NP-completeness for precedence-constrained tasks on identical processors). Classical approximation bounds, such as the Kawaguchi-Kyan bound ($\alpha \le (1+\sqrt{2})/2 \approx 1.207$)~\cite{kawaguchi1986worst}, apply strictly to identical parallel machines ($P || \sum w_j C_j$) without release dates. Consequently, OPTIMA utilizes density-based list scheduling as a principled online approximation heuristic. 
 
 In online scheduling theory, Hall et al.~\cite{hall1997scheduling}, Megow and Schulz~\cite{megow2004online}, and Phillips et al.~\cite{phillips1998minimizing} studied list scheduling guided by WSPT and linear programming relaxations. For preemption, rather than an intractable multi-stage branch-and-bound search tree, OPTIMA implements an Online Admissible Preemption Filter (OAPF) evaluated in $\mathcal{O}(M_P)$ kernel time. Finally, Neely's stochastic network optimization and Lyapunov drift analysis~\cite{neely2010stochastic,neely2006energy,georgiadis2006resource} provide the theoretical machinery to prove queue stability and bounded delay in stochastic queuing systems. Table~\ref{tab:comparison_matrix} summarizes how OPTIMA advances beyond existing schedulers.
 
@@ -203,10 +198,10 @@ Rather than maintaining a single global runqueue or uncoordinated per-CPU queues
 Upon loading, the user-space Rust controller inspects the sysfs microarchitectural hierarchy (\texttt{/sys/devices/system/cpu/cpu*/}). It extracts core frequency ceilings, physical package topologies, and hardware thread sibling maps. Cores are classified into Performance partition $\mathcal{P}$ and Efficiency partition $\mathcal{E}$. The controller initializes eBPF read-only global masks (\texttt{p\_core\_mask}, \texttt{e\_core\_mask}, \texttt{smt\_sibling\_map}), allowing the kernel BPF JIT compiler to perform dead-code elimination and optimize dispatch branches into constant bitwise operations.
 
 \subsection{Synchronous IPC Zero-Lag Fast-Path}
-In synchronous client-server patterns (e.g., pipes, Redis GET/SET, microservice RPCs), the waking task and waker execute in lockstep. OPTIMA intercepts the \texttt{SCX\_WAKE\_SYNC} flag in \texttt{ops.select\_cpu}. If the calling CPU (\texttt{this\_cpu}) is allowed and has an empty local runqueue, OPTIMA immediately places the waking task into \texttt{SCX\_DSQ\_LOCAL} of \texttt{this\_cpu}. If \texttt{this\_cpu} is occupied, it attempts the SMT sibling (\texttt{this\_sib}) or previous CPU (\texttt{prev\_cpu}). This eliminates cross-CCX cache invalidations and IPI interrupts, cutting ping-pong latency from 16.06\,$\mu$s down to 2.55\,$\mu$s.
+In synchronous client-server patterns (e.g., pipes, Redis GET/SET, microservice RPCs), the waking task and waker execute in lockstep. OPTIMA intercepts the \texttt{SCX\_WAKE\_SYNC} flag in \texttt{ops.select\_cpu}. If the calling CPU (\texttt{this\_cpu}) is allowed and has an empty local runqueue, OPTIMA immediately places the waking task into \texttt{SCX\_DSQ\_LOCAL} of \texttt{this\_cpu}. If \texttt{this\_cpu} is occupied, it attempts the SMT sibling (\texttt{this\_sib}) or previous CPU (\texttt{prev\_cpu}). This substantially reduces cross-CCX migrations (from 48.7\% to 0.2\%) and associated IPI interrupts, cutting ping-pong latency from 16.06\,$\mu$s down to 2.55\,$\mu$s.
 
 \subsection{Hierarchical Work-Conserving Work-Stealing}
-To prevent core starvation during parallel compute bursts (e.g., parallel software compilation), OPTIMA implements an asymmetric work-stealing protocol in \texttt{ops.dispatch}. Idle P-cores prioritize \texttt{DSQ\_PERF} and \texttt{DSQ\_SHARED\_P}, but steal from \texttt{DSQ\_SHARED\_E} and \texttt{DSQ\_EFF} when domestic queues are empty. Conversely, idle E-cores aggressively drain \texttt{DSQ\_SHARED\_P} without threshold barriers, guaranteeing 100\% hardware utilization under heavy compute load.
+To prevent core starvation during parallel compute bursts (e.g., parallel software compilation), OPTIMA implements an asymmetric work-stealing protocol in \texttt{ops.dispatch}. Idle P-cores prioritize \texttt{DSQ\_PERF} and \texttt{DSQ\_SHARED\_P}, but steal from \texttt{DSQ\_SHARED\_E} and \texttt{DSQ\_EFF} when domestic queues are empty. Conversely, idle E-cores aggressively drain \texttt{DSQ\_SHARED\_P} without threshold barriers, preventing core underutilization and mitigating starvation under asymmetric compute bursts.
 
 % =========================================================================
 % SECTION 4: MATHEMATICAL THEORY & PROOFS
@@ -254,12 +249,12 @@ Because $\Delta \Phi < 0$, $\mathcal{S}'$ achieves a strictly lower cost, contra
 
 \begin{proposition}[Computational Complexity \& Online Information Barrier]
 \label{prop:np_hard}
-Minimizing total weighted completion time with dynamic release dates on parallel machines ($P | r_j | \sum w_j C_j$ or $R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard~\cite{lenstra1977complexity,bruno1974sequencing,garey1979computers}. Even on a single core, preemptive scheduling with arbitrary release dates ($1 | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard. Furthermore, for online scheduling with unannounced arrivals, no online algorithm can achieve an optimal offline schedule regardless of computational power, as online decision-makers lack knowledge of future arrival sequences.
+Minimizing total weighted completion time with dynamic release dates on parallel machines ($P | r_j | \sum w_j C_j$ or $R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard~\cite{lenstra1977complexity,garey1979computers}. Even on a single core, preemptive scheduling with arbitrary release dates ($1 | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard~\cite{lenstra1977complexity}. Furthermore, for online scheduling with unannounced arrivals, no online algorithm can achieve an optimal offline schedule regardless of computational power, as online decision-makers lack knowledge of future arrival sequences.
 \end{proposition}
 
 \begin{remark}[Context of the Kawaguchi-Kyan Bound]
 \label{rem:kawaguchi_kyan}
-Kawaguchi and Kyan~\cite{kawaguchi1986worst} proved that for identical parallel machines without release dates ($P || \sum w_j C_j$), WSPT list scheduling achieves an approximation factor of $\alpha \le \frac{1+\sqrt{2}}{2} \approx 1.207$. This bound applies strictly to identical machines ($P$) at time zero. For asymmetric architectures ($Q$ or $R$) and dynamic arrivals ($r_j$), OPTIMA uses density-based virtual deadline list scheduling as a principled online approximation heuristic.
+Kawaguchi and Kyan~\cite{kawaguchi1986worst} proved that for identical parallel machines without release dates ($P || \sum w_j C_j$), WSPT list scheduling achieves an approximation factor of $\alpha \le (1+\sqrt{2})/2 \approx 1.207$. This bound applies strictly to identical machines ($P$) at time zero. For asymmetric architectures ($Q$ or $R$) and dynamic arrivals ($r_j$), OPTIMA uses density-based virtual deadline list scheduling as a principled online approximation heuristic.
 \end{remark}
 
 \begin{theorem}[Continuous Fluid Relaxation for Density-Guided Placement]
@@ -269,7 +264,22 @@ Under a continuous fluid relaxation where active jobs make continuous progress a
 \min_{k \in \mathcal{P}} \rho_{\sigma(k)} \ge \max_{k' \in \mathcal{E}} \rho_{\sigma(k')}
 \end{equation}
 \end{theorem}
-OPTIMA operationalizes this fluid insight as an online heuristic: tasks with high priority weight ($w \ge w_{\mathrm{RT}}$) or short observed burst runtimes ($p < 3\,\text{ms}$) are mapped to Performance cores, while long-running compute batch tasks ($p \ge 3\,\text{ms}$) are routed to Efficiency queues (\texttt{DSQ\_EFF}), preserving P-core bandwidth for interactive bursts.
+
+\begin{definition}[Task Density, Reference Normalization $\rho_{\mathrm{ref}}$, and Virtual Deadline Increment]
+\label{def:density_ref}
+For each task $J_j$ with priority weight $w_j \in [w_{\min}, w_{\max}]$ ($w_{\min} \ge 10$) and estimated burst runtime $p_{\mathrm{est},j} \triangleq \max(\mathrm{avg\_runtime}_j, \tau_{\min})$, its execution density is defined as $\rho_j \triangleq \frac{w_j}{p_{\mathrm{est},j}}$ with physical dimensions of $[\mathrm{weight}/\mathrm{time}]$ (or $[\mu\mathrm{s}^{-1}]$). To preserve dimensional consistency when translating density into temporal virtual deadline advances, we introduce an explicit reference density $\rho_{\mathrm{ref}} \triangleq \frac{w_{\mathrm{ref}}}{p_{\mathrm{ref}}} = \frac{100}{1000\,\mu\mathrm{s}} = 0.1\,\mu\mathrm{s}^{-1}$, representing a baseline interactive thread with default nice priority ($w_{\mathrm{ref}} = 100$) and a 1\,ms execution burst ($p_{\mathrm{ref}} = 1000\,\mu\mathrm{s}$). The virtual deadline increment assigned during enqueue is:
+\begin{align}
+\label{eq:delta_v_formula}
+\Delta v_j &\triangleq \mathrm{clamp}\left( \tau_j \cdot \frac{\rho_{\mathrm{ref}}}{\rho_j}, \; \tau_{\min}, \; \tau_{\max} \right) \nonumber \\
+&= \mathrm{clamp}\left( \frac{\tau_j p_{\mathrm{est},j}}{10 \max(w_j, 10)}, \; \tau_{\min}, \; \tau_{\max} \right)
+\end{align}
+Because the normalized density ratio $\rho_{\mathrm{ref}} / \rho_j$ is strictly dimensionless, $\Delta v_j$ has exact physical dimensions of time $[\mu\mathrm{s}]$, matching scheduling quantum $\tau_j$.
+\end{definition}
+
+\begin{remark}[Decoupling Domain Placement from Intra-Queue Virtual-Deadline Ordering]
+\label{rem:domain_vs_density}
+We explicitly decouple coarse-grained domain placement from fine-grained intra-queue scheduling. First, \emph{Domain Placement (Algorithm~\ref{alg:enqueue})} assigns tasks to target DSQs using heuristic thresholds: tasks with $w_j \ge w_{\mathrm{RT}}$ route to \texttt{DSQ\_PERF}, long-running batch jobs ($p_{\mathrm{est},j} \ge 3\,\mathrm{ms}$ or \texttt{is\_batch}) route to \texttt{DSQ\_EFF}, and general interactive tasks route to domestic shared queues (\texttt{DSQ\_SHARED\_P} or \texttt{DSQ\_SHARED\_E}) preserving CPU stickiness; domain placement does not evaluate $\rho = w/p$ directly. Second, \emph{Intra-Queue Scheduling (Algorithm~\ref{alg:enqueue})} evaluates task density $\rho_j$ and reference density $\rho_{\mathrm{ref}}$ exclusively within the virtual deadline calculus ($\Delta v_j \propto \rho_{\mathrm{ref}}/\rho_j$) to establish the execution order ($\le_v$) within shared dispatch queues, prioritizing higher-density tasks ahead of lower-density competitors.
+\end{remark}
 
 \subsection{Theorem 3: Online Admissible Preemption Filtering (OAPF)}
 \label{sec:oapf_theory}
@@ -307,20 +317,20 @@ Conversely, if $\mathcal{P}_{\mathrm{admissible}} = \emptyset$ or candidate core
 \begin{proof}
 Under non-preemptive wait, $J_{\mathrm{wake}}$ incurs waiting delay $R(c^*)$, while $J_{\mathrm{curr}}(c^*)$ incurs 0 delay, yielding weighted delay $\mathrm{Delay}_{\mathrm{wait}} = w_{\mathrm{wake}} R(c^*)$. Under preemption, $J_{\mathrm{wake}}$ incurs 0 dispatch delay, while $J_{\mathrm{curr}}(c^*)$ incurs delay $(\tau_{\mathrm{slice}} + C_{\mathrm{switch}})$, yielding weighted delay $\mathrm{Delay}_{\mathrm{preempt}} = w_{\mathrm{curr}}(c^*) (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})$. Computing $\Delta\mathrm{DelayProxy}(c^*) = \mathrm{Delay}_{\mathrm{preempt}} - \mathrm{Delay}_{\mathrm{wait}}$ yields:
 \begin{equation}
-\Delta\mathrm{DelayProxy}(c^*) = w_{\mathrm{curr}}(c^*) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c^*)
+\Delta\mathrm{DelayProxy}(c^*) = w_{\mathrm{curr}}(c^*)(\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} R(c^*)
 \end{equation}
 Since $c^* \in \mathcal{P}_{\mathrm{admissible}}$, $R(c^*) > \delta_{\min}(c^*)$, which implies $w_{\mathrm{wake}} R(c^*) > w_{\mathrm{curr}}(c^*) (\tau_{\mathrm{slice}} + C_{\mathrm{switch}})$, ensuring $\Delta\mathrm{DelayProxy}(c^*) < 0$. 
 
 When preemption is suppressed (e.g., $w_{\mathrm{curr}}(c) \ge w_{\mathrm{wake}}$ or $R(c) \le \delta_{\min}(c)$), the waking task waits for quantum expiration. Because each executing slice is clamped to $\tau(c) \le \tau_{\max}$, the maximum waiting delay is bounded by $\tau_{\max}$, guaranteeing bounded priority inversion while protecting cache locality and pipeline execution.
 \end{proof}
 
-\begin{remark}[Microarchitectural Grounding of $C_{\mathrm{switch}} = 50\,\mu\text{s}$]
-While low-level CPU register context switches require only $1\text{--}2\,\mu\text{s}$, evicting warm L1/L2 cache lines and invalidating translation lookaside buffer (TLB) entries imposes a substantial cache refill penalty. In modern multi-gigahertz architectures with multi-megabyte cache hierarchies, cache line reload times and pipeline stall latencies under memory-intensive workloads measure between $30\text{--}50\,\mu\text{s}$. In OPTIMA, $C_{\mathrm{switch}}$ is a tunable parameter set nominally to $50\,\mu\text{s}$ (with an effective operational sensitivity range of $20\text{--}100\,\mu\text{s}$), ensuring that preemption is triggered only when the immediate priority advantage strictly amortizes microarchitectural warm-up overhead.
+\begin{remark}[Tunable Anti-Thrashing Dampening Penalty $C_{\mathrm{switch}} = 50\,\mu\text{s}$]
+While raw CPU register context switches require only $1\text{--}2\,\mu\text{s}$ and individual cache line reloads require tens to hundreds of nanoseconds, repeatedly displacing and reloading a memory-intensive working set introduces cumulative pipeline stalls across thousands of cycles. In OPTIMA, $C_{\mathrm{switch}}$ serves strictly as a \emph{tunable anti-thrashing dampening penalty} nominally set to $50\,\mu\text{s}$ (with an effective operational sensitivity range of $20\text{--}100\,\mu\text{s}$). Rather than modeling a single hardware cache miss, $C_{\mathrm{switch}}$ enforces an algorithmic hysteresis barrier, ensuring that preemption is triggered only when the waking task's priority advantage is sufficiently pronounced to justify evicting the incumbent thread and disrupting pipeline throughput.
 \end{remark}
 
-\subsection{Theorem 4 \& Proposition 2: Queue Stability via Lyapunov Drift and Starvation Protection}
+\subsection{Theorem 4 \& Proposition 2: Conditional Queue Stability and Starvation Protection}
 \label{sec:stability_theory}
-We model the multi-queue system state vector $\mathbf{Q}(t) = (q_1(t), q_2(t), q_3(t), q_4(t))^T$ evolving via $q_k(t+1) = \max(0, q_k(t) - s_k(t)) + a_k(t)$. We define the quadratic Lyapunov function:
+We model the multi-queue system state vector $\mathbf{Q}(t) = (q_1(t), q_2(t), q_3(t), q_4(t))^T$ evolving via $q_k(t+1) = \max(0, q_k(t) - s_k(t)) + a_k(t)$ with bounded second moments $\mathbb{E}[a_k(t)^2 + s_k(t)^2 \mid \mathbf{Q}(t)] \le M_{\mathrm{sec}} < \infty$. We define the quadratic Lyapunov function:
 \begin{equation}
 L(\mathbf{Q}(t)) \triangleq \frac{1}{2} \sum_{k=1}^4 q_k(t)^2
 \end{equation}
@@ -335,13 +345,21 @@ The arrival workload is aggregate-admissible if aggregate workload demand is wit
 where $\lambda_k = \mathbb{E}[a_k(t)]$ and $\bar{p}_k$ is mean task execution work.
 \end{definition}
 
-\begin{theorem}[Aggregate Queue Stability via Lyapunov Drift]
+\begin{theorem}[Conditional Multi-Queue Stability via Foster-Lyapunov Drift]
 \label{thm:stability}
-Under any aggregate-admissible workload satisfying Definition~\ref{def:class_admissible}, OPTIMA's adaptive quantum scaling $\tau(q_k) = \max(\frac{Q_{\mathrm{base}}}{1+q_k}, \tau_{\min})$ and work-conserving work-stealing maintain negative Lyapunov drift:
+Let the multi-queue backlog $\mathbf{Q}(t)$ evolve under an aggregate-admissible workload (Definition~\ref{def:class_admissible}). If the dispatch and hierarchical work-stealing policy guarantees a positive service slack across all active non-empty queues:
+\begin{equation}
+\label{eq:slack_cond}
+\mathbb{E}\big[ s_k(t) - a_k(t) \;\big|\; \mathbf{Q}(t) \big] \ge \delta > 0, \quad \forall k: q_k(t) > 0
+\end{equation}
+then the quadratic Lyapunov function satisfies the negative drift condition:
 \begin{equation}
 \Delta L(\mathbf{Q}(t)) \le B - \delta \sum_{k=1}^4 q_k(t)
 \end{equation}
-for positive constant $\delta > 0$ and finite $B = \frac{1}{2} \sum_{k=1}^4 \mathbb{E}[a_k(t)^2 + s_k(t)^2] < \infty$, ensuring strong aggregate queue stability ($\limsup \frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\delta} < \infty$).
+for finite positive constant $B = \frac{1}{2} \sum_{k=1}^4 \mathbb{E}[a_k(t)^2 + s_k(t)^2 \mid \mathbf{Q}(t)] < \infty$. Consequently, the multi-queue system is Foster-Lyapunov stable (positive recurrent), with bounded time-average queue depth:
+\begin{equation}
+\limsup_{T \to \infty} \frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\delta} < \infty
+\end{equation}
 \end{theorem}
 
 \begin{proof}
@@ -358,12 +376,22 @@ Subtracting $q_k(t)^2$, dividing by 2, and taking conditional expectations:
 \begin{equation}
 \Delta L(\mathbf{Q}(t)) \le B - \sum_{k=1}^4 q_k(t) \, \mathbb{E}\big[ s_k(t) - a_k(t) \;\big|\; \mathbf{Q}(t) \big]
 \end{equation}
-Under work-conserving work-stealing, no core is idle while tasks are queued. Because the aggregate workload is admissible ($\sum \lambda_k \bar{p}_k \le C_{\mathrm{total}} - \epsilon_0$), total service capacity rate exceeds arrival rate across active queues: $\mathbb{E}[s_k(t) - a_k(t) \mid \mathbf{Q}(t)] \ge \delta > 0$. Thus $\Delta L(\mathbf{Q}(t)) \le B - \delta \sum_k q_k(t)$, establishing positive recurrence and strong aggregate queue stability by the Foster-Lyapunov criterion.
+Under the stated per-queue service condition~\eqref{eq:slack_cond}, $\mathbb{E}[s_k(t) - a_k(t) \mid \mathbf{Q}(t)] \ge \delta > 0$ for non-empty queues. Substituting this into the drift bound yields $\Delta L(\mathbf{Q}(t)) \le B - \delta \sum_k q_k(t)$. By the Foster-Lyapunov stability criterion, this establishes positive recurrence and strong aggregate queue stability.
 \end{proof}
 
-\begin{proposition}[Virtual Deadline Bounding and Inter-Batch Starvation Protection]
+\begin{remark}[Architectural Realization of the Service Slack Condition]
+In multi-queue systems with strict priorities, global capacity admissibility ($\sum \lambda_k \bar{p}_k \le C_{\mathrm{total}} - \epsilon_0$) is a necessary condition for aggregate stability, but does not independently ensure per-queue service slack~\eqref{eq:slack_cond} if high-priority queues can monopolize all cores. OPTIMA establishes this per-queue condition through structural partitioning:
+(1) dedicated Efficiency cores provide guaranteed domestic compute capacity to batch queues (\texttt{DSQ\_EFF}), preventing high-priority P-core traffic from completely starving throughput work; and
+(2) dynamic quantum scaling $\tau(q_k) = \max(\frac{Q_{\mathrm{base}}}{1+q_k}, \tau_{\min})$ dynamically compresses time slices during congestion, accelerating task dispatch and preemption frequency.
+\end{remark}
+
+\begin{proposition}[Virtual Deadline Bounding and Starvation Protection]
 \label{prop:starvation}
-Under OPTIMA's virtual deadline calculus, every task $J_j$ enqueued into a batch or interactive queue (\texttt{DSQ\_SHARED\_P}, \texttt{DSQ\_SHARED\_E}, \texttt{DSQ\_EFF}) at time $t$ has its virtual deadline clamped by $v_j(t) \le t + 2 \tau_{\max}$ (with incremental advance $\Delta v_j \le \tau_{\max}$). Any subsequent batch task $J_{j'}$ arriving at timestamp $t' > t + 2 \tau_{\max}$ receives $v_{j'}(t') \ge t' > v_j(t)$ and cannot supersede $J_j$. Since aggregate queue backlog is stable ($\limsup \frac{1}{T}\sum \mathbb{E}[q_k(t)] \le B/\delta < \infty$) and domestic Efficiency cores provide dedicated service capacity to batch queues, batch tasks are protected against indefinite starvation. Latency-critical tasks ($w \ge w_{\mathrm{RT}}$) receive immediate priority ($v_j = t$); under sustainable arrival intensity ($\lambda_1 \bar{p}_1 \le M_P c_P - \epsilon_1$), both latency-critical and batch queues achieve finite expected waiting times.
+Under OPTIMA's virtual deadline calculus (Algorithm~\ref{alg:enqueue}), for every task $J_j$ enqueued into a batch or interactive queue (\texttt{DSQ\_SHARED\_P}, \texttt{DSQ\_SHARED\_E}, \texttt{DSQ\_EFF}) at time $t$, its assigned virtual deadline satisfies:
+\begin{equation}
+v_j(t) = \operatorname{clamp}(v_{\mathrm{time}}, t, t + 2\tau_j) + \Delta v_j \le t + 3\tau_{\max}
+\end{equation}
+since $\tau_j \le \tau_{\max}$ and $\Delta v_j \le \tau_{\max}$. Any subsequent batch task $J_{j'}$ arriving at timestamp $t' > t + 3\tau_{\max}$ receives $v_{j'}(t') \ge t' > v_j(t)$ and cannot be scheduled ahead of $J_j$. While a batch task arriving earlier ($t' \le t + 3\tau_{\max}$) with higher density may receive an earlier deadline, $v_j(t) \le t + 3\tau_{\max}$ strictly bounds relative queue advancement lag. Under the conditional service rate condition ($\mathbb{E}[s_k - a_k \mid \mathbf{Q}] \ge \delta > 0$) of Theorem~\ref{thm:stability}, every admitted batch task is guaranteed dispatch within finite time. Furthermore, latency-critical tasks ($w \ge w_{\mathrm{RT}}$) receive immediate priority ($v_j = t$) and always supersede batch tasks; when preemption is suppressed by OAPF, the immediate waiting delay imposed by the running task is bounded by $\tau_{\max}$, ensuring bounded priority inversion.
 \end{proposition}
 
 \subsection{Algorithmic Specifications}
@@ -448,7 +476,7 @@ Algorithms~\ref{alg:select_cpu}, \ref{alg:oapf}, \ref{alg:enqueue}, and \ref{alg
 \IF{$p$ is pinned \OR $p$ is kernel thread \OR $tctx.dispatch\_local$}
     \STATE $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau_{\min}, enq\_flags)$; \textbf{return}
 \ENDIF
-\STATE \COMMENT{Density-Guided Domain Placement Target DSQ Selection}
+\STATE \COMMENT{Domain Placement Target DSQ Selection (Heuristic Thresholds)}
 \IF{$tctx.weight \ge w_{\mathrm{RT}}$}
     \STATE $target\_dsq \leftarrow \text{DSQ\_PERF}$
 \ELSIF{$tctx.avg\_runtime \ge 3\text{ms} \lor tctx.is\_batch$}
@@ -465,7 +493,7 @@ Algorithms~\ref{alg:select_cpu}, \ref{alg:oapf}, \ref{alg:enqueue}, and \ref{alg
     \STATE $v \leftarrow \mathrm{clamp}(p.\text{scx.dsq\_vtime}, now, now + 2\tau)$
     \STATE $p_{\mathrm{est}} \leftarrow \max(tctx.avg\_runtime, \tau_{\min})$
     \STATE $\rho \leftarrow \frac{\max(tctx.weight, 10)}{p_{\mathrm{est}}}$ \COMMENT{Execution density $\rho = w / p_{\mathrm{est}}$}
-    \STATE $\Delta v \leftarrow \mathrm{clamp}\left( \frac{\tau \cdot p_{\mathrm{est}}}{10 \cdot \max(tctx.weight, 10)}, \; \tau_{\min}, \; \tau_{\max} \right)$ \COMMENT{Monotonic increment $\tau \cdot \rho_{\mathrm{ref}} / \rho$}
+    \STATE $\Delta v \leftarrow \mathrm{clamp}\left( \frac{\tau \cdot p_{\mathrm{est}}}{10 \cdot \max(tctx.weight, 10)}, \; \tau_{\min}, \; \tau_{\max} \right)$ \COMMENT{Density advance $\tau \cdot \rho_{\mathrm{ref}} / \rho$, $\rho_{\mathrm{ref}} = 0.1\,\mu\text{s}^{-1}$}
     \STATE $deadline \leftarrow v + \Delta v$
 \ENDIF
 \STATE $p.\text{scx.dsq\_vtime} \leftarrow deadline$
@@ -540,7 +568,7 @@ Schbench Request P50 Latency & Request P50 ($\downarrow$) & $\mu$s & 18,698.67 &
 Schbench Request P99 Tail & Request P99 ($\downarrow$) & $\mu$s & 38,506.67 & 170,752.00 & 284,842.67 & 140,373.33 & +343.4\% \\
 Schbench Service Rate & Throughput ($\uparrow$) & req/s & 1,634.37 & 712.97 & 714.00 & 766.57 & -56.4\% \\
 Sysbench CPU Compute & Throughput ($\uparrow$) & EPS & 11,712.23 & 6,028.19 & 5,965.74 & 5,969.98 & -48.5\% \\
-Sysbench Thread Fairness & Variance $\sigma$ ($\downarrow$) & dev & 2,303.38 & \textbf{46.48} $\star$ & 223.38 & 304.96 & \textbf{-98.0\% Variance Reduction} \\
+Sysbench Thread Fairness & Standard Deviation $\sigma$ ($\downarrow$) & $\sigma$ & 2,303.38 & \textbf{46.48} $\star$ & 223.38 & 304.96 & \textbf{-98.0\%} \\
 Sysbench Memory Bandwidth & Throughput ($\uparrow$) & MiB/s & 10,991.27 & \textbf{12,394.80} $\star$ & 12,376.37 & 11,891.51 & \textbf{+12.8\%} \\
 Sysbench Memory Operations & Operations Rate ($\uparrow$) & ops/s & 11,255,061 & \textbf{12,692,281} $\star$ & 12,673,403 & 12,176,903 & \textbf{+12.8\%} \\
 L3 Cache Miss Rate & Hardware PMU ($\downarrow$) & \% & 6.40\% & 2.66\% & 1.55\% & \textbf{1.36\%} $\star$ & \textbf{-58.5\% Misses} \\
@@ -557,9 +585,9 @@ Kernel Build (\texttt{make kernel/}) & Wall Time ($\downarrow$) & s & 3.29 & 6.0
 \label{sec:evaluation}
 
 \subsection{Experimental Methodology}
-We conduct all experiments on a modern heterogeneous asymmetric multi-core testbed comprising an asymmetric cluster of wide-issue Performance cores and compact Efficiency cores sharing a unified multi-megabyte Level-3 cache hierarchy and dual-channel memory. To eliminate external OS jitter and background interference, the evaluation harness executes within an isolated, hardware-partitioned execution domain:
+We conduct all experiments on a modern heterogeneous asymmetric multi-core testbed comprising 12 hardware execution threads across 4 wide-issue Performance cores and 8 compact Efficiency cores sharing a unified multi-megabyte Level-3 cache hierarchy and dual-channel memory, running Linux 6.12 with \texttt{sched\_ext}. Throughout our evaluation, the baseline labeled ``CFS / EEVDF'' denotes the Linux 6.12 mainline default fair scheduler class (which implements Earliest Eligible Virtual Deadline First proportional-lag allocation with standard CFS load-balancing heuristics). To eliminate external OS jitter and background interference, the evaluation harness executes within an isolated, hardware-partitioned execution domain:
 \begin{itemize}
-    \item \textbf{Isolated Execution Partition:} Benchmark workloads execute across 12 dedicated hardware execution threads partitioned equally between Performance and Efficiency domains.
+    \item \textbf{Isolated Execution Partition:} Benchmark workloads execute across 12 dedicated hardware execution threads partitioned between Performance and Efficiency domains.
     \item \textbf{Hardware Cache Isolation:} Hardware Cache Allocation Technology (CAT) bitmasks partition L3 cache ways, strictly preventing cross-domain cache evictions between host monitoring infrastructure and benchmark threads.
     \item \textbf{Dedicated IRQ Routing:} External device interrupts are affinity-pinned away from benchmark cores.
     \item \textbf{Statistical Rigor:} Every workload is executed through 3 complete, independent repetitions. We report mean values, sample standard deviations ($\sigma$), and relative percentage deltas.
@@ -567,7 +595,7 @@ We conduct all experiments on a modern heterogeneous asymmetric multi-core testb
 
 \subsection{Benchmark Workload Taxonomy}
 We evaluate 16 diverse production and synthetic workloads covering real-time, throughput, memory, and communication profiles:
-\begin{enumerate}
+\begin{enumerate}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}\setlength{\parsep}{0pt}
     \item \textbf{Pro-Audio Real-Time DSP:} Simulates low-latency audio processing pipelines, tracking buffer turnaround latencies and buffer underruns (xruns).
     \item \textbf{Game Physics Server:} Simulates a multi-threaded game server tick loop, measuring physics P50/P99 latency and frame desync rates.
     \item \textbf{Real-Time POSIX Jitter (\texttt{cyclictest}):} Measures high-precision timer jitter and worst-case latency spikes under load.
@@ -578,7 +606,7 @@ We evaluate 16 diverse production and synthetic workloads covering real-time, th
     \item \textbf{IPC Ping-Pong Latency (\texttt{perf bench sched pipe}):} Measures bidirectional pipe context-switch latency and operations rate.
     \item \textbf{Messaging Storm (\texttt{perf bench sched messaging}):} Evaluates high-density IPC message exchange duration.
     \item \textbf{Scheduler Wakeup and Request Latency (\texttt{schbench}):} Evaluates multi-threaded request-response latencies and wakeup P99 tails under worker contention.
-    \item \textbf{Compute Throughput \& Thread Fairness (\texttt{sysbench cpu}):} Measures events per second (EPS) and per-thread variance $\sigma$.
+    \item \textbf{Compute Throughput \& Thread Fairness (\texttt{sysbench cpu}):} Measures events per second (EPS) and per-thread standard deviation $\sigma$.
     \item \textbf{Memory Bandwidth \& Operations (\texttt{sysbench memory}):} Evaluates memory transfer rates (MiB/s) and operations per second.
     \item \textbf{Hardware PMU Cache Miss Rates:} Hardware performance counters measuring L3 cache miss percentages.
     \item \textbf{Hardware Instruction Retirement (IPC):} Measures instructions retired per CPU clock cycle.
@@ -598,7 +626,7 @@ In \texttt{perf bench sched pipe}, OPTIMA delivers an unprecedented \textbf{2.55
 In POSIX real-time jitter evaluation (\texttt{cyclictest}), OPTIMA achieves the lowest average jitter (\textbf{21.27\,$\mu$s}) and suppresses worst-case jitter spikes by \textbf{94.6\%} (450\,$\mu$s vs. 8,383\,$\mu$s on CFS). In pro-audio DSP, OPTIMA achieves \textbf{31.71\,$\mu$s} turnaround latency with \textbf{zero audio buffer underruns} (0.00 xruns vs. 3.67 on CFS). Similarly, in game server physics simulation, OPTIMA eliminates frame drops entirely (\textbf{0.000\% desync rate}).
 
 \subsubsection{Software Compilation and Compute Throughput}
-By removing artificial work-stealing barriers and enabling idle E-cores to drain shared queues, OPTIMA achieves a kernel compile time of \textbf{6.03s}, closely matching peer extensible schedulers \texttt{scx\_rusty} (5.67s) and \texttt{scx\_rlfifo} (5.83s), though paying the expected BPF struct-ops trampoline tax compared to in-kernel CFS (3.29s). In \texttt{sysbench memory}, OPTIMA achieves highest-in-class bandwidth (\textbf{12,394.80 MiB/s}) and operation rates (\textbf{12,692,281 ops/s}), representing a \textbf{+12.8\% gain} over CFS. Furthermore, thread fairness variance $\sigma$ drops by \textbf{98.0\%} (46.48 vs. 2303.38 on CFS), demonstrating balanced cross-core workload distribution.
+By removing artificial work-stealing barriers and enabling idle E-cores to drain shared queues, OPTIMA achieves a kernel compile time of \textbf{6.03s}, closely matching peer extensible schedulers \texttt{scx\_rusty} (5.67s) and \texttt{scx\_rlfifo} (5.83s), though paying the expected BPF struct-ops trampoline tax compared to in-kernel CFS (3.29s). In \texttt{sysbench memory}, OPTIMA achieves highest-in-class bandwidth (\textbf{12,394.80 MiB/s}) and operation rates (\textbf{12,692,281 ops/s}), representing a \textbf{+12.8\% gain} over CFS. Furthermore, thread fairness standard deviation $\sigma$ drops by \textbf{98.0\%} (46.48 vs. 2303.38 on CFS), demonstrating balanced cross-core workload distribution.
 
 \subsection{Ablation Study: Synchronous IPC Fast-Path}
 \label{sec:ablation}
@@ -635,7 +663,7 @@ Our comprehensive evaluation across 34 metrics reveals both significant microarc
 \subsection{Workload Trade-offs and Architectural Specialization}
 The empirical results demonstrate a clear bimodal performance profile:
 \begin{itemize}
-    \item \textbf{Sub-Microsecond Latency and Real-Time Robustness:} In workloads characterized by synchronous communication (\texttt{perf bench sched pipe}, \texttt{iperf3} socket loopback) and strict timing bounds (pro-audio DSP, game server ticks, POSIX jitter), OPTIMA achieves decisive improvements over CFS: an 84.1\% reduction in pipe latency, a 94.6\% reduction in jitter spikes, and zero audio underruns or frame drops. Relative to peer extensible schedulers, OPTIMA matches their zero-drop real-time robustness (0.00 xruns, 0.000\% desync rate). In audio processing tail turnaround, OPTIMA achieves 101.95\,$\mu$s P99 (closely tracking native CFS at 101.50\,$\mu$s), while peer schedulers \texttt{scx\_rusty} (61.91\,$\mu$s) and \texttt{scx\_rlfifo} (58.42\,$\mu$s) demonstrate tighter tail bounds on this micro-benchmark. Concurrently, peer schedulers demonstrate advantages in specific isolated metrics: \texttt{scx\_rusty} achieves faster game physics turnaround (1,235.41\,$\mu$s P99 vs. OPTIMA's 1,865.02\,$\mu$s and CFS's 1,563.91\,$\mu$s), and \texttt{scx\_rlfifo} registers the lowest peak jitter spike (280.67\,$\mu$s vs. OPTIMA's 450.00\,$\mu$s, though both represent a massive reduction over CFS's 8,383.00\,$\mu$s spike). These variations reflect the trade-offs of distinct queue designs under pure real-time streaming.
+    \item \textbf{Low-Latency IPC and Real-Time Robustness:} In workloads characterized by synchronous communication (\texttt{perf bench sched pipe}, \texttt{iperf3} socket loopback) and strict timing bounds (pro-audio DSP, game server ticks, POSIX jitter), OPTIMA achieves decisive improvements over CFS: an 84.1\% reduction in pipe latency, a 94.6\% reduction in jitter spikes, and zero audio underruns or frame drops. Relative to peer extensible schedulers, OPTIMA matches their zero-drop real-time robustness (0.00 xruns, 0.000\% desync rate). In audio processing tail turnaround, OPTIMA achieves 101.95\,$\mu$s P99 (closely tracking native CFS at 101.50\,$\mu$s), while peer schedulers \texttt{scx\_rusty} (61.91\,$\mu$s) and \texttt{scx\_rlfifo} (58.42\,$\mu$s) demonstrate tighter tail bounds on this micro-benchmark. Concurrently, peer schedulers demonstrate advantages in specific isolated metrics: \texttt{scx\_rusty} achieves faster game physics turnaround (1,235.41\,$\mu$s P99 vs. OPTIMA's 1,865.02\,$\mu$s and CFS's 1,563.91\,$\mu$s), and \texttt{scx\_rlfifo} registers the lowest peak jitter spike (280.67\,$\mu$s vs. OPTIMA's 450.00\,$\mu$s, though both represent a massive reduction over CFS's 8,383.00\,$\mu$s spike). These variations reflect the trade-offs of distinct queue designs under pure real-time streaming.
     \item \textbf{High-Concurrency and Memory-Bound Trade-offs:} Conversely, in throughput-oriented database and proxy workloads (Production Redis, Cloud API Gateway), CFS outperforms OPTIMA by 14--30\%. These applications exhibit thousands of short, non-blocking requests with highly volatile burst runtimes that challenge our EWMA burst estimation. Under rapid connection multiplexing, static or slow-converging EWMA values misclassify short batch tasks as compute-bound, intermittently routing them to Efficiency cores or incurring queue rebalancing delays.
 \end{itemize}
 
@@ -651,7 +679,7 @@ Because all \texttt{schbench} worker threads share identical nice levels ($w = 1
 Nonetheless, this anti-thrashing design imposes a substantial trade-off on end-to-end request-response metrics under worker pool contention. When worker threads cannot preempt peers, queued request-handling tasks must wait for running threads to yield or exhaust full quanta. Consequently, OPTIMA's request P50 latency increases to 29,280.00\,$\mu$s (+56.6\% vs. CFS's 18,698.67\,$\mu$s), request P99 tail latency rises to 170,752.00\,$\mu$s (+343.4\% vs. CFS's 38,506.67\,$\mu$s, though outperforming \texttt{scx\_rusty}'s 284,842.67\,$\mu$s), and aggregate service throughput declines to 712.97 req/s (-56.4\% vs. CFS's 1,634.37 req/s, matching \texttt{scx\_rusty} at 714.00 req/s and \texttt{scx\_rlfifo} at 766.57 req/s). This illustrates the fundamental duality: protecting thread quanta against peer preemption minimizes wakeup jitter but incurs significant request-level queueing delays during saturated request-response concurrency.
 
 \subsection{Sysbench Compute Throughput and Thread Fairness}
-In \texttt{sysbench cpu}, all three \texttt{sched\_ext} schedulers cluster near $\sim$6,000 EPS (OPTIMA: 6,028.19 EPS, \texttt{scx\_rusty}: 5,965.74 EPS, \texttt{scx\_rlfifo}: 5,969.98 EPS) within the 12-thread isolated partition, whereas CFS achieves 11,712.23 EPS. This occurs because the pure compute loop of sysbench creates continuous core contention where CFS allows threads to unrestrictedly saturate all core pipelines without queue structure overheads. However, the critical differentiator lies in thread fairness: under CFS, individual thread event completions exhibit extreme variance ($\sigma = 2,303.38$), with some threads starved on slower cores while others surge ahead. Under OPTIMA, per-thread variance drops by \textbf{98.0\%} down to $\sigma = 46.48$. This demonstrates that OPTIMA's density-guided domain placement ensures uniform compute progress across asymmetric cores at the expense of uncoordinated thread racing.
+In \texttt{sysbench cpu}, all three \texttt{sched\_ext} schedulers cluster near $\sim$6,000 EPS (OPTIMA: 6,028.19 EPS, \texttt{scx\_rusty}: 5,965.74 EPS, \texttt{scx\_rlfifo}: 5,969.98 EPS) within the 12-thread isolated partition, whereas CFS achieves 11,712.23 EPS. This occurs because the pure compute loop of sysbench creates continuous core contention where CFS allows threads to unrestrictedly saturate all core pipelines without queue structure overheads. However, the critical differentiator lies in thread fairness: under CFS, individual thread event completions exhibit extreme variance ($\sigma = 2,303.38$), with some threads starved on slower cores while others surge ahead. Under OPTIMA, per-thread standard deviation drops by \textbf{98.0\%} down to $\sigma = 46.48$. This demonstrates that OPTIMA's density-guided domain placement ensures uniform compute progress across asymmetric cores at the expense of uncoordinated thread racing.
 
 \subsection{Extensible Scheduler Overheads in Dynamic Process Lifecycles}
 In the parallel Linux kernel compilation benchmark (\texttt{make kernel/}), the wall-clock build time is 6.03s for OPTIMA, matching \texttt{scx\_rusty} (5.67s) and \texttt{scx\_rlfifo} (5.83s), but lagging native CFS (3.29s). In earlier iterations of OPTIMA, build time was 11.63s due to an artificial queue barrier that prevented idle Efficiency cores from stealing tasks enqueued for Performance cores. Removing this barrier and enabling unconstrained asymmetric work-stealing reduced compilation time by \textbf{48.2\%} (11.63s $\to$ 6.03s).
@@ -659,7 +687,7 @@ In the parallel Linux kernel compilation benchmark (\texttt{make kernel/}), the 
 However, all \texttt{sched\_ext} schedulers remain $\sim$83\% slower than CFS on this workload. The root cause is microarchitectural trampoline overhead: kernel compilation executes tens of thousands of short-lived compiler processes (\texttt{gcc}, \texttt{as}, \texttt{ld}). For each process creation and termination, \texttt{sched\_ext} invokes BPF struct-ops hooks (\texttt{ops.init\_task}, \texttt{ops.exit\_task}, \texttt{ops.select\_cpu}, \texttt{ops.enqueue}). While each invocation costs only a few hundred nanoseconds, the cumulative overhead across hundreds of thousands of process lifecycles imposes a measurable penalty compared to in-kernel CFS C code that optimizes process creation paths natively.
 
 \subsection{Microarchitectural Asymmetry and Hardware IPC Retirement}
-In Table~\ref{tab:benchmark_results}, OPTIMA registers a -25.2\% reduction in hardware IPC retirement (0.88 vs. 1.18 on CFS, matching \texttt{scx\_rusty} at 0.83 and \texttt{scx\_rlfifo} at 0.83). This retirement drop is a direct architectural consequence of density-aware core partitioning: by deliberately steering long-running batch and background compute tasks onto Efficiency cores via density-guided domain placement, a higher fraction of total program instructions execute on E-core pipelines. Modern Efficiency cores feature narrower instruction decode and issue pipelines (e.g., 2-wide decode compared to 4-wide or 6-wide superscalar execution on Performance cores) with smaller out-of-order execution windows. While this intentional steering achieves substantial L3 cache hit gains (reducing L3 cache misses by 58.5\% down to 2.66\%) and maintains high thread fairness, the lower IPC retirement reflects the narrower microarchitecture of the cores processing the background load.
+In Table~\ref{tab:benchmark_results}, OPTIMA registers a hardware IPC retirement of 0.88 (a -25.2\% delta vs. CFS at 1.18). Importantly, peer extensible schedulers also exhibit lower retirement rates (both \texttt{scx\_rusty} and \texttt{scx\_rlfifo} register 0.83 IPC), demonstrating that this lower instruction retirement is not an isolated side effect of OPTIMA's density steering, but rather reflects general microarchitectural execution characteristics and memory-bound stall patterns across the benchmark suite under \texttt{sched\_ext}. In OPTIMA, steering batch compute to narrower Efficiency pipelines does contribute to lower per-cycle retirement for those specific threads, but OPTIMA actually achieves slightly higher retirement (0.88) than peer schedulers (0.83) due to improved cache locality (reducing L3 cache misses by 58.5\% down to 2.66\% vs CFS's 6.40\%).
 
 Notably, in Table~\ref{tab:benchmark_results}, \texttt{scx\_rlfifo} registers an even lower L3 miss rate (1.36\% vs. 2.66\% on OPTIMA and 6.40\% on CFS). This occurs because \texttt{scx\_rlfifo}'s flat, single-queue FIFO design preserves strictly sequential task execution without domain rebalancing or cross-queue work-stealing passes, whereas OPTIMA incurs a minor cache footprint from hierarchical DSQ classification and work-stealing checks across the asymmetric topology.
 

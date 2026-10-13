@@ -192,15 +192,15 @@ J.~K. Lenstra, A.~H.~G. Rinnooy~Kan, and P.~Brucker, ``Complexity of machine
   scheduling problems,'' \emph{Annals of Discrete Mathematics}, vol.~1, pp.
   343--362, 1977.
 
-\bibitem{bruno1974sequencing}
-J.~Bruno, E.~G. Coffman, and R.~Sethi, ``Sequencing problems with partial
-  ordered tasks and alternative processors,'' \emph{Journal of the ACM},
-  vol.~21, no.~4, pp. 667--676, 1974.
-
 \bibitem{garey1979computers}
 M.~R. Garey and D.~S. Johnson, \emph{Computers and Intractability: A Guide to
   the Theory of {NP}-Completeness}.\hskip 1em plus 0.5em minus 0.4em\relax San
   Francisco, CA, USA: W. H. Freeman and Company, 1979.
+
+\bibitem{bruno1974sequencing}
+J.~Bruno, E.~G. Coffman, and R.~Sethi, ``Sequencing problems with partial
+  ordered tasks and alternative processors,'' \emph{Journal of the ACM},
+  vol.~21, no.~4, pp. 667--676, 1974.
 
 \bibitem{kawaguchi1986worst}
 T.~Kawaguchi and S.~Kyan, ``Worst case bound of an {LRF} schedule for the mean
