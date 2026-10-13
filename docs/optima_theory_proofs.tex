@@ -27,9 +27,9 @@
 \begin{abstract}
 Asymmetric multiprocessor architectures, combining high-throughput Performance (P) cores and energy-efficient Efficiency (E) cores with disparate compute capacities, present fundamental challenges for general-purpose operating system schedulers. Existing kernel schedulers rely heavily on empirical heuristics that lack formal mathematical characterization and struggle under mixed latency-critical and compute-intensive workloads. In this paper, we develop the rigorous mathematical foundations and scheduling theory of OPTIMA, an extensible task-scheduling framework implemented via Linux \texttt{sched\_ext} eBPF. 
 
-We formalize the asymmetric scheduling problem under a dual objective: minimizing total weighted completion time $\sum w_j C_j$ while providing latency-critical prioritization and bounded queuing delay under non-overloaded regimes. We rigorously prove that Weighted Shortest Processing Time (WSPT) sequencing via Smith's Rule is optimal for isolated, single-core non-preemptive queues at time zero ($1 || \sum w_j C_j$). We explicitly acknowledge that the generalized online problem with arbitrary release dates, preemption, and asymmetric parallel machines ($R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard; accordingly, we cite the classical Kawaguchi-Kyan bound ($\alpha \le 1.207$) strictly as an identical-machine reference bound and characterize OPTIMA's density-based virtual deadline list scheduling as an online approximation heuristic. Using the Hardy-Littlewood-P\'olya Rearrangement Inequality and continuous Dantzig knapsack relaxation, we prove that matching tasks with higher execution density to Performance cores maximizes the instantaneous backlog weight retirement rate.
+We formalize the asymmetric scheduling problem under a dual objective: minimizing total weighted completion time $\sum w_j C_j$ while providing latency-critical prioritization and bounded queuing delay under non-overloaded regimes. We rigorously prove that Weighted Shortest Processing Time (WSPT) sequencing via Smith's Rule is optimal for isolated, single-core non-preemptive queues at time zero ($1 || \sum w_j C_j$). We explicitly acknowledge that the generalized online problem with arbitrary release dates, preemption, and asymmetric parallel machines ($R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard; accordingly, we cite the classical Kawaguchi-Kyan bound ($\alpha \le \frac{1+\sqrt{2}}{2} \approx 1.207$) strictly as an identical-machine reference bound and characterize OPTIMA's density-based virtual deadline list scheduling as an online approximation heuristic. Using the Hardy-Littlewood-P\'olya Rearrangement Inequality and a continuous fluid progress rate formulation, we prove that matching tasks with higher execution density to Performance cores maximizes the instantaneous priority-weighted progress rate.
 
-Furthermore, we formalize an Online Admissible Preemption Filter (OAPF) based on a dimensionally consistent weighted one-step dispatch delay proxy $\Delta\mathrm{DelayProxy}(c) = w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$. We prove that this greedy filter enforces priority inversion safety, eliminates context-switch thrashing, and guarantees strict local one-step dispatch delay reduction. Finally, using a quadratic Lyapunov drift formulation with an exact cross-term expansion, we prove that OPTIMA's adaptive quantum scaling and hierarchical work-stealing maintain strong queue stability ($\limsup \frac{1}{T} \sum \mathbb{E}[q_k(t)] < \infty$) under all strictly admissible workloads ($\sum \lambda_k \bar{p}_k \le C_{\text{total}} - \epsilon_0$). By bounding virtual deadline advancement ($v_j \le t + 10 \tau_{\max}$), we reconcile strict priority queuing with guaranteed starvation freedom for every admitted task. Complete algorithmic specifications in kernel eBPF hot-paths are provided.
+Furthermore, we formalize an Online Admissible Preemption Filter (OAPF) based on a dimensionally consistent weighted one-step dispatch delay proxy $\Delta\mathrm{DelayProxy}(c) = w_{\mathrm{curr}}(c) \cdot (\tau_{\mathrm{slice}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$. We prove that this greedy filter enforces priority inversion safety, eliminates context-switch thrashing, and guarantees strict local one-step dispatch delay reduction. Finally, using a quadratic Lyapunov drift formulation with an exact cross-term expansion, we prove that OPTIMA's adaptive quantum scaling and hierarchical work-stealing maintain strong queue stability ($\limsup \frac{1}{T} \sum \mathbb{E}[q_k(t)] < \infty$) under all strictly admissible workloads ($\sum \lambda_k \bar{p}_k \le C_{\text{total}} - \epsilon_0$). By bounding virtual deadline advancement ($v_j \le t + 2 \tau_{\max}$ with increments $\Delta v_j \le \tau_{\max}$), we reconcile strict priority queuing with guaranteed starvation freedom for every admitted task. Complete algorithmic specifications in kernel eBPF hot-paths are provided.
 \end{abstract}
 
 % =========================================================================
@@ -119,7 +119,7 @@ Constraint~\eqref{eq:causality_constraint} enforces causality, and Constraint~\e
 In an open, general-purpose operating system without hard admission control, arbitrary processes may arrive concurrently without reservation contracts. Under arbitrary adversarial overload ($\sum_{j \in \mathcal{J}_{\mathrm{RT}}} p_j / (d_j - r_j) > M_P$), it is mathematically impossible for any online scheduler to guarantee hard real-time deadlines ($C_j \le d_j$) for all tasks. Consequently, OPTIMA formulates real-time support as:
 \begin{enumerate}
     \item \textbf{Latency-Critical Prioritization:} Latency-critical tasks are prioritized via zero-lag local dispatch and minimal virtual deadlines ($v_j = t$), ensuring immediate dispatch to Performance cores when capacity is available.
-    \item \textbf{Bounded Queuing Delay under Non-Overload:} Under non-overloaded regimes where the latency-critical workload utilization satisfies $\sum_{j \in \mathcal{J}_{\mathrm{RT}}} \frac{p_j}{d_j - r_j} \le U_{\mathrm{RT}} < M_P$, OPTIMA guarantees that real-time deadlines $C_j \le d_j$ are satisfied with high probability, with queuing delay strictly bounded by $\epsilon_{\mathrm{queue}} \le \tau_{\min}$.
+    \item \textbf{Bounded Queuing Delay under Non-Overload:} Under non-overloaded regimes where the latency-critical workload utilization satisfies $\sum_{j \in \mathcal{J}_{\mathrm{RT}}} \frac{p_j}{d_j - r_j} \le U_{\mathrm{RT}} < M_P$, OPTIMA provides bounded queuing delay and rapid dispatch onto Performance cores without priority inversion.
     \item \textbf{Graceful Degradation:} Under system overload, OPTIMA provides graceful degradation by minimizing total weighted completion time $\sum w_j C_j$, preventing unbounded starvation.
 \end{enumerate}
 \end{remark}
@@ -203,7 +203,7 @@ While Smith's Rule provides an exact, polynomial-time solution for the static si
 Using standard Graham notation $\alpha | \beta | \gamma$:
 \begin{enumerate}
     \item \textbf{Release Dates on a Single Core ($1 | r_j | \sum w_j C_j$):} Introducing dynamic task release dates makes the single-core non-preemptive problem strongly NP-hard, as proven by Lenstra, Rinnooy Kan, and Brucker (1977).
-    \item \textbf{Preemptive Scheduling with Release Dates ($1 | r_j, \text{pmtn} | \sum w_j C_j$):} Even when arbitrary preemption is permitted, minimizing total weighted completion time with dynamic arrivals remains strongly NP-hard (Labetoulle, Lawler, Lenstra, and Rinnooy Kan, 1984).
+    \item \textbf{Preemptive Scheduling with Release Dates ($1 | r_j, \text{pmtn} | \sum w_j C_j$):} Even when arbitrary preemption is permitted, minimizing total weighted completion time with dynamic arrivals remains strongly NP-hard (Lenstra, Rinnooy Kan, and Brucker, 1977; Bruno, Coffman, and Sethi, 1974).
     \item \textbf{Parallel Machines ($P || \sum w_j C_j$):} Scheduling independent jobs without release dates on identical parallel machines is strongly NP-hard (Garey and Johnson, 1979).
     \item \textbf{Asymmetric / Unrelated Parallel Machines ($R | r_j, \text{pmtn} | \sum w_j C_j$):} Scheduling dynamic tasks on asymmetric machines with disparate core capacities ($c_P \ne c_E$), arbitrary release dates, and preemption is strongly NP-hard.
 \end{enumerate}
@@ -289,17 +289,23 @@ Therefore, allocating tasks with highest densities to Performance cores strictly
 Maximizing $-\dot{W}(t)$ is an instantaneous (greedy) rate maximization at time $t$. Because future arrivals $r_j > t$ dynamically alter queue state, instantaneous rate maximization does not constitute a proof of global multi-stage offline optimality over $[0, \infty)$, but provides a principled mathematical basis for asymmetric core partitioning.
 \end{remark}
 
-\subsection{Continuous Dantzig Knapsack Formulation in eBPF}
-When tasks wake up dynamically, full combinatorial reassignment across all cores is computationally prohibitive. OPTIMA formulates core assignment as a continuous knapsack problem.
+\subsection{Density-Guided Domain Placement via Continuous Fluid Progress Rate}
+When tasks wake up dynamically, full combinatorial reassignment across all cores is computationally prohibitive. OPTIMA formulates core allocation between Performance and Efficiency domains through a continuous fluid progress rate relaxation.
 
-Let $x_j \in \{0, 1\}$ denote whether task $J_j$ is allocated to a Performance core ($x_j = 1$) or an Efficiency core ($x_j = 0$). The weighted completion time reduction obtained by executing $J_j$ on a P-core instead of an E-core is:
+Under a fluid relaxation where active jobs make continuous progress, the instantaneous priority-weighted rate of progress across the multiprocessor is:
 \begin{equation}
-\label{eq:knapsack_gain}
-\mathrm{Gain}(J_j) = w_j \left( \frac{p_j}{c_E} - \frac{p_j}{c_P} \right) = w_j p_j \left( \frac{c_P - c_E}{c_P c_E} \right)
+\label{eq:fluid_progress_rate}
+\mathcal{R}(t) \triangleq \sum_{k=1}^M \rho_{\sigma(k)} c_k = \sum_{k \in \mathcal{P}} \rho_{\sigma(k)} c_P + \sum_{k \in \mathcal{E}} \rho_{\sigma(k)} c_E
 \end{equation}
-Subject to the P-core capacity constraint $\sum_{j} x_j \le M_P$, the continuous relaxation upper bound (Dantzig knapsack relaxation) ranks tasks by marginal gain per unit capacity. By~\eqref{eq:knapsack_gain}, this marginal efficiency is directly proportional to task density $\rho_j = w_j / p_j$.
+where $\rho_{\sigma(k)} = w_{\sigma(k)} / p_{\mathrm{est},\sigma(k)}$ is the execution density of the task executing on core $k$. By the Hardy-Littlewood-P\'olya Rearrangement Inequality (Theorem~\ref{thm:rearrangement_depletion}), $\mathcal{R}(t)$ is strictly maximized when tasks with higher execution density are assigned to faster Performance cores ($c_P > c_E$).
 
-OPTIMA implements this continuous frontier in kernel eBPF by defining a critical density threshold $\rho^*$: tasks with $\rho_j \ge \rho^*$ or $w_j \ge w_{\mathrm{RT}}$ are placed in the Performance domain, while tasks with $\rho_j < \rho^*$ are placed in the Efficiency domain when P-core queues are congested. This yields a deterministic $\mathcal{O}(1)$ kernel hot-path decision tracking the continuous relaxation.
+OPTIMA operationalizes this fluid principle directly in kernel eBPF as an $\mathcal{O}(1)$ domain placement policy:
+\begin{itemize}
+    \item High-priority latency-critical tasks ($w_j \ge w_{\mathrm{RT}}$) are unconditionally placed into the dedicated Performance queue (\texttt{DSQ\_PERF}).
+    \item Long-running compute batch tasks ($p_{\mathrm{est},j} \ge 3\,\text{ms}$ or tagged as batch) have low execution density $\rho_j$ and are placed into the Efficiency domain queue (\texttt{DSQ\_EFF}), offloading sustained execution from P-cores.
+    \item Short interactive tasks ($p_{\mathrm{est},j} < 3\,\text{ms}$) with high execution density are routed to the domestic shared Performance queue (\texttt{DSQ\_SHARED\_P}), preserving Performance core bandwidth for rapid interactive turnaround.
+\end{itemize}
+This eliminates uncoordinated thread racing while providing a deterministic $\mathcal{O}(1)$ kernel hot-path decision rule grounded in fluid rate maximization.
 
 % =========================================================================
 % SECTION 3: THEOREM 2 (ONLINE ADMISSIBLE PREEMPTION FILTERING)
@@ -480,17 +486,26 @@ To maintain density-ordered scheduling across dynamic online arrivals without gl
 When task $J_j$ is enqueued into dispatch queue $k$ at time $t$, its virtual deadline $v_j(t)$ is computed via:
 \begin{equation}
 \label{eq:vdeadline}
-v_j(t) = \max\Big( v_j(t^-), \, t \Big) + \tau_j(t) \cdot \frac{100}{\max(w_j, 10)}
+v_j(t) = \max\Big( v_j(t^-), \, t \Big) + \Delta v_j(t)
 \end{equation}
-where $\tau_j(t)$ is the adaptive scheduling quantum computed as:
+where $\Delta v_j(t)$ is the execution-density-scaled virtual deadline advance:
+\begin{equation}
+\label{eq:delta_v_formula}
+\Delta v_j(t) = \mathrm{clamp}\left( \tau_j(t) \cdot \frac{\rho_{\mathrm{ref}}}{\rho_j}, \; \tau_{\min}, \; \tau_{\max} \right)
+\end{equation}
+with task density $\rho_j = \frac{\max(w_j, 10)}{p_{\mathrm{est},j}}$ and reference density $\rho_{\mathrm{ref}} = \frac{w_{\mathrm{ref}}}{p_{\mathrm{ref}}} = \frac{100}{1000\,\mu\text{s}} = 0.1\,\mu\text{s}^{-1}$. In integer arithmetic:
+\begin{equation}
+\Delta v_j(t) = \mathrm{clamp}\left( \frac{\tau_j(t) \cdot p_{\mathrm{est},j}}{10 \cdot \max(w_j, 10)}, \; \tau_{\min}, \; \tau_{\max} \right)
+\end{equation}
+Here $\tau_j(t)$ is the adaptive scheduling quantum computed as:
 \begin{equation}
 \label{eq:adaptive_slice}
 \tau_j(t) = \mathrm{clamp}\left( \frac{Q_{\mathrm{base}}}{1 + q_k(t)}, \; \tau_{\min}, \; \tau_{\max} \right)
 \end{equation}
-Here $q_k(t)$ denotes the current queue depth of target queue $k$, $Q_{\mathrm{base}}$ is the base nominal quantum, and $\tau_{\min}, \tau_{\max}$ are hardware enforcement boundaries.
+where $q_k(t)$ denotes current queue depth of target queue $k$, $Q_{\mathrm{base}}$ is base nominal quantum, and $\tau_{\min}, \tau_{\max}$ are hardware enforcement boundaries.
 \end{definition}
 
-For interactive tasks ($w_j \ge w_{\mathrm{RT}}$ or $p_j < \tau_{\min}$), $v_j(t) = t$, placing them at the front of the DSQ priority heap. For batch tasks, virtual deadlines advance monotonically in proportion to quantum consumed divided by task weight, preserving Generalized Processor Sharing (GPS) fairness while approximating Smith's density ordering.
+For interactive tasks ($w_j \ge w_{\mathrm{RT}}$ or $p_j < \tau_{\min}$), $v_j(t) = t$, placing them at the front of the DSQ priority heap. For batch tasks, virtual deadlines advance monotonically in proportion to quantum consumed scaled inversely by execution density ($\Delta v_j \propto 1/\rho_j = p_{\mathrm{est},j}/w_j$), maintaining Generalized Processor Sharing (GPS) fairness while approximating Smith's density ordering.
 
 \subsection{Queue State Dynamics}
 We model the system across four kernel dispatch queues:
@@ -662,13 +677,9 @@ Taking the limit superior as $T \to \infty$ establishes strong aggregate queue s
 \end{equation}
 \end{proof}
 
-\begin{proposition}[Individual Starvation Freedom via Virtual Deadline Clamping]
+\begin{proposition}[Virtual Deadline Bounding and Inter-Batch Starvation Protection]
 \label{prop:starvation}
-Under OPTIMA's virtual deadline calculus, every admitted task $J_j$ enqueued at time $t$ has its virtual deadline clamped by $v_j(t) \le t + 10 \tau_{\max}$. Any subsequent task $J_{j'}$ arriving at timestamp $t' > t + 10 \tau_{\max}$ receives $v_{j'}(t') \ge t' > v_j(t)$ and cannot supersede $J_j$. Because aggregate queue backlog is stable ($\mathbb{E}[Q_{\mathrm{total}}] \le B/\delta$) and domestic Efficiency cores provide guaranteed dedicated service capacity to batch queues, every admitted task is dispatched within finite expected waiting time:
-\begin{equation}
-\mathbb{E}[W_j] \le \left(\frac{B}{\delta}\right) \cdot \frac{\tau_{\max}}{\min(M_P, M_E)} < \infty
-\end{equation}
-guaranteeing complete starvation freedom.
+Under OPTIMA's virtual deadline calculus, every admitted task $J_j$ enqueued into a batch or interactive queue (\texttt{DSQ\_SHARED\_P}, \texttt{DSQ\_SHARED\_E}, \texttt{DSQ\_EFF}) at time $t$ has its virtual deadline clamped by $v_j(t) \le t + 2 \tau_{\max}$ (with incremental advance $\Delta v_j \le \tau_{\max}$). Any subsequent task $J_{j'}$ arriving at timestamp $t' > t + 2 \tau_{\max}$ receives $v_{j'}(t') \ge t' > v_j(t)$ and cannot supersede $J_j$. Since aggregate queue backlog is stable ($\limsup_{T \to \infty} \frac{1}{T}\sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\delta} < \infty$) and domestic Efficiency cores provide dedicated service capacity to batch queues, batch tasks are protected against indefinite starvation. Latency-critical tasks ($w \ge w_{\mathrm{RT}}$) receive immediate priority ($v_j = t$); under sustainable arrival intensity ($\lambda_1 \bar{p}_1 \le M_P c_P - \epsilon_1$), both latency-critical and batch queues achieve finite expected waiting times.
 \end{proposition}
 
 % =========================================================================
@@ -761,10 +772,10 @@ We formalize OPTIMA's core scheduling operations implemented in Linux \texttt{sc
     \STATE $tctx.dispatch\_local \leftarrow \text{FALSE}$
     \STATE $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau_{\min}, enq\_flags)$; \textbf{return}
 \ENDIF
-\STATE \COMMENT{Dantzig Knapsack Target DSQ Selection}
-\IF{$tctx.weight \ge w_{\mathrm{RT}} \lor tctx.core\_type == \text{CORE\_TYPE\_PERF}$}
+\STATE \COMMENT{Density-Guided Domain Placement Target DSQ Selection}
+\IF{$tctx.weight \ge w_{\mathrm{RT}}$}
     \STATE $target\_dsq \leftarrow \text{DSQ\_PERF}$
-\ELSIF{$tctx.avg\_runtime \ge 3\text{ms} \lor tctx.is\_batch \lor tctx.core\_type == \text{CORE\_TYPE\_EFF}$}
+\ELSIF{$tctx.avg\_runtime \ge 3\text{ms} \lor tctx.is\_batch$}
     \STATE $target\_dsq \leftarrow \text{DSQ\_EFF}$
 \ELSE
     \STATE $target\_dsq \leftarrow \text{is\_perf\_core}(task\_cpu) \ ? \ \text{DSQ\_SHARED\_P} : \text{DSQ\_SHARED\_E}$
@@ -782,8 +793,8 @@ We formalize OPTIMA's core scheduling operations implemented in Linux \texttt{sc
     \ENDIF
     \STATE $v \leftarrow \mathrm{clamp}(p.\text{scx.dsq\_vtime}, now, now + 2\tau)$
     \STATE $p_{\mathrm{est}} \leftarrow \max(tctx.avg\_runtime, \tau_{\min})$
-    \STATE $\rho \leftarrow \dfrac{\max(tctx.weight, 10)}{p_{\mathrm{est}}}$ \COMMENT{WSPT execution density}
-    \STATE $\Delta v \leftarrow \mathrm{clamp}\left( \dfrac{\tau \cdot 100}{\rho \cdot \tau_{\min}}, \; \tau_{\min}, \; \tau_{\max} \right)$
+    \STATE $\rho \leftarrow \dfrac{\max(tctx.weight, 10)}{p_{\mathrm{est}}}$ \COMMENT{Execution density $\rho = w / p_{\mathrm{est}}$}
+    \STATE $\Delta v \leftarrow \mathrm{clamp}\left( \dfrac{\tau \cdot p_{\mathrm{est}}}{10 \cdot \max(tctx.weight, 10)}, \; \tau_{\min}, \; \tau_{\max} \right)$ \COMMENT{Monotonic increment $\tau \cdot \rho_{\mathrm{ref}} / \rho$}
     \STATE $deadline \leftarrow v + \Delta v$
 \ENDIF
 \STATE $p.\text{scx.dsq\_vtime} \leftarrow deadline$
@@ -864,8 +875,8 @@ T.~Kawaguchi and S.~Kyan, ``Worst case bound of an {LRF} schedule for parallel p
 \bibitem{lenstra1977complexity}
 J.~K.~Lenstra, A.~H.~G.~Rinnooy~Kan, and P.~Brucker, ``Complexity of machine scheduling problems,'' \emph{Annals of Discrete Mathematics}, vol.~1, pp.~343--362, 1977.
 
-\bibitem{labetoulle1984preemptive}
-J.~Labetoulle, E.~L.~Lawler, J.~K.~Lenstra, and A.~H.~G.~Rinnooy~Kan, ``Preemptive scheduling of uniform machines subject to release dates,'' \emph{Mathematical Programming}, pp.~137--147, 1984.
+\bibitem{bruno1974sequencing}
+J.~Bruno, E.~G.~Coffman, and R.~Sethi, ``Sequencing problems with partially ordered tasks and alternative processors,'' \emph{Journal of the ACM}, vol.~21, no.~4, pp.~667--676, 1974.
 
 \bibitem{garey1979computers}
 M.~R.~Garey and D.~S.~Johnson, \emph{Computers and Intractability: A Guide to the Theory of {NP}-Completeness}. San Francisco, CA: W. H. Freeman and Company, 1979.
@@ -878,9 +889,6 @@ L.~Georgiadis, M.~J.~Neely, and L.~Tassiulas, ``Resource allocation and cross-la
 
 \bibitem{stoica1995eevdf}
 I.~Stoica and H.~Abdel-Wahab, ``Earliest Eligible Virtual Deadline First: A Flexible and Accurate Mechanism for Proportional Share Resource Allocation,'' Old Dominion University, Tech. Rep. TR-95-22, 1995.
-
-\bibitem{dantzig1957discrete}
-G.~B.~Dantzig, ``Discrete-variable extremum problems,'' \emph{Operations Research}, vol.~5, no.~2, pp.~266--277, 1957.
 
 \bibitem{heo2024schedext}
 T.~Heo, D.~Vernet, A.~Righi, and C.~Min, ``sched\_ext: BPF Extensible {CPU} Scheduling in the {Linux} Kernel,'' in \emph{Proceedings of the Linux Plumbers Conference (LPC)}, 2024.
