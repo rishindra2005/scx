@@ -358,11 +358,10 @@ While our primary evaluation is executed on AMD Zen 5/5c silicon, OPTIMA's core 
 
 #### 5.1.3 Execution Isolation & Hardware Energy Profiling
 To eliminate external operating system noise, scheduling jitter, and background interference:
-- **Isolated Execution Partition:** Benchmark workloads execute within dedicated vCPU partitions pinned 1:1 to isolated physical cores.
-- **Hardware Cache Isolation:** Hardware Cache Allocation Technology (CAT) bitmasks partition L3 cache ways, strictly preventing cross-domain cache evictions between host monitoring infrastructure and benchmark threads.
+- **Isolated CPU Execution:** Workloads execute within an isolated 12-thread physical core partition (4 P-cores and 8 E-cores) with affinity pinning.
 - **Dedicated IRQ Routing:** External device interrupts are affinity-pinned away from benchmark cores.
-- **Hardware RAPL Energy Counters:** Package and core energy consumption is measured via non-invasive hardware Running Average Power Limit (RAPL) MSRs/sysfs (`powercap/intel-rapl`) and PMU counters, tracking total Joules, average Watts, and Energy-Delay Product ($\mathrm{EDP} = \mathrm{Joules} \times \mathrm{Time}$).
-- **Statistical Rigor:** Every workload is executed through multiple complete independent repetitions (3--5 runs). We report mean values, sample standard deviations ($\pm \sigma$), and relative percentage deltas.
+- **Hardware RAPL Energy Counters:** Package and core energy consumption is measured via Linux's unified `powercap/intel-rapl` MSR subsystem (which natively interfaces with AMD Zen 5 Family 0x1A RAPL MSRs), tracking total Joules, average Watts, and Energy-Delay Product ($\mathrm{EDP} = \mathrm{Joules} \times \mathrm{Time}$).
+- **Statistical Rigor:** Every workload is executed through multiple complete independent repetitions (3 for performance benchmarks, 5 for RAPL energy). We report mean values, sample standard deviations ($\pm \sigma$), and relative percentage deltas.
 
 ### 5.2 Benchmark Workload Taxonomy
 We evaluate 16 diverse production and synthetic workloads covering real-time, throughput, memory, and communication profiles:
@@ -489,24 +488,28 @@ Asymmetric multi-core processors were fundamentally engineered to optimize energ
 
 #### Table 4: Hardware RAPL Energy Profiling & Energy-Delay Product (AMD Ryzen AI 9 HX 370, 5 Repetitions)
 
-| Workload Domain | Energy Metric | Unit | CFS / EEVDF | scx_optima | scx_rusty | scx_rlfifo | Advantage (vs CFS) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| Sysbench CPU Compute (12 threads) | Package Energy ($\downarrow$) | Joules | 180.89 ± 1.49 | 179.68 ± 1.52 | **176.27 ± 0.64** 🥇 | 176.68 ± 0.50 | -0.7% |
-| Sysbench CPU Compute (12 threads) | Core Energy ($\downarrow$) | Joules | 33.69 ± 0.59 | 34.13 ± 0.31 | 33.01 ± 0.64 | **33.00 ± 0.50** 🥇 | +1.3% |
-| Sysbench CPU Compute (12 threads) | Average Package Power | Watts | 36.14 ± 0.30 | 35.90 ± 0.30 | **35.22 ± 0.13** 🥇 | 35.30 ± 0.10 | -0.7% |
-| Sysbench CPU Compute (12 threads) | Energy-Delay Product (EDP) ($\downarrow$) | J·s | 905.39 ± 7.43 | 899.28 ± 7.65 | **882.22 ± 3.10** 🥇 | 884.36 ± 2.63 | -0.7% |
-| Sysbench Memory Bandwidth (12 thr) | Package Energy ($\downarrow$) | Joules | 137.69 ± 2.91 | 138.60 ± 2.02 | **131.24 ± 0.56** 🥇 | 133.87 ± 0.78 | +0.7% |
-| Sysbench Memory Bandwidth (12 thr) | Core Energy ($\downarrow$) | Joules | 22.29 ± 0.29 | 23.32 ± 0.58 | **21.87 ± 0.26** 🥇 | 22.25 ± 0.12 | +4.6% |
-| Sysbench Memory Bandwidth (12 thr) | Average Package Power | Watts | 27.51 ± 0.58 | 27.69 ± 0.41 | **26.22 ± 0.11** 🥇 | 26.75 ± 0.16 | +0.7% |
-| Sysbench Memory Bandwidth (12 thr) | Energy-Delay Product (EDP) ($\downarrow$) | J·s | 689.12 ± 14.52 | 693.74 ± 10.10 | **656.85 ± 2.85** 🥇 | 670.02 ± 3.91 | +0.7% |
-| IPC Pipe Ping-Pong (100k ops) | Package Energy ($\downarrow$) | Joules | 4.01 ± 0.62 | **3.10 ± 0.17** 🥇 | 3.44 ± 0.20 | 3.54 ± 0.39 | **-22.7%** |
-| IPC Pipe Ping-Pong (100k ops) | Core Energy ($\downarrow$) | Joules | 0.96 ± 0.18 | 0.71 ± 0.51 | 0.91 ± 0.68 | **0.58 ± 0.52** 🥇 | **-26.0%** |
-| IPC Pipe Ping-Pong (100k ops) | Average Package Power | Watts | 28.71 ± 2.49 | 22.75 ± 1.32 | 21.10 ± 4.28 | **19.00 ± 3.40** 🥇 | **-20.8%** |
-| IPC Pipe Ping-Pong (100k ops) | Energy-Delay Product (EDP) ($\downarrow$) | J·s | 0.58 ± 0.19 | **0.42 ± 0.02** 🥇 | 0.57 ± 0.08 | 0.67 ± 0.15 | **-27.6%** |
-| Hackbench Context-Switch (proc) | Package Energy ($\downarrow$) | Joules | 6.73 ± 0.78 | 4.12 ± 0.18 | 9.62 ± 1.58 | **4.00 ± 0.16** 🥇 | **-38.8%** |
-| Hackbench Context-Switch (proc) | Core Energy ($\downarrow$) | Joules | 1.14 ± 0.11 | 0.85 ± 0.03 | 1.70 ± 0.28 | **0.69 ± 0.04** 🥇 | **-25.4%** |
-| Hackbench Context-Switch (proc) | Average Package Power | Watts | 45.34 ± 0.87 | 48.05 ± 1.16 | **38.06 ± 1.95** 🥇 | 46.76 ± 0.89 | +6.0% |
-| Hackbench Context-Switch (proc) | Energy-Delay Product (EDP) ($\downarrow$) | J·s | 1.01 ± 0.23 | **0.35 ± 0.04** 🥇 | 2.53 ± 1.03 | **0.34 ± 0.03** 🥇 | **-65.3%** |
+| Energy Metric (Unit) | CFS / EEVDF | scx_optima | scx_rusty | scx_rlfifo | vs. CFS |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Sysbench CPU Compute (12 threads, 5.0s window)** | | | | | |
+| Package Energy (J) ($\downarrow$) | 180.89 ± 1.49 | 179.68 ± 1.52 | **176.27 ± 0.64** 🥇 | 176.68 ± 0.50 | -0.7% |
+| Core Energy (J) ($\downarrow$) | 33.69 ± 0.59 | 34.13 ± 0.31 | 33.01 ± 0.64 | **33.00 ± 0.50** 🥇 | +1.3% |
+| Avg Package Power (W) | 36.14 ± 0.30 | 35.90 ± 0.30 | **35.22 ± 0.13** 🥇 | 35.30 ± 0.10 | -0.7% |
+| EDP (J·s) ($\downarrow$) | 905.39 ± 7.43 | 899.28 ± 7.65 | **882.22 ± 3.10** 🥇 | 884.36 ± 2.63 | -0.7% |
+| **Sysbench Memory Bandwidth (12 threads, 5.0s window)** | | | | | |
+| Package Energy (J) ($\downarrow$) | 137.69 ± 2.91 | 138.60 ± 2.02 | **131.24 ± 0.56** 🥇 | 133.87 ± 0.78 | +0.7% |
+| Core Energy (J) ($\downarrow$) | 22.29 ± 0.29 | 23.32 ± 0.58 | **21.87 ± 0.26** 🥇 | 22.25 ± 0.12 | +4.6% |
+| Avg Package Power (W) | 27.51 ± 0.58 | 27.69 ± 0.41 | **26.22 ± 0.11** 🥇 | 26.75 ± 0.16 | +0.7% |
+| EDP (J·s) ($\downarrow$) | 689.12 ± 14.52 | 693.74 ± 10.10 | **656.85 ± 2.85** 🥇 | 670.02 ± 3.91 | +0.7% |
+| **IPC Pipe Ping-Pong (100k operations)** | | | | | |
+| Package Energy (J) ($\downarrow$) | 4.01 ± 0.62 | **3.10 ± 0.17** 🥇 | 3.44 ± 0.20 | 3.54 ± 0.39 | **-22.7%** |
+| Core Energy (J) ($\downarrow$) | 0.96 ± 0.18 | 0.71 ± 0.51 | 0.91 ± 0.68 | **0.58 ± 0.52** 🥇 | **-26.0%** |
+| Avg Package Power (W) | 28.71 ± 2.49 | 22.75 ± 1.32 | 21.10 ± 4.28 | **19.00 ± 3.40** 🥇 | **-20.8%** |
+| EDP (J·s) ($\downarrow$) | 0.58 ± 0.19 | **0.42 ± 0.02** 🥇 | 0.57 ± 0.08 | 0.67 ± 0.15 | **-27.6%** |
+| **Hackbench Context-Switch (isolated process group)** | | | | | |
+| Package Energy (J) ($\downarrow$) | 6.73 ± 0.78 | 4.12 ± 0.18 | 9.62 ± 1.58 | **4.00 ± 0.16** 🥇 | **-38.8%** |
+| Core Energy (J) ($\downarrow$) | 1.14 ± 0.11 | 0.85 ± 0.03 | 1.70 ± 0.28 | **0.69 ± 0.04** 🥇 | **-25.4%** |
+| Avg Package Power (W) | 45.34 ± 0.87 | 48.05 ± 1.16 | **38.06 ± 1.95** 🥇 | 46.76 ± 0.89 | +6.0% |
+| EDP (J·s) ($\downarrow$) | 1.01 ± 0.23 | **0.35 ± 0.04** 🥇 | 2.53 ± 1.03 | **0.34 ± 0.03** 🥇 | **-65.3%** |
 
 *Note:* Values represent mean ± sample standard deviation ($\sigma$) across 5 independent executions via hardware RAPL MSRs (`intel-rapl` sysfs interface) on the host AMD Zen 5/5c processor. 🥇 indicates lowest energy or EDP.
 

@@ -128,7 +128,7 @@ Hardware-native multi-tier; dynamic sysfs topology detection; speedup $\mu = c_P
 Direct \texttt{SCX\_DSQ\_LOCAL} on \texttt{SCX\_WAKE\_SYNC} (2.55\,$\mu$s); SMT locality. & 
 Online Admissible Preemption Filter (OAPF): $\Delta\mathrm{DelayProxy} < 0$; bounded inversion ($\le \tau_{\max}$). & 
 Density-based WSPT + virtual deadlines; Lyapunov drift queue stabilization. & 
-BPF \texttt{task\_storage} (~64\,B); per-CPU array maps (~16\,KB total). & 
+BPF \texttt{task\_storage} ($\sim$64\,B); per-CPU array maps ($\sim$16\,KB total). & 
 $\mathcal{O}(1)$ atomic BPF \texttt{.rodata} live tuning; lightweight user topology controller. \\
 \textbf{CFS / EEVDF} \newline \textit{(Linux Default)} & 
 Capacity-aware heuristics (\texttt{sched-capacity}); lacks execution density metrics. & 
@@ -156,7 +156,7 @@ Unaware; global shared queue without core differentiation. &
 Generic dispatch; lacks synchronous waker-affinity routing. & 
 Round-robin / FIFO; periodic slice preemption without priority differentiation. & 
 Susceptible to head-of-line blocking and severe tail spikes under mixed workloads. & 
-Minimal BPF dispatch queue state (~8\,KB). & 
+Minimal BPF dispatch queue state ($\sim$8\,KB). & 
 Static FIFO policy; requires restarting scheduler to modify parameters. \\
 \textbf{\texttt{scx\_lavd}} \newline \cite{min2024scxlavd} & 
 Topology-informed; tracks core frequencies for gaming interactivity. & 
@@ -332,7 +332,7 @@ While Theorem~\ref{thm:oapf} formally prevents lower-priority tasks from interru
 
 To resolve this latency cliff without inducing context-switch thrashing, OPTIMA incorporates \textbf{OAPF-Adaptive}:
 \begin{definition}[Admissible Peer Preemption Criterion]
-Let $J_{\mathrm{curr}}(c)$ and $J_{\mathrm{wake}}$ belong to equal priority classes ($w_{\mathrm{curr}}(c) = w_{\mathrm{wake}}$). Peer preemption is admissible if and only if the incumbent thread has attained forward execution progress of at least $\tau_{\mathrm{soft}} = 1{,}000\,\mu\mathrm{s}$ and possesses remaining quantum $R(c) > \tau_{\min} = 500\,\mu\mathrm{s}$. The peer dispatch delay differential is defined as:
+Let $J_{\mathrm{curr}}(c)$ and $J_{\mathrm{wake}}$ belong to equal priority classes ($w_{\mathrm{curr}}(c) = w_{\mathrm{wake}}$). Peer preemption is admissible if and only if the incumbent thread has attained forward execution progress of at least $E(c) \ge \tau_{\mathrm{soft}} = 1{,}000\,\mu\mathrm{s}$ and possesses remaining quantum $R(c) > \tau_{\min} = 500\,\mu\mathrm{s}$. The peer dispatch delay differential is defined as:
 \begin{align}
 \label{eq:peer_delay}
 \Delta\mathrm{DelayPeer}(c) &\triangleq w_{\mathrm{curr}}(c) \cdot C_{\mathrm{switch}} - w_{\mathrm{wake}} \cdot (R(c) - \tau_{\min}) \nonumber \\
@@ -439,7 +439,7 @@ Algorithms~\ref{alg:select_cpu} and~\ref{alg:enqueue} detail the complete execut
 \STATE \quad \quad $oapf \leftarrow \textsc{OPTIMA-OAPF}(p, tctx, \mathcal{P})$
 \STATE \quad \quad \textbf{if} $oapf \ge 0$ \textbf{then} $tctx.dispatch\_local \leftarrow \text{TRUE}$; \textbf{return} $oapf$
 \STATE \quad $tctx.dispatch\_local \leftarrow \text{FALSE}$; \textbf{return} $prev\_cpu$
-\STATE \quad \textbf{direct\_dispatch:} $\tau \leftarrow \text{calc\_slice}(tctx)$; $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau, 0)$; \textbf{return} $target\_cpu$
+\STATE \quad \textbf{direct\_dispatch}($target\_cpu$): $\tau \leftarrow \text{calc\_slice}(tctx)$; $\text{scx\_bpf\_dsq\_insert}(p, \text{SCX\_DSQ\_LOCAL}, \tau, 0)$; \textbf{return} $target\_cpu$
 \STATE \textbf{function} \textsc{OPTIMA-OAPF}($p, tctx, \mathcal{P}$):
 \STATE \quad $c^* \leftarrow -1$, $\Delta\mathrm{Proxy}^* \leftarrow 0$, $now \leftarrow \text{scx\_bpf\_now}()$
 \STATE \quad $w_{\mathrm{wake}} \leftarrow \max(tctx.weight, 10)$, $\tau_{\mathrm{slice}} \leftarrow \tau_{\min}$, $C_{\mathrm{switch}} \leftarrow 50\,\mu\text{s}$
@@ -480,18 +480,20 @@ Algorithms~\ref{alg:select_cpu} and~\ref{alg:enqueue} detail the complete execut
 \STATE \quad \quad $\tau \leftarrow (tctx.avg\_runtime \ge 3\text{ms}) \ ? \ \tau_{\max} : \max(\frac{Q_{\text{base}}}{1+q}, \tau_{\min})$
 \STATE \quad \quad $v \leftarrow \mathrm{clamp}(p.\text{vtime}, now, now + 2\tau)$; $p_{\mathrm{est}} \leftarrow \max(tctx.avg\_runtime, \tau_{\min})$
 \STATE \quad \quad $\Delta v \leftarrow \mathrm{clamp}\left( \frac{\tau \cdot p_{\mathrm{est}}}{10 \cdot \max(tctx.weight, 10)}, \; \tau_{\min}, \; \tau_{\max} \right)$; $deadline \leftarrow v + \Delta v$
-\STATE \quad $p.\text{vtime} \leftarrow deadline$; $\text{scx\_bpf\_dsq\_insert\_vtime}(p, target, \tau, deadline, enq\_flags)$
+\STATE \quad $p.\text{vtime} \leftarrow deadline$
+\STATE \quad $\text{scx\_bpf\_dsq\_insert\_vtime}(p, target, \tau, deadline, enq\_flags)$
 \STATE \quad $idle \leftarrow \text{scx\_bpf\_pick\_idle\_cpu}(p.\text{allowed}, 0)$
 \STATE \quad \textbf{if} $idle \ge 0$ \textbf{then} $\text{scx\_bpf\_kick\_cpu}(idle, \text{SCX\_KICK\_IDLE})$; \textbf{return}
-\STATE \quad \textbf{if} $is\_rt \lor (tctx.weight == 100 \land \text{dsq\_nr\_queued}(\texttt{DSQ\_SHARED\_P}) > 0)$ \textbf{then}
+\STATE \quad $is\_ia \leftarrow (\neg tctx.is\_batch \lor tctx.avg\_runtime < 1\text{ms} \lor tctx.weight \ge w_{\mathrm{RT}})$
+\STATE \quad \textbf{if} $is\_rt \lor (is\_ia \land \text{dsq\_nr\_queued}(\texttt{DSQ\_SHARED\_P}) > 0)$ \textbf{then}
 \STATE \quad \quad $oapf \leftarrow \textsc{OPTIMA-OAPF}(p, tctx, \mathcal{P})$
 \STATE \quad \quad \textbf{if} $oapf \ge 0$ \textbf{then} $\text{scx\_bpf\_kick\_cpu}(oapf, \text{SCX\_KICK\_PREEMPT})$
 \STATE \textbf{function} \textsc{OPTIMA-DISPATCH}($cpu$):
 \STATE \quad \textbf{if} $\text{is\_perf}(cpu)$ \textbf{then}
-\STATE \quad \quad \textbf{for} $dsq \in [\text{DSQ\_PERF}, \text{DSQ\_SHARED\_P}, \text{DSQ\_SHARED\_E}, \text{DSQ\_EFF}]$ \textbf{do}
+\STATE \quad \quad \textbf{for} $dsq \in [\text{PERF}, \text{SHARED\_P}, \text{SHARED\_E}, \text{EFF}]$ \textbf{do}
 \STATE \quad \quad \quad \textbf{if} $\text{scx\_bpf\_dsq\_move\_to\_local}(dsq, 0)$ \textbf{then} \textbf{return}
 \STATE \quad \textbf{else}
-\STATE \quad \quad \textbf{for} $dsq \in [\text{DSQ\_SHARED\_E}, \text{DSQ\_EFF}, \text{DSQ\_SHARED\_P}, \text{DSQ\_PERF}]$ \textbf{do}
+\STATE \quad \quad \textbf{for} $dsq \in [\text{SHARED\_E}, \text{EFF}, \text{SHARED\_P}, \text{PERF}]$ \textbf{do}
 \STATE \quad \quad \quad \textbf{if} $\text{scx\_bpf\_dsq\_move\_to\_local}(dsq, 0)$ \textbf{then} \textbf{return}
 \end{algorithmic}
 \end{algorithm}
@@ -516,7 +518,7 @@ The compute capacity ratio yields an empirical single-thread compute speedup fac
 \subsubsection{Execution Isolation \& Hardware Energy Profiling}
 To eliminate external operating system noise, scheduling jitter, and background interference:
 \begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}
-    \item \textbf{Isolated CPU Execution:} Workloads execute within isolated physical core sets with affinity pinning.
+    \item \textbf{Isolated CPU Execution:} Workloads execute within an isolated 12-thread physical core partition (4 P-cores and 8 E-cores) with affinity pinning.
     \item \textbf{Dedicated IRQ Routing:} External device interrupts are affinity-pinned away from benchmark cores.
     \item \textbf{Hardware RAPL Energy Counters:} Package and core energy consumption is measured via Linux's unified \texttt{powercap/intel-rapl} MSR subsystem (which natively interfaces with AMD Zen 5 Family 0x1A RAPL MSRs), tracking total Joules, average Watts, and Energy-Delay Product ($\mathrm{EDP} = \mathrm{Joules} \times \mathrm{Time}$).
     \item \textbf{Statistical Rigor:} Every workload is executed through multiple independent repetitions (3 for performance benchmarks, 5 for RAPL energy). We report mean values, sample standard deviations ($\pm \sigma$), and relative percentage deltas.
@@ -677,48 +679,52 @@ Asymmetric multi-core processors were fundamentally engineered to optimize energ
 \caption{Hardware RAPL Energy Profiling \& Energy-Delay Product (AMD Ryzen AI 9 HX 370, 5 Repetitions)}
 \label{tab:rapl_energy}
 \scriptsize
-\setlength{\tabcolsep}{2.5pt}
-\renewcommand{\arraystretch}{1.05}
+\setlength{\tabcolsep}{2.8pt}
+\renewcommand{\arraystretch}{0.85}
 \resizebox{\columnwidth}{!}{%
-\begin{tabular}{llrrrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-\textbf{Workload Domain} & \textbf{Energy Metric (Unit)} & \textbf{CFS / EEVDF} & \textbf{scx\_optima} & \textbf{scx\_rusty} & \textbf{scx\_rlfifo} & \textbf{Advantage (vs CFS)} \\
+\textbf{Energy Metric (Unit)} & \textbf{CFS / EEVDF} & \textbf{scx\_optima} & \textbf{scx\_rusty} & \textbf{scx\_rlfifo} & \textbf{vs.\ CFS} \\
 \midrule
-Sysbench CPU Compute (12 threads) & Package Energy (Joules) $\downarrow$ & $180.89 \pm 1.49$ & $179.68 \pm 1.52$ & $\mathbf{176.27 \pm 0.64} \star$ & $176.68 \pm 0.50$ & -0.7\% \\
-Sysbench CPU Compute (12 threads) & Core Energy (Joules) $\downarrow$ & $33.69 \pm 0.59$ & $34.13 \pm 0.31$ & $33.01 \pm 0.64$ & $\mathbf{33.00 \pm 0.50} \star$ & +1.3\% \\
-Sysbench CPU Compute (12 threads) & Average Package Power (Watts) & $36.14 \pm 0.30$ & $35.90 \pm 0.30$ & $\mathbf{35.22 \pm 0.13} \star$ & $35.30 \pm 0.10$ & -0.7\% \\
-Sysbench CPU Compute (12 threads) & Energy-Delay Product (EDP, J$\cdot$s) $\downarrow$ & $905.39 \pm 7.43$ & $899.28 \pm 7.65$ & $\mathbf{882.22 \pm 3.10} \star$ & $884.36 \pm 2.63$ & -0.7\% \\
+\multicolumn{6}{l}{\textbf{Sysbench CPU Compute (12 threads, 5.0s window)}} \\
+Package Energy (J) $\downarrow$ & $180.89 \pm 1.49$ & $179.68 \pm 1.52$ & $\mathbf{176.27 \pm 0.64} \star$ & $176.68 \pm 0.50$ & -0.7\% \\
+Core Energy (J) $\downarrow$ & $33.69 \pm 0.59$ & $34.13 \pm 0.31$ & $33.01 \pm 0.64$ & $\mathbf{33.00 \pm 0.50} \star$ & +1.3\% \\
+Avg Package Power (W) & $36.14 \pm 0.30$ & $35.90 \pm 0.30$ & $\mathbf{35.22 \pm 0.13} \star$ & $35.30 \pm 0.10$ & -0.7\% \\
+EDP (J$\cdot$s) $\downarrow$ & $905.39 \pm 7.43$ & $899.28 \pm 7.65$ & $\mathbf{882.22 \pm 3.10} \star$ & $884.36 \pm 2.63$ & -0.7\% \\
 \midrule
-Sysbench Memory Bandwidth (12 thr) & Package Energy (Joules) $\downarrow$ & $137.69 \pm 2.91$ & $138.60 \pm 2.02$ & $\mathbf{131.24 \pm 0.56} \star$ & $133.87 \pm 0.78$ & +0.7\% \\
-Sysbench Memory Bandwidth (12 thr) & Core Energy (Joules) $\downarrow$ & $22.29 \pm 0.29$ & $23.32 \pm 0.58$ & $\mathbf{21.87 \pm 0.26} \star$ & $22.25 \pm 0.12$ & +4.6\% \\
-Sysbench Memory Bandwidth (12 thr) & Average Package Power (Watts) & $27.51 \pm 0.58$ & $27.69 \pm 0.41$ & $\mathbf{26.22 \pm 0.11} \star$ & $26.75 \pm 0.16$ & +0.7\% \\
-Sysbench Memory Bandwidth (12 thr) & Energy-Delay Product (EDP, J$\cdot$s) $\downarrow$ & $689.12 \pm 14.52$ & $693.74 \pm 10.10$ & $\mathbf{656.85 \pm 2.85} \star$ & $670.02 \pm 3.91$ & +0.7\% \\
+\multicolumn{6}{l}{\textbf{Sysbench Memory Bandwidth (12 threads, 5.0s window)}} \\
+Package Energy (J) $\downarrow$ & $137.69 \pm 2.91$ & $138.60 \pm 2.02$ & $\mathbf{131.24 \pm 0.56} \star$ & $133.87 \pm 0.78$ & +0.7\% \\
+Core Energy (J) $\downarrow$ & $22.29 \pm 0.29$ & $23.32 \pm 0.58$ & $\mathbf{21.87 \pm 0.26} \star$ & $22.25 \pm 0.12$ & +4.6\% \\
+Avg Package Power (W) & $27.51 \pm 0.58$ & $27.69 \pm 0.41$ & $\mathbf{26.22 \pm 0.11} \star$ & $26.75 \pm 0.16$ & +0.7\% \\
+EDP (J$\cdot$s) $\downarrow$ & $689.12 \pm 14.52$ & $693.74 \pm 10.10$ & $\mathbf{656.85 \pm 2.85} \star$ & $670.02 \pm 3.91$ & +0.7\% \\
 \midrule
-IPC Pipe Ping-Pong (100k ops) & Package Energy (Joules) $\downarrow$ & $4.01 \pm 0.62$ & $\mathbf{3.10 \pm 0.17} \star$ & $3.44 \pm 0.20$ & $3.54 \pm 0.39$ & \textbf{-22.7\%} \\
-IPC Pipe Ping-Pong (100k ops) & Core Energy (Joules) $\downarrow$ & $0.96 \pm 0.18$ & $0.71 \pm 0.51$ & $0.91 \pm 0.68$ & $\mathbf{0.58 \pm 0.52} \star$ & \textbf{-26.0\%} \\
-IPC Pipe Ping-Pong (100k ops) & Average Package Power (Watts) & $28.71 \pm 2.49$ & $22.75 \pm 1.32$ & $21.10 \pm 4.28$ & $\mathbf{19.00 \pm 3.40} \star$ & \textbf{-20.8\%} \\
-IPC Pipe Ping-Pong (100k ops) & Energy-Delay Product (EDP, J$\cdot$s) $\downarrow$ & $0.58 \pm 0.19$ & $\mathbf{0.42 \pm 0.02} \star$ & $0.57 \pm 0.08$ & $0.67 \pm 0.15$ & \textbf{-27.6\%} \\
+\multicolumn{6}{l}{\textbf{IPC Pipe Ping-Pong (100k operations)}} \\
+Package Energy (J) $\downarrow$ & $4.01 \pm 0.62$ & $\mathbf{3.10 \pm 0.17} \star$ & $3.44 \pm 0.20$ & $3.54 \pm 0.39$ & \textbf{-22.7\%} \\
+Core Energy (J) $\downarrow$ & $0.96 \pm 0.18$ & $0.71 \pm 0.51$ & $0.91 \pm 0.68$ & $\mathbf{0.58 \pm 0.52} \star$ & \textbf{-26.0\%} \\
+Avg Package Power (W) & $28.71 \pm 2.49$ & $22.75 \pm 1.32$ & $21.10 \pm 4.28$ & $\mathbf{19.00 \pm 3.40} \star$ & \textbf{-20.8\%} \\
+EDP (J$\cdot$s) $\downarrow$ & $0.58 \pm 0.19$ & $\mathbf{0.42 \pm 0.02} \star$ & $0.57 \pm 0.08$ & $0.67 \pm 0.15$ & \textbf{-27.6\%} \\
 \midrule
-Hackbench Context-Switch (proc) & Package Energy (Joules) $\downarrow$ & $6.73 \pm 0.78$ & $4.12 \pm 0.18$ & $9.62 \pm 1.58$ & $\mathbf{4.00 \pm 0.16} \star$ & \textbf{-38.8\%} \\
-Hackbench Context-Switch (proc) & Core Energy (Joules) $\downarrow$ & $1.14 \pm 0.11$ & $0.85 \pm 0.03$ & $1.70 \pm 0.28$ & $\mathbf{0.69 \pm 0.04} \star$ & \textbf{-25.4\%} \\
-Hackbench Context-Switch (proc) & Average Package Power (Watts) & $45.34 \pm 0.87$ & $48.05 \pm 1.16$ & $\mathbf{38.06 \pm 1.95} \star$ & $46.76 \pm 0.89$ & +6.0\% \\
-Hackbench Context-Switch (proc) & Energy-Delay Product (EDP, J$\cdot$s) $\downarrow$ & $1.01 \pm 0.23$ & $\mathbf{0.35 \pm 0.04} \star$ & $2.53 \pm 1.03$ & $\mathbf{0.34 \pm 0.03} \star$ & \textbf{-65.3\%} \\
+\multicolumn{6}{l}{\textbf{Hackbench Context-Switch (isolated process group)}} \\
+Package Energy (J) $\downarrow$ & $6.73 \pm 0.78$ & $4.12 \pm 0.18$ & $9.62 \pm 1.58$ & $\mathbf{4.00 \pm 0.16} \star$ & \textbf{-38.8\%} \\
+Core Energy (J) $\downarrow$ & $1.14 \pm 0.11$ & $0.85 \pm 0.03$ & $1.70 \pm 0.28$ & $\mathbf{0.69 \pm 0.04} \star$ & \textbf{-25.4\%} \\
+Avg Package Power (W) & $45.34 \pm 0.87$ & $48.05 \pm 1.16$ & $\mathbf{38.06 \pm 1.95} \star$ & $46.76 \pm 0.89$ & +6.0\% \\
+EDP (J$\cdot$s) $\downarrow$ & $1.01 \pm 0.23$ & $\mathbf{0.35 \pm 0.04} \star$ & $2.53 \pm 1.03$ & $\mathbf{0.34 \pm 0.03} \star$ & \textbf{-65.3\%} \\
 \bottomrule
 \end{tabular}%
 }
-\vspace{0.5ex}
+\vspace{0.2ex}
 \raggedright \tiny Note: Mean $\pm \sigma$ across 5 runs via \texttt{powercap/intel-rapl} MSRs on AMD Zen 5/5c. Star ($\star$) indicates lowest energy/EDP.
 \end{table}
 
 Table~\ref{tab:rapl_energy} presents hardware RAPL energy measurements collected across 5 independent runs on the host AMD Zen 5/5c processor via Linux's unified \texttt{powercap/intel-rapl} driver (which natively interfaces with AMD Zen 5 Family 0x1A RAPL MSRs):
-\begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}
+\begin{itemize}\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}
     \item \textbf{Synchronous IPC Energy Dividends:} In fixed-work \texttt{perf bench sched pipe} (100k operations), OPTIMA reduces total package energy from $4.01 \pm 0.62$\,J on CFS down to $\mathbf{3.10 \pm 0.17}$\,J (\textbf{-22.7\%}), while core energy drops from $0.96 \pm 0.18$\,J to $\mathbf{0.71 \pm 0.51}$\,J (\textbf{-26.0\%}). Average package power decreases from $28.71 \pm 2.49$\,W to $\mathbf{22.75 \pm 1.32}$\,W (\textbf{-20.8\%}), driving Energy-Delay Product down to $\mathbf{0.42 \pm 0.02}$\,J$\cdot$s (\textbf{-27.6\% EDP reduction} vs. CFS's $0.58 \pm 0.19$\,J$\cdot$s). By confining communicating thread pairs to local cores and eliminating cross-CCX IPI wakeups, OPTIMA minimizes dynamic uncore and interconnect power dissipation.
-    \item \textbf{Process Churn \& Race-to-Sleep Optimization:} In \texttt{hackbench}, OPTIMA reduces package energy from $6.73 \pm 0.78$\,J down to $\mathbf{4.12 \pm 0.18}$\,J (\textbf{-38.8\%}), slashing EDP by \textbf{65.3\%} ($1.01 \pm 0.23$\,J$\cdot$s on CFS vs. $\mathbf{0.35 \pm 0.04}$\,J$\cdot$s on OPTIMA). While instantaneous power is modestly higher ($48.05$\,W vs. $45.34$\,W), OPTIMA's zero-lag local enqueue enables processes to finish in nearly half the time ($0.086$\,s vs. $0.148$\,s in this isolated profile), achieving substantial race-to-sleep energy savings. (Note that this RAPL profile evaluated an isolated process group configuration to isolate switching energy, whereas Table~\ref{tab:benchmark_results} reports the 16-group benchmark at $0.29 \pm 0.01$\,s vs. $0.35 \pm 0.04$\,s).
+    \item \textbf{Process Churn \& Race-to-Sleep Optimization:} In \texttt{hackbench}, OPTIMA reduces package energy from $6.73 \pm 0.78$\,J down to $\mathbf{4.12 \pm 0.18}$\,J (\textbf{-38.8\%}), slashing EDP by \textbf{65.3\%} ($1.01 \pm 0.23$\,J$\cdot$s on CFS vs. $\mathbf{0.35 \pm 0.04}$\,J$\cdot$s on OPTIMA). While instantaneous power is modestly higher ($48.05$\,W vs. $45.34$\,W), OPTIMA's zero-lag local enqueue enables processes to finish in nearly half the time ($0.086$\,s vs. $0.148$\,s in this isolated profile), achieving substantial race-to-sleep energy savings. (Note: this profile evaluated an isolated process group to isolate switching energy, while Table~\ref{tab:benchmark_results} reports the 16-group suite at $0.29 \pm 0.01$\,s vs. $0.35 \pm 0.04$\,s).
     \item \textbf{Batch Compute and Fixed-Duration Nuances:} In \texttt{sysbench cpu} (executed as a 5.0\,s fixed-duration run), package power across all schedulers converges within $\approx 1\text{--}2\%$ of CFS ($35.90$\,W vs. $36.14$\,W), yielding identical package energy ($179.68$\,J vs. $180.89$\,J). Because this benchmark operates over a fixed temporal window rather than fixed work, the reported EDP ($899.28$\,J$\cdot$s vs. $905.39$\,J$\cdot$s) scales directly with energy. Evaluating energy per completed CPU event reveals the true trade-off: CFS retires 11,712 EPS consuming $3.09\,\text{mJ/event}$, whereas OPTIMA retires 6,028 EPS consuming $5.96\,\text{mJ/event}$ due to density-based E-core steering and BPF dispatch pacing. Conversely, in \texttt{sysbench memory}, OPTIMA delivers 12.8\% higher data throughput at energy parity ($138.60$\,J vs. $137.69$\,J, $+0.7\%$), confirming that memory saturation is preserved without energy penalty.
 \end{itemize}
 
 \subsection{Limitations and Future Work}
-Several open challenges remain for extensible asymmetric scheduling: (1)~\emph{Cross-Platform Validation:} Expanding empirical evaluation beyond AMD Zen~5/5c silicon to Intel hybrid processors with Hardware Feedback Interface (HFI) and ARM big.LITTLE / DynamIQ mobile SoCs; (2)~\emph{Dynamic Power Integration:} Integrating OPTIMA's density placement with Energy-Aware Scheduling (EAS) power models and DVFS governors to throttle core frequencies during low-density phases; and (3)~\emph{Dynamic Burst Estimation:} Incorporating compiler-assisted runtime hinting or BPF quantile tracking to refine burst predictions in JIT-compiled languages and asynchronous actor systems.
+Several open challenges remain for extensible asymmetric scheduling: (1)~\emph{Cross-Platform Validation:} Expanding empirical evaluation beyond AMD Zen~5/5c silicon to Intel hybrid processors with HFI and ARM big.LITTLE / DynamIQ SoCs; (2)~\emph{Dynamic Power Integration:} Integrating density placement with Energy-Aware Scheduling (EAS) models and DVFS governors to throttle core frequencies during low-density phases; and (3)~\emph{Dynamic Burst Estimation:} Incorporating compiler-assisted runtime hinting or BPF quantile tracking to refine burst predictions in JIT-compiled runtimes.
 
 % =========================================================================
 % SECTION 7: CONCLUSION
