@@ -1,0 +1,762 @@
+{
+  "cfs": {
+    "sysbench_cpu": [
+      {
+        "elapsed_s": 5.0052108590025455,
+        "pkg_joules": 182.11665,
+        "core_joules": 34.247618,
+        "pkg_watts": 36.38541015159005,
+        "core_watts": 6.842392651330773,
+        "edp_js": 911.5322341851659,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.004963332001353,
+        "pkg_joules": 180.493397,
+        "core_joules": 33.322053,
+        "pkg_watts": 36.06288098974452,
+        "core_watts": 6.65780162402816,
+        "edp_js": 903.3628336533629,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.005363395997847,
+        "pkg_joules": 179.095902,
+        "core_joules": 33.066238,
+        "pkg_watts": 35.78079908108175,
+        "core_watts": 6.60616130817572,
+        "edp_js": 896.4400722440175,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.004937053003232,
+        "pkg_joules": 182.699551,
+        "core_joules": 34.38195,
+        "pkg_watts": 36.50386589584986,
+        "core_watts": 6.869606877347035,
+        "edp_js": 914.3997523669537,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.005394004001573,
+        "pkg_joules": 180.048184,
+        "core_joules": 33.441127,
+        "pkg_watts": 35.970831438256425,
+        "core_watts": 6.681017912529048,
+        "edp_js": 901.212100624972,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      }
+    ],
+    "sysbench_mem": [
+      {
+        "elapsed_s": 5.0056102509988705,
+        "pkg_joules": 138.154995,
+        "core_joules": 22.480496,
+        "pkg_watts": 27.600030380397907,
+        "core_watts": 4.49106000522394,
+        "edp_js": 691.5500591986978,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.0043645149999065,
+        "pkg_joules": 136.041274,
+        "core_joules": 22.120026,
+        "pkg_watts": 27.184525346272167,
+        "core_watts": 4.420146840562515,
+        "edp_js": 680.8001241809793,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.004077924997546,
+        "pkg_joules": 142.095847,
+        "core_joules": 22.304541,
+        "pkg_watts": 28.39601004016533,
+        "core_watts": 4.457272915071749,
+        "edp_js": 711.0586912065287,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.004913945995213,
+        "pkg_joules": 137.864178,
+        "core_joules": 22.635319,
+        "pkg_watts": 27.545763920739322,
+        "core_watts": 4.522619018876863,
+        "edp_js": 689.9983471253665,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.004970566005795,
+        "pkg_joules": 134.306516,
+        "core_joules": 21.888165,
+        "pkg_watts": 26.834626543504925,
+        "core_watts": 4.37328545919258,
+        "edp_js": 672.2001594027863,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      }
+    ],
+    "pipe_pingpong": [
+      {
+        "elapsed_s": 0.17491512199922,
+        "pkg_joules": 5.111369,
+        "core_joules": 1.148454,
+        "pkg_watts": 29.22199602629436,
+        "core_watts": 6.565778801018253,
+        "edp_js": 0.894055732218031,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.167 [sec]\n\n       1.676200 usecs/op\n         596587 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.11786629100242862,
+        "pkg_joules": 3.694419,
+        "core_joules": 0.9761,
+        "pkg_watts": 31.344152501785917,
+        "core_watts": 8.281417797221494,
+        "edp_js": 0.43544746493890135,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.112 [sec]\n\n       1.125120 usecs/op\n         888794 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.13429981600347674,
+        "pkg_joules": 3.726111,
+        "core_joules": 0.991511,
+        "pkg_watts": 27.744721555713365,
+        "core_watts": 7.382817262939005,
+        "edp_js": 0.5004160217085307,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.128 [sec]\n\n       1.287840 usecs/op\n         776493 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.12068679399817483,
+        "pkg_joules": 3.655542,
+        "core_joules": 1.020028,
+        "pkg_watts": 30.289494640609007,
+        "core_watts": 8.45186093861625,
+        "edp_js": 0.441175644305676,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.113 [sec]\n\n       1.139520 usecs/op\n         877562 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.15572517499822425,
+        "pkg_joules": 3.886533,
+        "core_joules": 0.664593,
+        "pkg_watts": 24.95764092122111,
+        "core_watts": 4.26772999296728,
+        "edp_js": 0.6052310315613735,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.148 [sec]\n\n       1.488640 usecs/op\n         671754 ops/sec\n"
+      }
+    ],
+    "hackbench_proc": [
+      {
+        "elapsed_s": 0.17324307300441433,
+        "pkg_joules": 8.097161,
+        "core_joules": 1.311624,
+        "pkg_watts": 46.73872876749121,
+        "core_watts": 7.571004007569059,
+        "edp_js": 1.4027770542514966,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.160\n"
+      },
+      {
+        "elapsed_s": 0.1434097169985762,
+        "pkg_joules": 6.377066,
+        "core_joules": 1.087987,
+        "pkg_watts": 44.46746101635019,
+        "core_watts": 7.586564026277256,
+        "edp_js": 0.9145332303412422,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.135\n"
+      },
+      {
+        "elapsed_s": 0.13684247600031085,
+        "pkg_joules": 6.222289,
+        "core_joules": 1.059424,
+        "pkg_watts": 45.470450271492204,
+        "core_watts": 7.741923640709287,
+        "edp_js": 0.8514734331494982,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.128\n"
+      },
+      {
+        "elapsed_s": 0.14597411699651275,
+        "pkg_joules": 6.544095,
+        "core_joules": 1.173096,
+        "pkg_watts": 44.83051608496002,
+        "core_watts": 8.036328796755281,
+        "edp_js": 0.9552684891662941,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.137\n"
+      },
+      {
+        "elapsed_s": 0.14128163799614413,
+        "pkg_joules": 6.38471,
+        "core_joules": 1.058722,
+        "pkg_watts": 45.191364501126834,
+        "core_watts": 7.493698508994457,
+        "edp_js": 0.9020422869303614,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.131\n"
+      }
+    ]
+  },
+  "scx_optima": {
+    "sysbench_cpu": [
+      {
+        "elapsed_s": 5.005109167002956,
+        "pkg_joules": 181.352209,
+        "core_joules": 34.668557,
+        "pkg_watts": 36.233417284001646,
+        "core_watts": 6.926633534500792,
+        "edp_js": 907.687603722136,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.005169840995222,
+        "pkg_joules": 179.861152,
+        "core_joules": 33.977018,
+        "pkg_watts": 35.935074675555185,
+        "core_watts": 6.788384626173654,
+        "edp_js": 900.2356135570575,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.005309605003276,
+        "pkg_joules": 180.843416,
+        "core_joules": 34.017573,
+        "pkg_watts": 36.13031565904136,
+        "core_watts": 6.796297468990978,
+        "edp_js": 905.1772871064031,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.004895956000837,
+        "pkg_joules": 178.632806,
+        "core_joules": 34.05459,
+        "pkg_watts": 35.69161228732846,
+        "core_watts": 6.804255333054181,
+        "edp_js": 894.038608358482,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.004639282997232,
+        "pkg_joules": 177.69093,
+        "core_joules": 33.924027,
+        "pkg_watts": 35.50524222668503,
+        "core_watts": 6.778515909279124,
+        "edp_js": 889.2790085103114,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      }
+    ],
+    "sysbench_mem": [
+      {
+        "elapsed_s": 5.005613096000161,
+        "pkg_joules": 136.504964,
+        "core_joules": 23.163566,
+        "pkg_watts": 27.270378549448242,
+        "core_watts": 4.627518259153774,
+        "edp_js": 683.2910354674306,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.005022052995628,
+        "pkg_joules": 141.870516,
+        "core_joules": 24.335427,
+        "pkg_watts": 28.34563254623165,
+        "core_watts": 4.862201753024175,
+        "edp_js": 710.0650612498691,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.005647710997437,
+        "pkg_joules": 138.28478,
+        "core_joules": 22.828547,
+        "pkg_watts": 27.62575154783417,
+        "core_watts": 4.560558057221157,
+        "edp_js": 692.2048924727842,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.005062529002316,
+        "pkg_joules": 137.536863,
+        "core_joules": 23.079449,
+        "pkg_watts": 27.479549396841584,
+        "core_watts": 4.611220912079302,
+        "edp_js": 688.3805993578252,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.004500210001424,
+        "pkg_joules": 138.823769,
+        "core_joules": 23.20548,
+        "pkg_watts": 27.73978682677695,
+        "core_watts": 4.636922574930494,
+        "edp_js": 694.7435811136892,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      }
+    ],
+    "pipe_pingpong": [
+      {
+        "elapsed_s": 0.13659610200556926,
+        "pkg_joules": 2.879231,
+        "core_joules": 1.262309,
+        "pkg_watts": 21.078427259092713,
+        "core_watts": 9.241178785237468,
+        "edp_js": 0.3932917313735972,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.130 [sec]\n\n       1.302840 usecs/op\n         767553 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.1396284549991833,
+        "pkg_joules": 3.027324,
+        "core_joules": 1.283046,
+        "pkg_watts": 21.681282658450293,
+        "core_watts": 9.189000909646278,
+        "edp_js": 0.4227005729019476,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.132 [sec]\n\n       1.322090 usecs/op\n         756378 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.1371161619972554,
+        "pkg_joules": 3.327938,
+        "core_joules": 0.349347,
+        "pkg_watts": 24.270938972654545,
+        "core_watts": 2.5478178130962617,
+        "edp_js": 0.45631408592482214,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.129 [sec]\n\n       1.294680 usecs/op\n         772391 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.13406905200099573,
+        "pkg_joules": 3.108863,
+        "core_joules": 0.315093,
+        "pkg_watts": 23.188520792829284,
+        "core_watts": 2.3502291938161823,
+        "edp_js": 0.41680231521097155,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.127 [sec]\n\n       1.270950 usecs/op\n         786813 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.13514080100139836,
+        "pkg_joules": 3.176914,
+        "core_joules": 0.344068,
+        "pkg_watts": 23.508177962976017,
+        "core_watts": 2.5459964529619725,
+        "edp_js": 0.42933070267255646,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.128 [sec]\n\n       1.284230 usecs/op\n         778676 ops/sec\n"
+      }
+    ],
+    "hackbench_proc": [
+      {
+        "elapsed_s": 0.09036488700076006,
+        "pkg_joules": 4.283439,
+        "core_joules": 0.896179,
+        "pkg_watts": 47.40158641446619,
+        "core_watts": 9.917336586637486,
+        "edp_js": 0.3870724812096487,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.082\n"
+      },
+      {
+        "elapsed_s": 0.0770197400051984,
+        "pkg_joules": 3.854293,
+        "core_joules": 0.818287,
+        "pkg_watts": 50.04292405738914,
+        "core_watts": 10.624380190646843,
+        "edp_js": 0.29685664476385615,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.068\n"
+      },
+      {
+        "elapsed_s": 0.08899873399786884,
+        "pkg_joules": 4.276162,
+        "core_joules": 0.862443,
+        "pkg_watts": 48.04744750753867,
+        "core_watts": 9.69050863151213,
+        "edp_js": 0.38057300436979485,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.080\n"
+      },
+      {
+        "elapsed_s": 0.08579886700317729,
+        "pkg_joules": 4.074389,
+        "core_joules": 0.839221,
+        "pkg_watts": 47.48767836117367,
+        "core_watts": 9.78125969855665,
+        "edp_js": 0.3495779599302085,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.078\n"
+      },
+      {
+        "elapsed_s": 0.08655175500462065,
+        "pkg_joules": 4.089724,
+        "core_joules": 0.824954,
+        "pkg_watts": 47.25177438379691,
+        "core_watts": 9.531337636723357,
+        "edp_js": 0.3539727896845172,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.077\n"
+      }
+    ]
+  },
+  "scx_rusty": {
+    "sysbench_cpu": [
+      {
+        "elapsed_s": 5.004276728999685,
+        "pkg_joules": 176.816295,
+        "core_joules": 32.567545,
+        "pkg_watts": 35.33303703517295,
+        "core_watts": 6.5079424587516765,
+        "edp_js": 884.8376703764433,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.004298871004721,
+        "pkg_joules": 176.959492,
+        "core_joules": 33.458749,
+        "pkg_watts": 35.36149549846362,
+        "core_watts": 6.686001348533052,
+        "edp_js": 885.5581860291691,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.005749644005846,
+        "pkg_joules": 175.528261,
+        "core_joules": 32.103503,
+        "pkg_watts": 35.06532956760772,
+        "core_watts": 6.4133257320294605,
+        "edp_js": 878.6505300137151,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.005611514003249,
+        "pkg_joules": 176.323035,
+        "core_joules": 33.494178,
+        "pkg_watts": 35.225073801020024,
+        "core_watts": 6.6913259061954165,
+        "edp_js": 882.6046141799978,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.004865438997513,
+        "pkg_joules": 175.723152,
+        "core_joules": 33.421245,
+        "pkg_watts": 35.110464835034165,
+        "core_watts": 6.677750962010751,
+        "edp_js": 879.4707302765066,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      }
+    ],
+    "sysbench_mem": [
+      {
+        "elapsed_s": 5.004159908996371,
+        "pkg_joules": 131.128961,
+        "core_joules": 21.787157,
+        "pkg_watts": 26.203990956455883,
+        "core_watts": 4.3538091100629135,
+        "edp_js": 656.1902895445487,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.004268553995644,
+        "pkg_joules": 130.752241,
+        "core_joules": 21.697791,
+        "pkg_watts": 26.128142322737904,
+        "core_watts": 4.335856632369472,
+        "edp_js": 654.3193280007599,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.005467132003105,
+        "pkg_joules": 130.845772,
+        "core_joules": 21.753682,
+        "pkg_watts": 26.140571608875536,
+        "core_watts": 4.345984385935732,
+        "edp_js": 654.9442111075722,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.005424241004221,
+        "pkg_joules": 131.310043,
+        "core_joules": 21.794207,
+        "pkg_watts": 26.233549181368836,
+        "core_watts": 4.354117843091658,
+        "edp_js": 657.2624723195066,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.00572724200174,
+        "pkg_joules": 132.154329,
+        "core_joules": 22.327504,
+        "pkg_watts": 26.40062524604373,
+        "core_watts": 4.460391651517844,
+        "edp_js": 661.5285248237604,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      }
+    ],
+    "pipe_pingpong": [
+      {
+        "elapsed_s": 0.15441755199572071,
+        "pkg_joules": 3.454563,
+        "core_joules": 1.396747,
+        "pkg_watts": 22.371569522716783,
+        "core_watts": 9.045260606376582,
+        "edp_js": 0.5334451616749929,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.148 [sec]\n\n       1.481540 usecs/op\n         674973 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.15488246700260788,
+        "pkg_joules": 3.463124,
+        "core_joules": 1.409259,
+        "pkg_watts": 22.35969033177712,
+        "core_watts": 9.098893033362332,
+        "edp_js": 0.5363771886559394,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.147 [sec]\n\n       1.473730 usecs/op\n         678550 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.1499527109990595,
+        "pkg_joules": 3.613338,
+        "core_joules": 0.203817,
+        "pkg_watts": 24.09651666799584,
+        "core_watts": 1.359208504081519,
+        "edp_js": 0.5418298288559197,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.144 [sec]\n\n       1.440960 usecs/op\n         693981 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.22865920799813466,
+        "pkg_joules": 3.097863,
+        "core_joules": 0.113825,
+        "pkg_watts": 13.547947739000614,
+        "core_watts": 0.4977932049905838,
+        "edp_js": 0.7083549000667254,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.221 [sec]\n\n       2.216700 usecs/op\n         451121 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.15336022999690613,
+        "pkg_joules": 3.549605,
+        "core_joules": 1.413196,
+        "pkg_watts": 23.145537797326003,
+        "core_watts": 9.21487924234666,
+        "edp_js": 0.544368239198168,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.147 [sec]\n\n       1.474460 usecs/op\n         678214 ops/sec\n"
+      }
+    ],
+    "hackbench_proc": [
+      {
+        "elapsed_s": 0.2381131270012702,
+        "pkg_joules": 9.277276,
+        "core_joules": 1.625343,
+        "pkg_watts": 38.961631879919466,
+        "core_watts": 6.8259277448039635,
+        "edp_js": 2.209041198413836,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.230\n"
+      },
+      {
+        "elapsed_s": 0.2641748980022385,
+        "pkg_joules": 9.874458,
+        "core_joules": 1.743562,
+        "pkg_watts": 37.378487035192606,
+        "core_watts": 6.600029045852896,
+        "edp_js": 2.608583934977388,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.257\n"
+      },
+      {
+        "elapsed_s": 0.21256156600429676,
+        "pkg_joules": 8.324796,
+        "core_joules": 1.440096,
+        "pkg_watts": 39.16416385374071,
+        "core_watts": 6.774959495598041,
+        "edp_js": 1.7695316744263054,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.203\n"
+      },
+      {
+        "elapsed_s": 0.34911800299596507,
+        "pkg_joules": 12.210459,
+        "core_joules": 2.15922,
+        "pkg_watts": 34.97516282522137,
+        "core_watts": 6.184785606787957,
+        "edp_js": 4.262891061744109,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.340\n"
+      },
+      {
+        "elapsed_s": 0.21170428099867422,
+        "pkg_joules": 8.434455,
+        "core_joules": 1.53285,
+        "pkg_watts": 39.84073897897615,
+        "core_watts": 7.24052434258332,
+        "edp_js": 1.7856102313906728,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.204\n"
+      }
+    ]
+  },
+  "scx_rlfifo": {
+    "sysbench_cpu": [
+      {
+        "elapsed_s": 5.00529933499638,
+        "pkg_joules": 176.423921,
+        "core_joules": 33.727015,
+        "pkg_watts": 35.2474266157206,
+        "core_watts": 6.738261339174112,
+        "edp_js": 883.0545344587539,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.004777782996825,
+        "pkg_joules": 176.908393,
+        "core_joules": 33.14976,
+        "pkg_watts": 35.34790167927666,
+        "core_watts": 6.623622753566125,
+        "edp_js": 885.3871949120711,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.0066850450020866,
+        "pkg_joules": 177.469491,
+        "core_joules": 32.543117,
+        "pkg_watts": 35.44650590257491,
+        "core_watts": 6.499932931168919,
+        "edp_js": 888.5338465338324,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.00435814299999,
+        "pkg_joules": 176.311256,
+        "core_joules": 32.520535,
+        "pkg_watts": 35.231542380039514,
+        "core_watts": 6.498442771424975,
+        "edp_js": 882.3246696661558,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      },
+      {
+        "elapsed_s": 5.005513077005162,
+        "pkg_joules": 176.306251,
+        "core_joules": 33.042419,
+        "pkg_watts": 35.22241342449662,
+        "core_watts": 6.601205209470663,
+        "edp_js": 882.5032449382544,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nPrime numbers limit: 10000"
+      }
+    ],
+    "sysbench_mem": [
+      {
+        "elapsed_s": 5.004953093004588,
+        "pkg_joules": 132.852565,
+        "core_joules": 22.152861,
+        "pkg_watts": 26.544217804096455,
+        "core_watts": 4.426187536295397,
+        "edp_js": 664.920856110343,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.004396133997943,
+        "pkg_joules": 133.229484,
+        "core_joules": 22.146422,
+        "pkg_watts": 26.62248959367747,
+        "core_watts": 4.425393475457653,
+        "edp_js": 666.7331146641409,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.004264024995791,
+        "pkg_joules": 134.491702,
+        "core_joules": 22.213817,
+        "pkg_watts": 26.875420906696288,
+        "core_watts": 4.438977817526061,
+        "edp_js": 673.0319859790545,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.0053779629961355,
+        "pkg_joules": 134.535371,
+        "core_joules": 22.426651,
+        "pkg_watts": 26.878164245456777,
+        "core_watts": 4.48051099553245,
+        "edp_js": 673.4003812469093,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      },
+      {
+        "elapsed_s": 5.004985785002646,
+        "pkg_joules": 134.264449,
+        "core_joules": 22.298239,
+        "pkg_watts": 26.826139926774847,
+        "core_watts": 4.455205260885314,
+        "edp_js": 671.9916586762128,
+        "stdout": "sysbench 1.0.20 (using system LuaJIT 2.1.1761786044)\n\nRunning the test with following options:\nNumber of threads: 12\nInitializing random number generator from current time\n\n\nRunning memory speed test "
+      }
+    ],
+    "pipe_pingpong": [
+      {
+        "elapsed_s": 0.2171756669995375,
+        "pkg_joules": 4.178235,
+        "core_joules": 0.365551,
+        "pkg_watts": 19.238964740966573,
+        "core_watts": 1.6832042237990616,
+        "edp_js": 0.9074109730058125,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.211 [sec]\n\n       2.117120 usecs/op\n         472339 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.18645253499562386,
+        "pkg_joules": 3.469563,
+        "core_joules": 0.214269,
+        "pkg_watts": 18.608290845074496,
+        "core_watts": 1.1491879153320657,
+        "edp_js": 0.6469088166770217,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.180 [sec]\n\n       1.806280 usecs/op\n         553624 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.22250265100592515,
+        "pkg_joules": 3.136313,
+        "core_joules": 0.114953,
+        "pkg_watts": 14.095620819890732,
+        "core_watts": 0.5166365410942401,
+        "edp_js": 0.6978379568843461,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.216 [sec]\n\n       2.164210 usecs/op\n         462062 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.1472716810021666,
+        "pkg_joules": 3.487689,
+        "core_joules": 1.348304,
+        "pkg_watts": 23.6820071331208,
+        "core_watts": 9.155215658740016,
+        "edp_js": 0.5136378218427654,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.141 [sec]\n\n       1.415200 usecs/op\n         706613 ops/sec\n"
+      },
+      {
+        "elapsed_s": 0.176551565004047,
+        "pkg_joules": 3.41651,
+        "core_joules": 0.870179,
+        "pkg_watts": 19.351343614097587,
+        "core_watts": 4.928752684690466,
+        "edp_js": 0.6031901873519767,
+        "stdout": "# Running 'sched/pipe' benchmark:\n# Executed 100000 pipe operations between two processes\n\n     Total time: 0.170 [sec]\n\n       1.707990 usecs/op\n         585483 ops/sec\n"
+      }
+    ],
+    "hackbench_proc": [
+      {
+        "elapsed_s": 0.08458407800208079,
+        "pkg_joules": 3.980996,
+        "core_joules": 0.694361,
+        "pkg_watts": 47.065548198114385,
+        "core_watts": 8.209121815844805,
+        "edp_js": 0.3367288761899716,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.077\n"
+      },
+      {
+        "elapsed_s": 0.08101447399531025,
+        "pkg_joules": 3.837433,
+        "core_joules": 0.695673,
+        "pkg_watts": 47.36725193355129,
+        "core_watts": 8.587021129585695,
+        "edp_js": 0.3108876159872454,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.073\n"
+      },
+      {
+        "elapsed_s": 0.0816903579980135,
+        "pkg_joules": 3.884168,
+        "core_joules": 0.686915,
+        "pkg_watts": 47.547447400027956,
+        "core_watts": 8.408764716353723,
+        "edp_js": 0.31729907444442806,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.074\n"
+      },
+      {
+        "elapsed_s": 0.09168552499613725,
+        "pkg_joules": 4.257119,
+        "core_joules": 0.744148,
+        "pkg_watts": 46.4317459073213,
+        "core_watts": 8.116308436161011,
+        "edp_js": 0.39031619048603083,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.084\n"
+      },
+      {
+        "elapsed_s": 0.08907745200122008,
+        "pkg_joules": 4.040913,
+        "core_joules": 0.623717,
+        "pkg_watts": 45.36403892586254,
+        "core_watts": 7.001962741272135,
+        "edp_js": 0.3599542337986062,
+        "stdout": "Running in process mode with 4 groups using 40 file descriptors each (== 160 tasks)\nEach sender will pass 1000 messages of 100 bytes\nTime: 0.080\n"
+      }
+    ]
+  }
+}

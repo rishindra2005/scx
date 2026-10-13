@@ -33,3 +33,4 @@ sch_tests/qemu/*.log
 *.aux
 *.out
 *.blg
+*.bbl

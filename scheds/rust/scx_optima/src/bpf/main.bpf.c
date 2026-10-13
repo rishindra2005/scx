@@ -168,9 +168,15 @@ static inline s32 branch_and_bound_preempt_target(struct task_struct *p, struct 
 		if (!st || st->pid == 0)
 			continue;
 
-		/* Pruning Rule 2 (Inversion Safety): A task cannot preempt an equal or
-		 * higher-priority running task without creating an inversion. Prune branch! */
-		if (st->weight >= wake_weight) {
+		/* Pruning Rule 2 (Inversion Safety & Adaptive Peer-Preemption):
+		 * 1. Strict Inversion: If running task has strictly higher weight, prune immediately.
+		 * 2. Equal Priority (Peer Tasks, e.g. server worker pools w_curr == wake_weight):
+		 *    Under heavy concurrency, unconditional suppression of peer preemption causes
+		 *    head-of-line request queuing spikes. We evaluate an adaptive soft-preemption window:
+		 *    allow peer preemption if the incumbent has already executed for at least half its quantum
+		 *    (elapsed >= 1ms) and remaining slice R(c) > 500us. */
+		bool is_peer = (st->weight == wake_weight);
+		if (st->weight > wake_weight) {
 			stat_add(OPTIMA_STAT_BB_PRUNED, 1);
 			continue;
 		}
@@ -178,6 +184,16 @@ static inline s32 branch_and_bound_preempt_target(struct task_struct *p, struct 
 		/* Compute remaining quantum R(c) of currently running task */
 		u64 elapsed = now - st->start_time_ns;
 		u64 rem_slice_us = (st->slice_ns > elapsed) ? ((st->slice_ns - elapsed) / 1000ULL) : 0;
+		u64 elapsed_us = elapsed / 1000ULL;
+
+		if (is_peer) {
+			/* Adaptive peer preemption requires adequate progress (>= 1ms)
+			 * and meaningful remaining slice to prevent thrashing */
+			if (elapsed_us < 1000ULL || rem_slice_us < 500ULL) {
+				stat_add(OPTIMA_STAT_BB_PRUNED, 1);
+				continue;
+			}
+		}
 
 		/* Pruning Rule 3: If remaining slice is tiny (< 100us), preemption overhead
 		 * exceeds scheduling gain. Prune branch! */
@@ -187,13 +203,22 @@ static inline s32 branch_and_bound_preempt_target(struct task_struct *p, struct 
 		}
 
 		/* Admissible Lower Bound evaluation:
-		 * Penalty(c) = w(T_cur(c)) * R(c) + context switch cost (50us equiv)
-		 * Gain(c) = w(T_wake) * R(c)
-		 * LB(c) = Penalty(c) - Gain(c) = (w_cur - w_wake) * R(c) + C_switch
+		 * For strict priority (wake_weight > st->weight):
+		 *   LB(c) = (w_cur - w_wake) * R(c) + C_switch
+		 * For equal peer tasks (w_cur == wake_weight):
+		 *   The incumbent has already enjoyed elapsed_us >= 1ms of execution.
+		 *   DelayProxy differential models switching early to service pending request:
+		 *   LB_peer(c) = C_switch - w_wake * (R(c) - 500us)
 		 */
-		s64 penalty = (s64)st->weight * (s64)rem_slice_us + 50000;
-		s64 gain = (s64)wake_weight * (s64)rem_slice_us;
-		s64 lb = penalty - gain;
+		s64 lb;
+		if (is_peer) {
+			s64 gain_peer = (s64)wake_weight * (s64)(rem_slice_us > 500 ? (rem_slice_us - 500) : 0);
+			lb = 50000 - gain_peer;
+		} else {
+			s64 penalty = (s64)st->weight * (s64)rem_slice_us + 50000;
+			s64 gain = (s64)wake_weight * (s64)rem_slice_us;
+			lb = penalty - gain;
+		}
 
 		/* Pruning Rule 4 (Branch & Bound optimality cutoff):
 		 * If this candidate core has worse (higher) net penalty than current best, prune branch! */
