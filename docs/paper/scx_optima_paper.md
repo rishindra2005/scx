@@ -582,7 +582,7 @@ In this paper, we presented **OPTIMA**, an extensible operating system scheduler
 ### A. Artifact Identification
 - **Artifact Name:** OPTIMA: Algorithmic Extensible Operating System Scheduler for Asymmetric Multiprocessors
 - **Primary Badges Applied:** Artifact Available, Artifact Functional, Results Reproduced
-- **Repository:** Branch `DAA`, directory `artifact/`
+- **Repository:** [https://github.com/rishindra2005/scx_optima](https://github.com/rishindra2005/scx_optima) (directory `artifact/`)
 
 ### B. Hardware & Software Requirements
 - **Host CPU:** Asymmetric multi-core processor (AMD Ryzen AI 9 HX 370 with 4 Zen 5 P-cores @ 5.16 GHz + 8 Zen 5c E-cores @ 3.29 GHz; Intel Hybrid 12th--14th Gen; ARM big.LITTLE / DynamIQ RK3588).

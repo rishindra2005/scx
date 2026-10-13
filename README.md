@@ -1,3 +1,17 @@
+# OPTIMA: Density-Aware Task Scheduling and Low-Latency IPC on Asymmetric Multiprocessors with Linux sched_ext
+
+[![Artifact Evaluation](https://img.shields.io/badge/Artifact_Evaluation-USENIX_ATC_%2F_EuroSys-blue.svg)](artifact/README.md)
+[![Badges Applied](https://img.shields.io/badge/Badges-Available_%7C_Functional_%7C_Reproduced-brightgreen.svg)](artifact/README.md)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](LICENSE)
+[![ORCID](https://img.shields.io/badge/ORCID-0009--0004--5568--614X-green.svg)](https://orcid.org/0009-0004-5568-614X)
+
+> **USENIX ATC / ACM EuroSys Artifact Evaluation & Replication Package**  
+> **Author:** Risheendra MN (`rishindra.hackbox@gmail.com`)  
+> **Paper:** [`docs/paper/scx_optima_paper_usenix.pdf`](artifact/papers/scx_optima_paper_usenix.pdf) | **Proofs:** [`docs/optima_theory_proofs.pdf`](artifact/papers/optima_theory_proofs.pdf)  
+> 👉 **[Jump to the Complete Artifact Evaluation Guide](artifact/README.md)**
+
+---
+
 # Sched_ext Schedulers and Tools
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sched-ext/scx)

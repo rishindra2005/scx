@@ -2,8 +2,10 @@
 
 **Title:** OPTIMA: Density-Aware Task Scheduling and Low-Latency IPC on Asymmetric Multiprocessors with Linux sched_ext  
 **Author:** Risheendra MN (`rishindra.hackbox@gmail.com`)  
+**ORCID:** [0009-0004-5568-614X](https://orcid.org/0009-0004-5568-614X)  
 **Target Badges:** Artifact Available, Artifact Functional, Results Reproduced  
-**Target Venues:** USENIX Annual Technical Conference (ATC) / ACM European Conference on Computer Systems (EuroSys)
+**Target Venues:** USENIX Annual Technical Conference (ATC) / ACM European Conference on Computer Systems (EuroSys)  
+**Public Repository:** [https://github.com/rishindra2005/scx_optima](https://github.com/rishindra2005/scx_optima)  
 
 ---
 
@@ -37,30 +39,34 @@ OPTIMA is an algorithmic extensible operating system scheduler implemented in Li
 ## 2. Directory Structure
 
 ```text
-scx/
-├── artifact/
-│   ├── README.md                          <- This evaluation guide
+scx_optima/
+├── artifact/                              <- Complete Artifact Evaluation Bundle
+│   ├── README.md                          <- This comprehensive replication guide
 │   ├── setup_env.sh                       <- Prerequisite validation & build script
 │   ├── run_artifact_eval.sh               <- Execution harness (smoke, rapl, full)
-│   ├── parse_results.py                   <- Results aggregator & LaTeX/Markdown table formatter
-│   └── kernel_config_sched_ext.config     <- Recommended kernel config fragment
+│   ├── parse_results.py                   <- Results aggregator & publication table formatter
+│   ├── kernel_config_sched_ext.config     <- Recommended kernel config fragment
+│   ├── data/                              <- Complete raw benchmark datasets & logs
+│   │   ├── qemu_3x_results.csv            <- 16-workload 3x repetition dataset (Mean, σ, Min, Max)
+│   │   ├── raw_iterations_results.json    <- Full per-iteration raw metrics
+│   │   ├── QEMU_16_WORKLOADS_3X_REPORT.md <- Markdown summary table with error bars
+│   │   └── rapl_energy_results.json       <- 5-repetition hardware RAPL energy data
+│   └── papers/                            <- Compiled camera-ready PDFs & proofs
+│       ├── scx_optima_paper_usenix.pdf    <- USENIX ATC compliant 12-page paper
+│       ├── scx_optima_paper.pdf           <- IEEE conference format paper
+│       └── optima_theory_proofs.pdf       <- Complete standalone formal proofs
 ├── docs/
-│   ├── paper/
-│   │   ├── scx_optima_paper.tex           <- Full conference paper (LaTeX source)
-│   │   ├── scx_optima_paper_usenix.tex    <- USENIX ATC compliant paper variant
-│   │   ├── scx_optima_paper.md            <- Complete Markdown paper mirror
+│   ├── paper/                             <- Full LaTeX source files & bibliography
+│   │   ├── scx_optima_paper_usenix.tex    <- USENIX ATC LaTeX source
+│   │   ├── scx_optima_paper.tex           <- IEEE format LaTeX source
+│   │   ├── scx_optima_paper.md            <- Full Markdown paper mirror
 │   │   └── references.bib                 <- Audited bibliography
-│   └── optima_theory_proofs.tex           <- Complete formal mathematical proofs
+│   └── optima_theory_proofs.tex           <- Standalone formal proofs LaTeX source
 ├── scheds/rust/scx_optima/
 │   ├── src/bpf/main.bpf.c                 <- Kernel eBPF implementation (WSPT, OAPF, IPC bypass)
 │   ├── src/main.rs                        <- User-space topology detection & BPF loader
 │   └── Cargo.toml
-├── sch_tests/
-│   ├── qemu_results/                      <- Isolated 16-workload 3x repetition dataset
-│   │   ├── qemu_3x_results.csv            <- Raw CSV dataset (mean, stddev, min, max)
-│   │   ├── raw_iterations_results.json    <- Full iteration logs for all 34 metrics
-│   │   └── QEMU_16_WORKLOADS_3X_REPORT.md <- Markdown summary table with error bars
-│   └── rapl_energy_results.json           <- Multi-run hardware RAPL energy data
+├── sch_tests/                             <- Workload benchmarks & harness
 └── scripts/
     └── measure_rapl_energy.py             <- Automated 5-repetition RAPL energy benchmark
 ```
@@ -90,36 +96,33 @@ To verify that the build environment is sound and that `scx_optima` attaches to 
 
 ---
 
-## 4. Hardware RAPL Energy Evaluation (Step-by-Step)
+## 4. Hardware RAPL Energy Evaluation (Table IV)
 
 To measure hardware package/core energy (Joules), average power (Watts), and Energy-Delay Product (EDP, $\text{J}\cdot\text{s}$) across CFS, `scx_optima`, `scx_rusty`, and `scx_rlfifo`:
 
 ```bash
-# Run 5 repetitions per workload across all 4 schedulers (~3.5 minutes)
+# Run 5 repetitions per workload across all 4 schedulers (~3.5 minutes):
 ./artifact/run_artifact_eval.sh rapl
 ```
 
-The script measures:
-1. `sysbench_cpu` (12 threads, compute-heavy prime calculation)
-2. `sysbench_mem` (12 threads, memory bandwidth saturation)
-3. `pipe_pingpong` (100k bidirectional IPC operations)
-4. `hackbench_proc` (Process group IPC churn)
+Or view the pre-collected 5-repetition RAPL energy table directly:
+```bash
+python3 artifact/parse_results.py --rapl
+```
 
-Output tables will report:
-- `Pkg Energy (J)` ($\text{Mean} \pm \sigma$)
-- `Core Energy (J)` ($\text{Mean} \pm \sigma$)
-- `Avg Power (W)` ($\text{Mean} \pm \sigma$)
-- `EDP (J·s)` ($\text{Mean} \pm \sigma$)
+### Measured Energy Targets (Table IV in Paper):
+- **Synchronous IPC (`pipe_pingpong`):** OPTIMA drops package energy from $4.01 \pm 0.62\,\text{J}$ to $3.10 \pm 0.17\,\text{J}$ (**-22.7%**), core energy from $0.96 \pm 0.18\,\text{J}$ to $0.71 \pm 0.51\,\text{J}$ (**-26.0%**), and EDP from $0.58 \pm 0.19\,\text{J}\cdot\text{s}$ to $0.42 \pm 0.02\,\text{J}\cdot\text{s}$ (**-27.6%**).
+- **Process Churn (`hackbench_proc`):** OPTIMA cuts package energy from $6.73 \pm 0.78\,\text{J}$ to $4.12 \pm 0.18\,\text{J}$ (**-38.8%**) and slashes EDP by **-65.3%** ($1.01 \pm 0.23\,\text{J}\cdot\text{s}$ vs $0.35 \pm 0.04\,\text{J}\cdot\text{s}$).
 
 ---
 
 ## 5. Reproducing Paper Table II (16-Workload Benchmark Suite)
 
-The repository includes the full isolated multi-run dataset across all 16 production workloads and 34 evaluated metrics in `sch_tests/qemu_results/`:
+The repository includes the full isolated multi-run dataset across all 16 production workloads and 34 evaluated metrics in `artifact/data/`:
 
 ```bash
 # View Table II with Mean ± StdDev for all 34 evaluated metrics:
-python3 artifact/parse_results.py
+python3 artifact/parse_results.py --benchmarks
 ```
 
 ### Key Claims and Reproduction Targets:
@@ -132,25 +135,25 @@ python3 artifact/parse_results.py
 
 ---
 
-## 6. Paper and Formal Theory Compilation
+## 6. Accessing Pre-Compiled Papers and Proofs
 
-All formal mathematical proofs and paper variants are fully compilable from source:
+Pre-compiled PDFs are bundled directly in `artifact/papers/`:
+- `artifact/papers/scx_optima_paper_usenix.pdf`: USENIX ATC compliant 12-page main-body conference paper.
+- `artifact/papers/scx_optima_paper.pdf`: IEEE double-column conference paper.
+- `artifact/papers/optima_theory_proofs.pdf`: Complete standalone formal mathematical proofs (Theorems 1–4, Kawaguchi-Kyan context, Lyapunov drift derivation, and starvation bounds).
 
+To recompile from LaTeX source:
 ```bash
-# 1. Compile IEEE Conference Paper
-pdflatex docs/paper/scx_optima_paper.tex
-bibtex scx_optima_paper
-pdflatex docs/paper/scx_optima_paper.tex
-pdflatex docs/paper/scx_optima_paper.tex
-
-# 2. Compile USENIX ATC Paper
-pdflatex docs/paper/scx_optima_paper_usenix.tex
+# 1. Compile USENIX ATC Paper
+cd docs/paper
+pdflatex -interaction=nonstopmode scx_optima_paper_usenix.tex
 bibtex scx_optima_paper_usenix
-pdflatex docs/paper/scx_optima_paper_usenix.tex
-pdflatex docs/paper/scx_optima_paper_usenix.tex
+pdflatex -interaction=nonstopmode scx_optima_paper_usenix.tex
+pdflatex -interaction=nonstopmode scx_optima_paper_usenix.tex
 
-# 3. Compile Standalone Theory Proofs
-pdflatex docs/optima_theory_proofs.tex
+# 2. Compile Standalone Theory Proofs
+cd ../
+pdflatex -interaction=nonstopmode optima_theory_proofs.tex
 ```
 
 ---
@@ -160,4 +163,5 @@ pdflatex docs/optima_theory_proofs.tex
 For questions, issues, or assistance during Artifact Evaluation:
 - **Author:** Risheendra MN
 - **Email:** `rishindra.hackbox@gmail.com`
-- **Repository Branch:** `DAA`
+- **ORCID:** [0009-0004-5568-614X](https://orcid.org/0009-0004-5568-614X)
+- **GitHub Repository:** [https://github.com/rishindra2005/scx_optima](https://github.com/rishindra2005/scx_optima)
