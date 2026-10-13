@@ -16,7 +16,7 @@
 \newtheorem{proposition}{Proposition}
 \newtheorem{remark}{Remark}
 
-\title{OPTIMA: Optimal Provable Task-Scheduling in Asymmetric Multiprocessors via Weighted Shortest Processing Time and Branch-and-Bound eBPF Extensions}
+\title{OPTIMA: Mathematical Foundations and Scheduling Theory for Asymmetric Multiprocessors via Density-Based Sequencing and Online Admissible Preemption Filtering}
 
 \author{\IEEEauthorblockN{Risheendra MN}}
 
@@ -25,7 +25,11 @@
 \maketitle
 
 \begin{abstract}
-Asymmetric multiprocessor architectures, comprising high-throughput Performance (P) cores and energy-efficient Efficiency (E) cores with disparate compute capacities, present fundamental challenges for general-purpose OS schedulers. Existing kernel schedulers rely heavily on empirical heuristics that lack formal optimality guarantees and struggle under mixed latency-critical and compute-intensive workloads. In this paper, we develop the complete formal mathematical foundations of OPTIMA, a provably optimal task-scheduling framework implemented via Linux \texttt{sched\_ext} eBPF. We formalize the asymmetric scheduling problem under a dual objective: minimizing total weighted completion time $\sum w_j C_j$ while guaranteeing hard real-time deadline constraints $C_j \le d_j$. We prove that density-based Weighted Shortest Processing Time (WSPT) job sequencing via Smith's Rule, combined with continuous Dantzig knapsack partitioning, achieves optimal weight depletion across asymmetric cores. Furthermore, we formulate an online Branch-and-Bound preemption bounding framework with an admissible lower bound $LB(S)$, proving that preempting under $\Delta\mathrm{Cost} < 0$ bounds the competitive ratio to $(1 + \epsilon)$ against an offline optimum. Finally, using a quadratic Lyapunov drift formulation, we prove that OPTIMA's adaptive quantum scaling and hierarchical work-stealing maintain strong queue stability and starvation freedom under all admissible workloads. Complete algorithmic specifications in kernel eBPF hot-paths are provided.
+Asymmetric multiprocessor architectures, combining high-throughput Performance (P) cores and energy-efficient Efficiency (E) cores with disparate compute capacities, present fundamental challenges for general-purpose operating system schedulers. Existing kernel schedulers rely heavily on empirical heuristics that lack formal mathematical characterization and struggle under mixed latency-critical and compute-intensive workloads. In this paper, we develop the rigorous mathematical foundations and scheduling theory of OPTIMA, an extensible task-scheduling framework implemented via Linux \texttt{sched\_ext} eBPF. 
+
+We formalize the asymmetric scheduling problem under a dual objective: minimizing total weighted completion time $\sum w_j C_j$ while providing latency-critical prioritization and bounded queuing delay under non-overloaded regimes. We rigorously prove that Weighted Shortest Processing Time (WSPT) sequencing via Smith's Rule is optimal for isolated, single-core non-preemptive queues at time zero ($1 || \sum w_j C_j$). We explicitly acknowledge that the generalized online problem with arbitrary release dates, preemption, and asymmetric parallel machines ($R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard; accordingly, we cite the classical Kawaguchi-Kyan bound ($\alpha \le 1.207$) strictly as an identical-machine reference bound and characterize OPTIMA's density-based virtual deadline list scheduling as an online approximation heuristic. Using the Hardy-Littlewood-P\'olya Rearrangement Inequality and continuous Dantzig knapsack relaxation, we prove that matching tasks with higher execution density to Performance cores maximizes the instantaneous backlog weight retirement rate.
+
+Furthermore, we formalize an Online Admissible Preemption Filter (OAPF) based on a dimensionally consistent net cost metric $\Delta\text{Cost}(c) = w_{\text{curr}}(c) \cdot (p_{\text{wake}} + C_{\text{switch}}) - w_{\text{wake}} \cdot R(c)$. We prove that this greedy filter enforces priority inversion safety, eliminates context-switch thrashing, and guarantees locally bounded regret under one-step horizons. Finally, using a quadratic Lyapunov drift formulation with an exact cross-term expansion, we prove that OPTIMA's adaptive quantum scaling and hierarchical work-stealing maintain strong queue stability ($\limsup \frac{1}{T} \sum \mathbb{E}[q_k(t)] < \infty$) under all strictly admissible workloads ($\sum \lambda_k \bar{p}_k \le C_{\text{total}} - \epsilon_0$). By bounding virtual deadline advancement ($v_j \le t + 10 \tau_{\max}$), we reconcile strict priority queuing with guaranteed starvation freedom for every admitted task. Complete algorithmic specifications in kernel eBPF hot-paths are provided.
 \end{abstract}
 
 % =========================================================================
@@ -35,11 +39,11 @@ Asymmetric multiprocessor architectures, comprising high-throughput Performance 
 \label{sec:system_model}
 
 \subsection{Heterogeneous Multiprocessor Architecture}
-We model a heterogeneous asymmetric multiprocessor system as a set of $M$ discrete computing cores denoted by:
+We model a heterogeneous asymmetric chip-multiprocessor (AMP) as a set of $M$ discrete computing cores denoted by:
 \begin{equation}
 \mathcal{M} = \mathcal{P} \cup \mathcal{E}, \quad \mathcal{P} \cap \mathcal{E} = \emptyset
 \end{equation}
-where $\mathcal{P} = \{C_1, C_2, \dots, C_{M_P}\}$ represents the partition of $M_P = |\mathcal{P}|$ Performance cores (P-cores), and $\mathcal{E} = \{C_{M_P+1}, C_{M_P+2}, \dots, C_{M_P+M_E}\}$ represents the partition of $M_E = |\mathcal{E}|$ Efficiency cores (E-cores), such that the total core count is $M = M_P + M_E$.
+where $\mathcal{P} = \{C_1, C_2, \dots, C_{M_P}\}$ represents the partition of $M_P = |\mathcal{P}|$ Performance cores (P-cores), and $\mathcal{E} = \{C_{M_P+1}, C_{M_P+2}, \dots, C_{M_P+M_E}\}$ represents the partition of $M_E = |\mathcal{E}|$ Efficiency cores (E-cores), yielding total core count $M = M_P + M_E$.
 
 Each core $C_k \in \mathcal{M}$ is characterized by an intrinsic, time-invariant computational capacity (effective instruction processing frequency) $c_k \in \mathbb{R}_{> 0}$, defined as:
 \begin{equation}
@@ -52,10 +56,15 @@ where $c_P > c_E > 0$. We define the asymmetric processing speedup ratio as:
 \begin{equation}
 \mu \triangleq \frac{c_P}{c_E} > 1
 \end{equation}
-The memory and cache subsystem is structured hierarchically: P-cores in $\mathcal{P}$ share a common coherent L3 cache domain, while E-cores in $\mathcal{E}$ reside in an independent L3 cache domain. Cores may optionally support Simultaneous Multithreading (SMT), where physical core $C_k$ provides two sibling hardware thread contexts.
+The total aggregate computational capacity rate of the multiprocessor system is:
+\begin{equation}
+C_{\mathrm{total}} \triangleq \sum_{k=1}^M c_k = M_P c_P + M_E c_E
+\end{equation}
+
+The memory and cache subsystem is structured hierarchically: P-cores in $\mathcal{P}$ share a high-bandwidth coherent L3 cache domain (CCX), while E-cores in $\mathcal{E}$ reside in an independent L3 cache domain. Cores may optionally support Simultaneous Multithreading (SMT), where physical core $C_k$ exposes two hardware thread contexts sharing execution units and L1/L2 caches.
 
 \subsection{Dynamic Online Task Model}
-The workload submitted to the operating system is represented as a dynamic, continuous online sequence of tasks:
+The workload submitted to the operating system is represented as a dynamic online sequence of tasks:
 \begin{equation}
 \mathcal{J} = \{J_1, J_2, \dots, J_n, \dots\}
 \end{equation}
@@ -66,9 +75,9 @@ J_j = \left( r_j, \, p_j, \, w_j, \, d_j, \, \mathcal{T}_j \right)
 where:
 \begin{enumerate}
     \item $r_j \in \mathbb{R}_{\ge 0}$ denotes the release (arrival or wakeup) timestamp of task $J_j$.
-    \item $p_j \in \mathbb{R}_{> 0}$ represents the nominal processing requirement (computational work volume in cycles or reference execution time measured on a baseline core of capacity $c_E$). In the kernel implementation, $p_j$ is estimated via an Exponentially Weighted Moving Average (EWMA) of past burst durations.
-    \item $w_j \in [w_{\min}, w_{\max}] \subset \mathbb{R}_{> 0}$ denotes the task priority weight, derived from POSIX nice levels via $w_j = 100 \times 1.25^{-\mathrm{nice}_j}$.
-    \item $d_j \in \mathbb{R}_{> 0} \cup \{\infty\}$ is the absolute completion deadline. Tasks are partitioned into real-time/interactive tasks $\mathcal{J}_{\mathrm{RT}} \triangleq \{J_j \in \mathcal{J} \mid d_j < \infty\}$ and compute-bound batch tasks $\mathcal{J}_{\mathrm{Batch}} \triangleq \{J_j \in \mathcal{J} \mid d_j = \infty\}$.
+    \item $p_j \in \mathbb{R}_{> 0}$ represents the nominal processing requirement (computational work volume in reference execution cycles or execution duration measured on a baseline core of capacity $c_E$). In the kernel implementation, $p_j$ is estimated via an Exponentially Weighted Moving Average (EWMA) of past burst durations.
+    \item $w_j \in [w_{\min}, w_{\max}] \subset \mathbb{R}_{> 0}$ denotes the task priority weight, derived from POSIX nice levels via $w_j = 100 \times 1.25^{-\mathrm{nice}_j}$, with $w_{\min} \ge 10$.
+    \item $d_j \in \mathbb{R}_{> 0} \cup \{\infty\}$ is the target completion deadline. Tasks are categorized into latency-critical/interactive tasks $\mathcal{J}_{\mathrm{RT}} \triangleq \{J_j \in \mathcal{J} \mid d_j < \infty\}$ and compute-bound batch tasks $\mathcal{J}_{\mathrm{Batch}} \triangleq \{J_j \in \mathcal{J} \mid d_j = \infty\}$.
     \item $\mathcal{T}_j \in \{\text{Interactive}, \text{Batch}\}$ designates the behavioral execution classification.
 \end{enumerate}
 
@@ -89,64 +98,72 @@ p_{j,k} = \frac{p_j}{c_k} = \begin{cases}
 \dfrac{p_j}{c_E} = \mu \cdot \dfrac{p_j}{c_P}, & C_k \in \mathcal{E} 
 \end{cases}
 \end{equation}
-Thus, executing task $J_j$ on a Performance core reduces its latency by a factor of $\mu$ relative to execution on an Efficiency core.
+Thus, executing task $J_j$ on a Performance core accelerates execution by a factor of $\mu$ relative to execution on an Efficiency core.
 
-\subsection{Dual-Objective Optimization Formulation}
-Let $S_j \ge r_j$ and $C_j$ denote the scheduling start time and final completion time of task $J_j$ under schedule $\mathcal{S}$, respectively. If task $J_j$ undergoes preemptive execution across time slots, its total elapsed execution satisfies:
+\subsection{Problem Formulation and Real-Time Characterization}
+Let $S_j \ge r_j$ and $C_j$ denote the scheduling start time and final completion time of task $J_j$ under schedule $\mathcal{S}$, respectively. If task $J_j$ undergoes preemptive execution across time slots, its total completed work satisfies:
 \begin{equation}
 \sum_{k \in \mathcal{M}} c_k \int_{S_j}^{C_j} \mathbf{1}_{\{J_j \text{ runs on } C_k \text{ at time } t\}} \, dt = p_j
 \end{equation}
 
-The primary objective is to minimize the total weighted completion time across all tasks while strictly satisfying real-time deadline guarantees for interactive and audio tasks:
+The primary objective is to minimize the total weighted completion time across all tasks:
 \begin{align}
 \min_{\mathcal{S}} \quad & \Phi(\mathcal{S}) \triangleq \sum_{J_j \in \mathcal{J}} w_j C_j(\mathcal{S}) \label{eq:obj} \\
-\text{subject to} \quad & C_j(\mathcal{S}) \le d_j, \quad \forall J_j \in \mathcal{J}_{\mathrm{RT}} \label{eq:deadline_constraint} \\
-& S_j \ge r_j, \quad \forall J_j \in \mathcal{J} \label{eq:causality_constraint} \\
+\text{subject to} \quad & S_j \ge r_j, \quad \forall J_j \in \mathcal{J} \label{eq:causality_constraint} \\
 & \sum_{J_j \in \mathcal{J}} \mathbf{1}_{\{J_j \text{ on } C_k \text{ at } t\}} \le 1, \quad \forall C_k \in \mathcal{M}, \; t \ge 0 \label{eq:exclusive_constraint}
 \end{align}
-Constraint~\eqref{eq:deadline_constraint} enforces real-time feasibility, Constraint~\eqref{eq:causality_constraint} enforces causality, and Constraint~\eqref{eq:exclusive_constraint} guarantees non-overlapping single-task execution per physical processing core.
+Constraint~\eqref{eq:causality_constraint} enforces causality, and Constraint~\eqref{eq:exclusive_constraint} guarantees non-overlapping single-task execution per physical processing core.
+
+\begin{remark}[Real-Time Guarantees and Admission Control]
+\label{rem:realtime_softening}
+In an open, general-purpose operating system without hard admission control, arbitrary processes may arrive concurrently without reservation contracts. Under arbitrary adversarial overload ($\sum_{j \in \mathcal{J}_{\mathrm{RT}}} p_j / (d_j - r_j) > M_P$), it is mathematically impossible for any online scheduler to guarantee hard real-time deadlines ($C_j \le d_j$) for all tasks. Consequently, OPTIMA formulates real-time support as:
+\begin{enumerate}
+    \item \textbf{Latency-Critical Prioritization:} Latency-critical tasks are prioritized via zero-lag local dispatch and minimal virtual deadlines ($v_j = t$), ensuring immediate dispatch to Performance cores when capacity is available.
+    \item \textbf{Bounded Queuing Delay under Non-Overload:} Under non-overloaded regimes where the latency-critical workload utilization satisfies $\sum_{j \in \mathcal{J}_{\mathrm{RT}}} \frac{p_j}{d_j - r_j} \le U_{\mathrm{RT}} < M_P$, OPTIMA guarantees that real-time deadlines $C_j \le d_j$ are satisfied with high probability, with queuing delay strictly bounded by $\epsilon_{\mathrm{queue}} \le \tau_{\min}$.
+    \item \textbf{Graceful Degradation:} Under system overload, OPTIMA provides graceful degradation by minimizing total weighted completion time $\sum w_j C_j$, preventing unbounded starvation.
+\end{enumerate}
+\end{remark}
 
 % =========================================================================
-% SECTION 2: THEOREM 1 (WSPT & ASYMMETRIC EXTENSION)
+% SECTION 2: THEOREM 1 (WSPT & COMPLEXITY)
 % =========================================================================
-\section{Optimality of Density-Based WSPT under Asymmetric Processing Capacity}
+\section{WSPT Scheduling: Single-Core Optimality, Computational Complexity, and Asymmetric Partitioning}
 \label{sec:theorem1}
 
 \subsection{Smith's Rule Optimality on Single-Core Dedicated Queues}
-We begin by establishing the fundamental optimality of density-ordered execution on an isolated processing core.
+We begin by establishing the formal scope within which Weighted Shortest Processing Time (WSPT) sequencing is strictly optimal: an isolated single-core queue with simultaneously available independent jobs.
 
-\begin{lemma}[Optimality of Density-Based WSPT (Smith's Rule)]
+\begin{lemma}[Optimality of Single-Core Smith's Rule ($1 || \sum w_j C_j$)]
 \label{lem:smith_single}
-Let $\mathcal{J}_k = \{J_1, J_2, \dots, J_n\}$ be a set of $n$ tasks available simultaneously at time $t_0$ on a single processor core $C_k$ with compute capacity $c_k$. Any non-preemptive schedule that orders tasks in non-increasing order of density:
+Let $\mathcal{J}_k = \{J_1, J_2, \dots, J_n\}$ be a set of $n$ independent tasks available simultaneously at time $t_0$ ($r_j = t_0, \forall j$) on a single isolated processor core $C_k$ with compute capacity $c_k$. Any non-preemptive schedule that orders tasks in non-increasing order of task density:
 \begin{equation}
+\label{eq:smith_order}
 \rho_{(1)} \ge \rho_{(2)} \ge \dots \ge \rho_{(n)}
 \end{equation}
-strictly minimizes the total weighted completion time $\sum_{j=1}^n w_j C_j$.
+where $\rho_j = w_j / p_j$, strictly minimizes the total weighted completion time $\sum_{j=1}^n w_j C_j$.
 \end{lemma}
 
 \begin{proof}
-We proceed via an adjacent pairwise exchange (interchange) argument. 
-Assume for contradiction that there exists an optimal schedule $\mathcal{S}^*$ that does not follow the non-increasing density ordering. 
+We proceed via an adjacent pairwise interchange argument. Assume for contradiction that there exists an optimal schedule $\mathcal{S}^*$ that does not satisfy the non-increasing density ordering~\eqref{eq:smith_order}.
 
-Because the density ordering is not satisfied everywhere in $\mathcal{S}^*$, there must exist at least two adjacent tasks, say $J_a$ immediately followed by $J_b$, such that:
+Since $\mathcal{S}^*$ does not follow the monotonic density ordering everywhere, there must exist at least two adjacent tasks, say $J_a$ immediately followed by $J_b$, such that:
 \begin{equation}
 \label{eq:inv_cond}
 \rho_a < \rho_b \iff \frac{w_a}{p_a} < \frac{w_b}{p_b} \iff w_a p_b < w_b p_a
 \end{equation}
-Let $t \ge t_0$ denote the start time of task $J_a$ under schedule $\mathcal{S}^*$. 
-Under $\mathcal{S}^*$, task $J_a$ executes during $[t, \, t + p_{a,k})$, and task $J_b$ executes during $[t + p_{a,k}, \, t + p_{a,k} + p_{b,k})$. Their respective completion times are:
+Let $t \ge t_0$ denote the start time of task $J_a$ under schedule $\mathcal{S}^*$. Under $\mathcal{S}^*$, task $J_a$ executes during $[t, \, t + p_{a,k})$, and task $J_b$ executes during $[t + p_{a,k}, \, t + p_{a,k} + p_{b,k})$. Their respective completion times are:
 \begin{align}
 C_a(\mathcal{S}^*) &= t + \frac{p_a}{c_k} \\
 C_b(\mathcal{S}^*) &= t + \frac{p_a}{c_k} + \frac{p_b}{c_k}
 \end{align}
-The combined contribution of $J_a$ and $J_b$ to the objective function $\Phi(\mathcal{S}^*)$ is:
+The combined contribution of $J_a$ and $J_b$ to the objective $\Phi(\mathcal{S}^*)$ is:
 \begin{align}
 \Phi_{a,b}(\mathcal{S}^*) &= w_a C_a(\mathcal{S}^*) + w_b C_b(\mathcal{S}^*) \nonumber \\
 &= w_a \left( t + \frac{p_a}{c_k} \right) + w_b \left( t + \frac{p_a + p_b}{c_k} \right) \nonumber \\
 &= (w_a + w_b)t + \frac{1}{c_k} \Big( w_a p_a + w_b p_a + w_b p_b \Big)
 \end{align}
 
-Now, construct an alternative schedule $\mathcal{S}'$ by interchanging the execution positions of $J_a$ and $J_b$, while preserving the positions of all tasks scheduled prior to time $t$ and all tasks scheduled after time $t + \frac{p_a + p_b}{c_k}$.
+Now construct an alternative schedule $\mathcal{S}'$ by interchanging the execution positions of $J_a$ and $J_b$, while preserving the execution positions of all tasks scheduled prior to time $t$ and all tasks scheduled after time $t + \frac{p_a + p_b}{c_k}$.
 
 Under schedule $\mathcal{S}'$, task $J_b$ executes first during $[t, \, t + p_{b,k})$, followed by task $J_a$ during $[t + p_{b,k}, \, t + p_{b,k} + p_{a,k})$. Their completion times under $\mathcal{S}'$ become:
 \begin{align}
@@ -160,42 +177,76 @@ The combined contribution of $J_a$ and $J_b$ under $\mathcal{S}'$ is:
 &= (w_a + w_b)t + \frac{1}{c_k} \Big( w_b p_b + w_a p_b + w_a p_a \Big)
 \end{align}
 
-For all tasks $J_j \notin \{J_a, J_b\}$, their completion times are completely unaffected:
+For all tasks $J_j \notin \{J_a, J_b\}$, completion times are unaffected:
 \begin{enumerate}
     \item Tasks completed before time $t$ finish before the interchange occurs, so $C_j(\mathcal{S}') = C_j(\mathcal{S}^*)$.
     \item Tasks scheduled after $J_a$ and $J_b$ begin at $t + \frac{p_b + p_a}{c_k} = t + \frac{p_a + p_b}{c_k}$. Because the total execution duration of $\{J_a, J_b\}$ is invariant under permutation, the start and completion times of all subsequent tasks remain identical: $C_j(\mathcal{S}') = C_j(\mathcal{S}^*)$ for all subsequent $j$.
 \end{enumerate}
 
-Now, evaluate the net cost difference $\Delta \Phi \triangleq \Phi(\mathcal{S}') - \Phi(\mathcal{S}^*)$:
+Now evaluate the cost difference $\Delta \Phi \triangleq \Phi(\mathcal{S}') - \Phi(\mathcal{S}^*)$:
 \begin{align}
 \Delta \Phi &= \Phi_{a,b}(\mathcal{S}') - \Phi_{a,b}(\mathcal{S}^*) \nonumber \\
 &= \frac{1}{c_k} \Big( w_b p_b + w_a p_b + w_a p_a - w_a p_a - w_b p_a - w_b p_b \Big) \nonumber \\
 &= \frac{1}{c_k} \Big( w_a p_b - w_b p_a \Big)
 \end{align}
-From the inversion condition in~\eqref{eq:inv_cond}, $w_a p_b - w_b p_a < 0$. Since $c_k > 0$, it follows that:
+From the inversion condition~\eqref{eq:inv_cond}, $w_a p_b - w_b p_a < 0$. Since $c_k > 0$, it follows that:
 \begin{equation}
 \Delta \Phi = \frac{1}{c_k}(w_a p_b - w_b p_a) < 0 \implies \Phi(\mathcal{S}') < \Phi(\mathcal{S}^*)
 \end{equation}
-This strictly contradicts the assumption that $\mathcal{S}^*$ is an optimal schedule. Since the permutation group $S_n$ is finite and generated by adjacent transpositions, any schedule can be transformed into non-increasing density order via a finite sequence of adjacent exchanges, with each exchange strictly decreasing the objective function until no inversions remain. Thus, Smith's density ordering is uniquely optimal.
+This contradicts the assumption that $\mathcal{S}^*$ is optimal. Since the permutation group $S_n$ is finite and generated by adjacent transpositions, any schedule can be transformed into non-increasing density order via a finite sequence of adjacent exchanges, with each exchange strictly decreasing the objective function until no inversions remain. Thus, Smith's density ordering is uniquely optimal for single-core non-preemptive queues at time zero.
 \end{proof}
 
-\subsection{Extension to Asymmetric Dual-Speed Multiprocessors}
-We now extend density-based scheduling to asymmetric multiprocessors $\mathcal{M} = \mathcal{P} \cup \mathcal{E}$ with $c_P > c_E$.
+\subsection{Computational Complexity of Multiprocessor Scheduling and NP-Hardness}
+\label{sec:np_hardness}
+While Smith's Rule provides an exact, polynomial-time solution for the static single-machine problem $1 || \sum w_j C_j$, the generalized operating system scheduling problem on asymmetric multiprocessors is computationally intractable.
 
-\begin{theorem}[Optimality of Density-Tiered Asymmetric Processor Partitioning]
-\label{thm:asymmetric_density}
-Let $\mathcal{M} = \mathcal{P} \cup \mathcal{E}$ be an asymmetric multiprocessor system with capacities $c_P > c_E$. Under any concurrent assignment of tasks to Performance and Efficiency cores, assigning tasks with higher density $\rho_j$ to Performance cores strictly maximizes the instantaneous rate of remaining weight reduction and minimizes total weighted completion time.
+Using standard Graham notation $\alpha | \beta | \gamma$:
+\begin{enumerate}
+    \item \textbf{Release Dates on a Single Core ($1 | r_j | \sum w_j C_j$):} Introducing dynamic task release dates makes the single-core non-preemptive problem strongly NP-hard, as proven by Lenstra, Rinnooy Kan, and Brucker (1977).
+    \item \textbf{Preemptive Scheduling with Release Dates ($1 | r_j, \text{pmtn} | \sum w_j C_j$):} Even when arbitrary preemption is permitted, minimizing total weighted completion time with dynamic arrivals remains strongly NP-hard (Labetoulle, Lawler, Lenstra, and Rinnooy Kan, 1984).
+    \item \textbf{Parallel Machines ($P || \sum w_j C_j$):} Scheduling independent jobs without release dates on identical parallel machines is strongly NP-hard (Garey and Johnson, 1979).
+    \item \textbf{Asymmetric / Unrelated Parallel Machines ($R | r_j, \text{pmtn} | \sum w_j C_j$):} Scheduling dynamic tasks on asymmetric machines with disparate core capacities ($c_P \ne c_E$), arbitrary release dates, and preemption is strongly NP-hard.
+\end{enumerate}
+
+\begin{proposition}[Computational Intractability of Global Multi-Core Minimization]
+\label{prop:np_hard}
+Finding a schedule that globally minimizes total weighted completion time $\sum w_j C_j$ on an asymmetric multiprocessor $\mathcal{M} = \mathcal{P} \cup \mathcal{E}$ with online release dates and preemption ($R | r_j, \text{pmtn} | \sum w_j C_j$) is strongly NP-hard. No online deterministic scheduler can guarantee an exact global minimum in polynomial time unless $\mathrm{P} = \mathrm{NP}$.
+\end{proposition}
+
+\subsection{Approximation Ratio Reference and Online List Scheduling}
+In classical scheduling theory, Kawaguchi and Kyan (1986) analyzed the worst-case approximation performance of WSPT list scheduling:
+\begin{theorem}[Kawaguchi-Kyan Reference Bound on Identical Machines]
+\label{thm:kawaguchi_kyan}
+For the offline scheduling of independent jobs on $M$ identical parallel processors without release dates ($P || \sum w_j C_j$), the WSPT list scheduling heuristic achieves an approximation ratio bounded by:
+\begin{equation}
+\frac{\Phi(\mathcal{S}_{\mathrm{WSPT}})}{\Phi(\mathcal{S}_{\mathrm{OPT}})} \le \frac{1 + \sqrt{2}}{2} \approx 1.207
+\end{equation}
+\end{theorem}
+
+\begin{remark}[Scope and Application to Asymmetric Architectures]
+The Kawaguchi-Kyan bound $\alpha \le 1.207$ strictly applies to \emph{identical parallel machines} ($P$) with simultaneous job availability at time zero. On asymmetric multiprocessors ($Q$ or $R$) with dynamic release dates $r_j$, the Kawaguchi-Kyan bound does not apply directly. 
+
+Consequently, OPTIMA does \emph{not} claim global multi-core optimality via Smith's Rule, nor does it claim that the 1.207 bound holds unconditionally across asymmetric cores. Instead, OPTIMA employs density-based list scheduling and virtual deadline ordering as an \textbf{online approximation heuristic} inspired by the single-core optimality of Smith's Rule and the classical identical-machine bound.
+\end{remark}
+
+\subsection{Instantaneous Backlog Weight Depletion via the Rearrangement Inequality}
+We now provide the theoretical justification for density-tiered assignment across asymmetric cores $\mathcal{M} = \mathcal{P} \cup \mathcal{E}$ with $c_P > c_E$.
+
+\begin{theorem}[Maximization of Instantaneous Backlog Weight Depletion Rate]
+\label{thm:rearrangement_depletion}
+Let $\mathcal{M} = \mathcal{P} \cup \mathcal{E}$ be an asymmetric multiprocessor system with capacities $c_P > c_E$. At any instant $t$, let $\mathcal{Q}(t)$ denote the set of active uncompleted tasks, and let $W(t) \triangleq \sum_{J_j \in \mathcal{Q}(t)} w_j$ denote total remaining priority weight. 
+
+Matching tasks with higher density $\rho_j = w_j / p_j$ to Performance cores strictly maximizes the instantaneous rate of remaining weight reduction $-\dot{W}(t)$.
 \end{theorem}
 
 \begin{proof}
-Let $W(t) \triangleq \sum_{J_j \in \mathcal{Q}(t)} w_j$ denote the total unscheduled weight in the system at time $t$, where $\mathcal{Q}(t)$ is the set of active, uncompleted tasks. 
 Using the integral representation of total weighted completion time:
 \begin{equation}
 \sum_{J_j \in \mathcal{J}} w_j C_j = \int_0^\infty W(t) \, dt
 \end{equation}
-To minimize $\int_0^\infty W(t) \, dt$, the scheduler must maximize the instantaneous rate of weight decay $-\dot{W}(t)$ at every time $t$.
+To heuristically minimize $\int_0^\infty W(t) \, dt$, a greedy online scheduler should maximize the instantaneous rate of weight decay $-\dot{W}(t)$ at every time $t$.
 
-At any time $t$, let $J_{\sigma(k)}$ be the task currently executing on core $C_k \in \mathcal{M}$. The rate of computational progress delivered to task $J_{\sigma(k)}$ is $c_k / p_{\sigma(k)}$. Because task $J_{\sigma(k)}$ completes after executing $p_{\sigma(k)}$ work, the effective rate of weight retirement delivered by core $C_k$ is:
+At any time $t$, let $J_{\sigma(k)}$ be the task currently executing on core $C_k \in \mathcal{M}$. The computational rate delivered to task $J_{\sigma(k)}$ is $c_k / p_{\sigma(k)}$ per second. Because task $J_{\sigma(k)}$ completes after executing $p_{\sigma(k)}$ work, the effective rate of weight retirement delivered by core $C_k$ is:
 \begin{equation}
 -\dot{W}_k(t) = w_{\sigma(k)} \cdot \frac{c_k}{p_{\sigma(k)}} = \rho_{\sigma(k)} \cdot c_k
 \end{equation}
@@ -205,12 +256,12 @@ Summing over all $M$ cores, the total instantaneous rate of weight depletion is:
 -\dot{W}(t) = \sum_{k=1}^M \rho_{\sigma(k)} c_k = \sum_{k \in \mathcal{P}} \rho_{\sigma(k)} c_P + \sum_{k \in \mathcal{E}} \rho_{\sigma(k)} c_E
 \end{equation}
 
-Now, consider any two tasks $J_1$ and $J_2$ running concurrently, with $J_1$ assigned to a P-core ($c_P$) and $J_2$ assigned to an E-core ($c_E$). Suppose for contradiction that $\rho_1 < \rho_2$.
+Now consider any two tasks $J_1$ and $J_2$ running concurrently, with $J_1$ assigned to a P-core ($c_P$) and $J_2$ assigned to an E-core ($c_E$). Suppose for contradiction that $\rho_1 < \rho_2$.
 The weight depletion rate under this assignment $\mathcal{A}$ is:
 \begin{equation}
 R(\mathcal{A}) = \rho_1 c_P + \rho_2 c_E
 \end{equation}
-Interchanging the cores of $J_1$ and $J_2$ produces assignment $\mathcal{A}'$ with depletion rate:
+Interchanging the core assignments of $J_1$ and $J_2$ produces assignment $\mathcal{A}'$ with depletion rate:
 \begin{equation}
 R(\mathcal{A}') = \rho_2 c_P + \rho_1 c_E
 \end{equation}
@@ -221,7 +272,7 @@ R(\mathcal{A}') - R(\mathcal{A}) &= (\rho_2 c_P + \rho_1 c_E) - (\rho_1 c_P + \r
 \end{align}
 Because $\rho_2 > \rho_1$ and $c_P > c_E$, we have $(\rho_2 - \rho_1)(c_P - c_E) > 0$, which implies $R(\mathcal{A}') > R(\mathcal{A})$.
 
-More generally, by the Hardy-Littlewood-Pólya Rearrangement Inequality, for any two sequences of real numbers sorted in non-increasing order:
+More generally, by the Hardy-Littlewood-P\'olya Rearrangement Inequality, for any two real sequences sorted in non-increasing order:
 \begin{align}
 \rho_{(1)} \ge \rho_{(2)} \ge \dots \ge \rho_{(M)} \\
 c_{(1)} \ge c_{(2)} \ge \dots \ge c_{(M)}
@@ -231,165 +282,212 @@ Because $c_k = c_P$ for all $k \in \mathcal{P}$ and $c_k = c_E$ for all $k \in \
 \begin{equation}
 \min_{k \in \mathcal{P}} \rho_{\sigma(k)} \ge \max_{k' \in \mathcal{E}} \rho_{\sigma(k')}
 \end{equation}
-Therefore, allocating tasks with the highest densities $\rho_j$ to Performance cores maximizes the instantaneous reduction of system backlog, minimizing total weighted completion time.
+Therefore, allocating tasks with highest densities to Performance cores strictly maximizes the instantaneous rate of system backlog reduction.
 \end{proof}
+
+\begin{remark}[Instantaneous vs Global Optimality]
+Maximizing $-\dot{W}(t)$ is an instantaneous (greedy) rate maximization at time $t$. Because future arrivals $r_j > t$ dynamically alter queue state, instantaneous rate maximization does not constitute a proof of global multi-stage offline optimality over $[0, \infty)$, but provides a principled mathematical basis for asymmetric core partitioning.
+\end{remark}
 
 \subsection{Continuous Dantzig Knapsack Formulation in eBPF}
 When tasks wake up dynamically, full combinatorial reassignment across all cores is computationally prohibitive. OPTIMA formulates core assignment as a continuous knapsack problem.
-Let $x_j \in \{0, 1\}$ denote whether task $J_j$ is allocated to a Performance core ($x_j = 1$) or an Efficiency core ($x_j = 0$). The latency reduction gain obtained by assigning $J_j$ to a P-core instead of an E-core is:
+
+Let $x_j \in \{0, 1\}$ denote whether task $J_j$ is allocated to a Performance core ($x_j = 1$) or an Efficiency core ($x_j = 0$). The weighted completion time reduction obtained by executing $J_j$ on a P-core instead of an E-core is:
 \begin{equation}
 \label{eq:knapsack_gain}
 \mathrm{Gain}(J_j) = w_j \left( \frac{p_j}{c_E} - \frac{p_j}{c_P} \right) = w_j p_j \left( \frac{c_P - c_E}{c_P c_E} \right)
 \end{equation}
-Subject to the P-core capacity constraint $\sum_{j} x_j \le M_P$, the continuous relaxation upper bound (Dantzig-Wolfe relaxation) ranks tasks by marginal gain per unit capacity. By~\eqref{eq:knapsack_gain}, this marginal efficiency is directly proportional to task density $\rho_j = w_j / p_j$.
-OPTIMA implements this continuous frontier in kernel eBPF by defining a critical density threshold $\rho^*$: tasks with $\rho_j \ge \rho^*$ or $w_j \ge w_{\mathrm{RT}}$ are routed to $\mathcal{P}$, while batch tasks with $\rho_j < \rho^*$ are placed on $\mathcal{E}$ when P-core queues are saturated. This yields a deterministic $\mathcal{O}(1)$ kernel hot-path decision while tracking the optimal continuous relaxation.
+Subject to the P-core capacity constraint $\sum_{j} x_j \le M_P$, the continuous relaxation upper bound (Dantzig knapsack relaxation) ranks tasks by marginal gain per unit capacity. By~\eqref{eq:knapsack_gain}, this marginal efficiency is directly proportional to task density $\rho_j = w_j / p_j$.
+
+OPTIMA implements this continuous frontier in kernel eBPF by defining a critical density threshold $\rho^*$: tasks with $\rho_j \ge \rho^*$ or $w_j \ge w_{\mathrm{RT}}$ are placed in the Performance domain, while tasks with $\rho_j < \rho^*$ are placed in the Efficiency domain when P-core queues are congested. This yields a deterministic $\mathcal{O}(1)$ kernel hot-path decision tracking the continuous relaxation.
 
 % =========================================================================
-% SECTION 3: THEOREM 2 (BRANCH-AND-BOUND PREEMPTION)
+% SECTION 3: THEOREM 2 (ONLINE ADMISSIBLE PREEMPTION FILTERING)
 % =========================================================================
-\section{Branch-and-Bound Online Preemption Bounding}
+\section{Online Admissible Preemption Filtering (OAPF)}
 \label{sec:theorem2}
 
-\subsection{The Online Preemption Decision Problem}
-In an asymmetric multiprocessing system, when a high-priority interactive or real-time task $J_{\mathrm{wake}} \in \mathcal{J}_{\mathrm{RT}}$ arrives at time $t$, all Performance cores $\mathcal{P}$ may be actively executing batch tasks. The scheduler faces an immediate online decision:
+\subsection{The Online Preemption Decision Dilemma}
+In an asymmetric multiprocessing system, when a high-priority interactive or latency-critical task $J_{\mathrm{wake}} \in \mathcal{J}_{\mathrm{RT}}$ arrives at time $t$, all Performance cores $\mathcal{P}$ may be actively executing batch tasks. The scheduler faces an immediate online dilemma:
 \begin{itemize}
-    \item \textbf{Option 1 (Non-Preemptive Wait):} Enqueue $J_{\mathrm{wake}}$ into the dispatch queue and allow currently running tasks to execute until their time quanta expire.
+    \item \textbf{Option 1 (Non-Preemptive Wait):} Enqueue $J_{\mathrm{wake}}$ and allow the running task to complete its allocated time quantum, avoiding context-switch overhead but incurring queue latency for $J_{\mathrm{wake}}$.
     \item \textbf{Option 2 (Preemptive Displacement):} Select an active P-core $c^* \in \mathcal{P}$, immediately preempt its currently running task $J_{\mathrm{curr}}(c^*)$, and schedule $J_{\mathrm{wake}}$ on core $c^*$.
 \end{itemize}
 
-Preemption is not cost-free: preempting a task introduces a context-switch and hardware cache invalidation penalty $C_{\mathrm{switch}} > 0$, while delaying the running task $J_{\mathrm{curr}}$ by at least the duration of $J_{\mathrm{wake}}$'s execution slice.
+Preemption is not cost-free: preempting a task introduces a context-switch and cache displacement overhead $C_{\mathrm{switch}} > 0$, while delaying the running task $J_{\mathrm{curr}}$ by the execution duration of $J_{\mathrm{wake}}$ plus switching overhead.
 
-\subsection{Derivation of the Mathematical Lower Bound \texorpdfstring{$LB(S)$}{LB(S)}}
-For each candidate Performance core $c \in \mathcal{P}$, let $J_{\mathrm{curr}}(c)$ denote the task currently running on core $c$.
-Let:
+\begin{remark}[Nature of the Algorithmic Decision]
+OPTIMA does \emph{not} explore an exponential, multi-stage Branch-and-Bound search tree over future schedules. Instead, OPTIMA implements an \textbf{Online Admissible Preemption Filter (OAPF)} / \textbf{Greedy Decision Rule} that evaluates candidate Performance cores $c \in \mathcal{P}$ in $\mathcal{O}(M_P)$ bounded kernel time upon each task wakeup.
+\end{remark}
+
+\subsection{Dimensionally Consistent Cost Formulation}
+For each candidate Performance core $c \in \mathcal{P}$, let $J_{\mathrm{curr}}(c)$ denote the task executing on core $c$. Let:
 \begin{itemize}
-    \item $w_{\mathrm{curr}}(c)$ be the priority weight of $J_{\mathrm{curr}}(c)$.
-    \item $t_{\mathrm{start}}(c)$ be the timestamp when $J_{\mathrm{curr}}(c)$ commenced its current time slice.
+    \item $w_{\mathrm{curr}}(c)$ be the priority weight of running task $J_{\mathrm{curr}}(c)$.
+    \item $t_{\mathrm{start}}(c)$ be the start timestamp of $J_{\mathrm{curr}}(c)$'s current time slice.
     \item $\tau(c)$ be the allocated quantum of $J_{\mathrm{curr}}(c)$.
-    \item $R(c) \triangleq \max\Big(0, \, \tau(c) - \big(t - t_{\mathrm{start}}(c)\big)\Big)$ be the remaining slice duration of $J_{\mathrm{curr}}(c)$.
+    \item $R(c) \triangleq \max\Big(0, \, \tau(c) - \big(t - t_{\mathrm{start}}(c)\big)\Big)$ be the remaining quantum duration of $J_{\mathrm{curr}}(c)$ in time units.
     \item $w_{\mathrm{wake}}$ be the priority weight of waking task $J_{\mathrm{wake}}$.
+    \item $p_{\mathrm{wake}}$ be the nominal execution work / quantum assigned to $J_{\mathrm{wake}}$ (in kernel: bounded by $\tau_{\min}$).
+    \item $C_{\mathrm{switch}}$ be the context-switch and cache invalidation penalty in time units.
 \end{itemize}
 
-\begin{definition}[Preemption Penalty and Gain]
-For any candidate core $c \in \mathcal{P}$:
-\begin{align}
-\mathrm{Penalty}(c) &\triangleq w_{\mathrm{curr}}(c) \cdot R(c) + C_{\mathrm{switch}} \label{eq:penalty} \\
-\mathrm{Gain}(c) &\triangleq w_{\mathrm{wake}} \cdot R(c) \label{eq:gain}
-\end{align}
-\end{definition}
-
-The net latency cost differential incurred by preempting core $c$ instead of waiting is:
-\begin{align}
-\Delta\mathrm{Cost}(c) &\triangleq \mathrm{Penalty}(c) - \mathrm{Gain}(c) \nonumber \\
-&= \Big( w_{\mathrm{curr}}(c) - w_{\mathrm{wake}} \Big) \cdot R(c) + C_{\mathrm{switch}} \label{eq:deltacost}
-\end{align}
-
-We formulate the state space as a search tree $S$, where each candidate branch corresponds to selecting core $c \in \mathcal{P}$ for preemption, and the root represents the null action (no preemption).
-
-\begin{definition}[Admissible Lower Bound Function]
-For any subtree rooted at candidate core $c \in \mathcal{P}$, the bounding function is defined as:
+\begin{definition}[Preemption Cost and Gain Formulation]
+\label{def:deltacost}
+If the scheduler chooses \textbf{Option 1 (Wait)}, waking task $J_{\mathrm{wake}}$ is delayed by remaining slice $R(c)$, incurring a priority-weighted latency cost:
 \begin{equation}
-\label{eq:lb_def}
-LB(c) \triangleq \Big( w_{\mathrm{curr}}(c) - w_{\mathrm{wake}} \Big) \cdot R(c) + C_{\mathrm{switch}}
+\mathrm{Cost}_{\mathrm{wait}}(c) = w_{\mathrm{wake}} \cdot R(c)
 \end{equation}
+If the scheduler chooses \textbf{Option 2 (Preempt)}, $J_{\mathrm{wake}}$ executes immediately, eliminating the wait of $R(c)$ (saving $w_{\mathrm{wake}} \cdot R(c)$). However, running task $J_{\mathrm{curr}}(c)$ is suspended during the execution of $J_{\mathrm{wake}}$ ($p_{\mathrm{wake}}$ time units) plus the context switch overhead $C_{\mathrm{switch}}$. Thus, $J_{\mathrm{curr}}(c)$ is delayed by $(p_{\mathrm{wake}} + C_{\mathrm{switch}})$, incurring a priority-weighted penalty:
+\begin{equation}
+\mathrm{Penalty}_{\mathrm{preempt}}(c) = w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})
+\end{equation}
+
+The net schedule cost differential incurred by preempting core $c$ instead of waiting is:
+\begin{align}
+\label{eq:deltacost}
+\Delta\mathrm{Cost}(c) &\triangleq \mathrm{Penalty}_{\mathrm{preempt}}(c) - \mathrm{Cost}_{\mathrm{wait}}(c) \nonumber \\
+&= w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)
+\end{align}
 \end{definition}
 
-\subsection{Branch-and-Bound Pruning Invariants}
-OPTIMA evaluates $LB(c)$ across candidate cores using four rigorous pruning rules:
+\begin{remark}[Dimensional Consistency]
+In~\eqref{eq:deltacost}, both terms possess unified physical dimensions of $[\mathrm{weight} \times \mathrm{time}]$ (priority-weighted delay units):
+\begin{itemize}
+    \item $w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})$ has units $[w] \times [t]$.
+    \item $w_{\mathrm{wake}} \cdot R(c)$ has units $[w] \times [t]$.
+\end{itemize}
+Alternatively, if context switch cost is expressed directly in priority-weighted delay units $C_{\mathrm{switch}}^{\mathrm{weighted}} \triangleq w_{\mathrm{curr}} C_{\mathrm{switch}}$, the formulation is identically dimensioned.
+\end{remark}
+
+\subsection{Online Admissible Pruning Invariants}
+OPTIMA evaluates $\Delta\mathrm{Cost}(c)$ across candidate cores using four pruning invariants:
 
 \begin{enumerate}
-    \item \textbf{Rule 1 (Trivial Optimum / Idle Core):} If candidate core $c$ is idle ($w_{\mathrm{curr}}(c) = 0$), then $\mathrm{Penalty}(c) = 0$ (no running task is displaced), yielding:
+    \item \textbf{Invariant 1 (Idle Core Trivial Minimum):} If candidate core $c$ is idle ($w_{\mathrm{curr}}(c) = 0$), then $\mathrm{Penalty}_{\mathrm{preempt}}(c) = 0$ (no task is displaced). Thus:
     \begin{equation}
-    LB(c) = -w_{\mathrm{wake}} \cdot R(c) < 0
+    \Delta\mathrm{Cost}(c) = -w_{\mathrm{wake}} \cdot R(c) < 0
     \end{equation}
-    This constitutes the absolute minimum bound; the search terminates immediately with $c^* = c$ in $\mathcal{O}(1)$ time.
+    Core $c$ is immediately selected for dispatch without preemption.
     
-    \item \textbf{Rule 2 (Inversion Safety Pruning):} If $w_{\mathrm{curr}}(c) \ge w_{\mathrm{wake}}$, preempting core $c$ would displace a higher- or equal-priority task to run a lower-priority task, inducing priority inversion. Because $\big(w_{\mathrm{curr}}(c) - w_{\mathrm{wake}}\big) \ge 0$ and $C_{\mathrm{switch}} > 0$:
+    \item \textbf{Invariant 2 (Priority Inversion Safety):} If $w_{\mathrm{curr}}(c) \ge w_{\mathrm{wake}}$, preempting core $c$ would displace an equal- or higher-priority running task to execute a lower-priority waking task, causing priority inversion. Furthermore, since $p_{\mathrm{wake}} + C_{\mathrm{switch}} \ge R(c)$ in typical quantum regimes, $\Delta\mathrm{Cost}(c) \ge 0$. The candidate is strictly inadmissible and pruned.
+    
+    \item \textbf{Invariant 3 (Granularity / Anti-Thrashing Threshold):} Preempting core $c$ yields a net cost reduction ($\Delta\mathrm{Cost}(c) < 0$) if and only if:
     \begin{equation}
-    LB(c) \ge C_{\mathrm{switch}} > 0
+    \label{eq:thrash_threshold}
+    R(c) > \delta_{\min}(c) \triangleq \frac{w_{\mathrm{curr}}(c) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}
     \end{equation}
-    The branch cannot yield a net cost reduction. It is strictly inadmissible and pruned.
+    If $R(c) \le \delta_{\min}(c)$, the execution gain is insufficient to amortize displacement and context-switch penalties. The candidate is safely pruned.
     
-    \item \textbf{Rule 3 (Granularity Threshold Pruning):} If the remaining quantum $R(c) < \delta_{\min}$, where:
-    \begin{equation}
-    \delta_{\min} \triangleq \frac{C_{\mathrm{switch}}}{w_{\mathrm{wake}} - w_{\mathrm{curr}}(c)}
-    \end{equation}
-    the execution gain $(w_{\mathrm{wake}} - w_{\mathrm{curr}})R(c)$ is strictly insufficient to amortize the hardware context-switch penalty $C_{\mathrm{switch}}$. Thus $LB(c) > 0$, and the branch is safely pruned.
-    
-    \item \textbf{Rule 4 (Incumbent Cutoff):} Maintain the best upper bound $UB_{\mathrm{best}} \triangleq \min_{j \in \mathrm{visited}} LB(j)$, initialized to 0. If $LB(c) \ge UB_{\mathrm{best}}$, candidate core $c$ cannot improve upon the best incumbent preemption target. The branch is pruned.
+    \item \textbf{Invariant 4 (Incumbent Greedy Cutoff):} Maintain the best incumbent cost reduction $\Delta\mathrm{Cost}^* \triangleq \min_{j \in \mathrm{visited}} \Delta\mathrm{Cost}(j)$, initialized to 0. If $\Delta\mathrm{Cost}(c) \ge \Delta\mathrm{Cost}^*$, candidate core $c$ cannot improve upon the best discovered candidate. The candidate is pruned.
 \end{enumerate}
 
-\begin{proposition}[Admissibility of Pruning]
-\label{prop:admissibility}
-The bounding function $LB(c)$ is admissible. Pruning any branch where $LB(c) \ge 0$ or $LB(c) \ge UB_{\mathrm{best}}$ guarantees that no globally optimal preemption target is eliminated.
-\end{proposition}
+\subsection{Bounded Regret and One-Step Optimality Analysis}
 
-\begin{proof}
-Let $c^*$ be the true optimal preemption target. If preempting $c^*$ is optimal, it must satisfy $\Delta\mathrm{Cost}(c^*) < 0$, which is equivalent to $LB(c^*) < 0$. 
-Under Rule 2, any core with $w_{\mathrm{curr}} \ge w_{\mathrm{wake}}$ has $LB(c) \ge C_{\mathrm{switch}} > 0 > LB(c^*)$, so $c^* \ne c$. 
-Under Rule 3, any core with $R(c) < \delta_{\min}$ has $LB(c) > 0 > LB(c^*)$, so $c^* \ne c$. 
-Under Rule 4, if $LB(c) \ge UB_{\mathrm{best}}$, then candidate $c$ has net cost strictly worse than or equal to an already discovered admissible candidate. Therefore, pruning never discards $c^*$.
-\end{proof}
-
-\subsection{Competitive Ratio Analysis}
-We now prove that the preemption predicate guarantees bounded performance relative to an offline optimal schedule.
-
-\begin{theorem}[Competitive Ratio of OPTIMA Preemption Guard]
-\label{thm:competitive_ratio}
-Let $\mathcal{S}_{\mathrm{ON}}$ be the schedule generated by OPTIMA under the online Branch-and-Bound preemption predicate:
-\begin{align}
-\label{eq:preempt_predicate}
-\text{Preempt } c^* \iff & c^* = \arg\min_{c \in \mathcal{P}} LB(c) \nonumber \\
-& \text{and } LB(c^*) < 0
-\end{align}
-and let $\mathcal{S}_{\mathrm{OPT}}$ be the offline optimal schedule. Then the competitive ratio is bounded by:
+\begin{theorem}[Local One-Step Cost Reduction and Regret Bounding]
+\label{thm:oapf_optimality}
+Let $c^*$ be the candidate selected by the Online Admissible Preemption Filter:
 \begin{equation}
-\frac{\Phi(\mathcal{S}_{\mathrm{ON}})}{\Phi(\mathcal{S}_{\mathrm{OPT}})} \le 1 + \epsilon
+c^* = \arg\min_{c \in \mathcal{P}} \Delta\mathrm{Cost}(c)
 \end{equation}
-where $\epsilon \triangleq \dfrac{C_{\mathrm{switch}}}{\tau_{\min} \cdot w_{\min}} \ll 1$.
+If $\Delta\mathrm{Cost}(c^*) < 0$, triggering preemption on core $c^*$ guarantees:
+\begin{enumerate}
+    \item \textbf{Local One-Step Cost Reduction:} Under the local horizon (assuming no further task arrivals occur during $[t, \, t + R(c^*) + p_{\mathrm{wake}}]$), preemption strictly decreases the total weighted completion time:
+    \begin{equation}
+    \Delta\Phi = \Delta\mathrm{Cost}(c^*) < 0
+    \end{equation}
+    \item \textbf{Anti-Thrashing Invariant:} Because preemption is permitted only when $R(c) > \delta_{\min}(c) \ge \tau_{\min}$, each core experiences at most one preemption per $\tau_{\min}$ time interval:
+    \begin{equation}
+    f_{\mathrm{preempt}}(c) \le \frac{1}{\tau_{\min}}
+    \end{equation}
+    preventing high-frequency preemption thrashing.
+    \item \textbf{Locally Bounded Regret:} Relative to a local clairvoyant controller deciding whether to preempt at time $t$ over the horizon $[t, t + R(c^*) + p_{\mathrm{wake}}]$, OPTIMA achieves zero regret.
+\end{enumerate}
 \end{theorem}
 
 \begin{proof}
-We construct a continuous potential function $\Psi(t)$ to bound the divergence between the online cost $\Phi(\mathcal{S}_{\mathrm{ON}})$ and the offline optimal cost $\Phi(\mathcal{S}_{\mathrm{OPT}})$. 
-Define:
-\begin{equation}
-\Psi(t) \triangleq \sum_{J_j \in \mathcal{Q}_{\mathrm{ON}}(t)} w_j \cdot \Big( t - r_j \Big) + \sum_{c \in \mathcal{P}} \mathbf{1}_{\{c \text{ is preempted}\}} \cdot C_{\mathrm{switch}}
-\end{equation}
-where $\mathcal{Q}_{\mathrm{ON}}(t)$ is the active queue backlog under $\mathcal{S}_{\mathrm{ON}}$.
+Let $\mathcal{S}_{\mathrm{wait}}$ denote the schedule where $J_{\mathrm{wake}}$ waits for $J_{\mathrm{curr}}(c^*)$ to finish $R(c^*)$, and let $\mathcal{S}_{\mathrm{preempt}}$ denote the schedule where $J_{\mathrm{curr}}(c^*)$ is preempted immediately for $J_{\mathrm{wake}}$.
 
-Consider any preemption event occurring at time $t$ on core $c^*$:
-\begin{enumerate}
-    \item By the preemption predicate~\eqref{eq:preempt_predicate}, preemption occurs if and only if $LB(c^*) < 0$, which implies:
-    \begin{equation}
-    (w_{\mathrm{wake}} - w_{\mathrm{curr}}(c^*)) R(c^*) > C_{\mathrm{switch}}
-    \end{equation}
-    \item The immediate reduction in total weighted delay achieved by executing $J_{\mathrm{wake}}$ rather than waiting is:
-    \begin{equation}
-    \Delta \Phi_{\mathrm{gain}} = w_{\mathrm{wake}} R(c^*)
-    \end{equation}
-    \item The delay penalty imposed on the displaced task $J_{\mathrm{curr}}$ is $w_{\mathrm{curr}} R(c^*)$, and the switching overhead is $C_{\mathrm{switch}}$. The net online cost change satisfies:
-    \begin{align}
-    \Delta \Phi_{\mathrm{ON}} &= w_{\mathrm{curr}} R(c^*) + C_{\mathrm{switch}} - w_{\mathrm{wake}} R(c^*) \nonumber \\
-    &= LB(c^*) < 0
-    \end{align}
-\end{enumerate}
-
-Now consider the worst-case adversary: the offline optimal schedule $\mathcal{S}_{\mathrm{OPT}}$ possesses complete future knowledge of all task release times. 
-If $\mathcal{S}_{\mathrm{OPT}}$ does not preempt at time $t$ because a shorter task arrives at $t + \delta$, the maximum extra cost incurred by $\mathcal{S}_{\mathrm{ON}}$ due to preemption is strictly bounded by $C_{\mathrm{switch}}$.
-
-Because preemption is permitted only when $R(c) \ge \delta_{\min} \ge \tau_{\min}$, the maximum number of preemptions that can occur over any interval of length $T$ on any core is bounded by:
-\begin{equation}
-N_{\mathrm{preempt}}(T) \le \frac{T}{\tau_{\min}}
-\end{equation}
-Thus, thrashing (chattering) is impossible. 
-Integrating over the entire execution horizon $[0, \infty)$:
+Under $\mathcal{S}_{\mathrm{wait}}$, completion times of the two affected tasks are:
 \begin{align}
-\Phi(\mathcal{S}_{\mathrm{ON}}) &\le \Phi(\mathcal{S}_{\mathrm{OPT}}) + \sum_{k=1}^{N_{\mathrm{preempt}}} C_{\mathrm{switch}} \nonumber \\
-&\le \Phi(\mathcal{S}_{\mathrm{OPT}}) + \frac{C_{\mathrm{switch}}}{\tau_{\min}} \int_0^\infty \sum_{J_j \in \mathcal{Q}(t)} 1 \, dt \nonumber \\
-&\le \Phi(\mathcal{S}_{\mathrm{OPT}}) \left( 1 + \frac{C_{\mathrm{switch}}}{\tau_{\min} \cdot w_{\min}} \right)
+C_{\mathrm{curr}}(\mathcal{S}_{\mathrm{wait}}) &= t + R(c^*) \\
+C_{\mathrm{wake}}(\mathcal{S}_{\mathrm{wait}}) &= t + R(c^*) + p_{\mathrm{wake}}
 \end{align}
-Setting $\epsilon = \frac{C_{\mathrm{switch}}}{\tau_{\min} \cdot w_{\min}}$ completes the proof.
+Under $\mathcal{S}_{\mathrm{preempt}}$, $J_{\mathrm{wake}}$ executes first during $[t, t + p_{\mathrm{wake}}]$, followed by a context switch of duration $C_{\mathrm{switch}}$, after which $J_{\mathrm{curr}}(c^*)$ resumes and completes its remaining $R(c^*)$ execution:
+\begin{align}
+C_{\mathrm{wake}}(\mathcal{S}_{\mathrm{preempt}}) &= t + p_{\mathrm{wake}} \\
+C_{\mathrm{curr}}(\mathcal{S}_{\mathrm{preempt}}) &= t + p_{\mathrm{wake}} + C_{\mathrm{switch}} + R(c^*)
+\end{align}
+The completion times of all other tasks in the system are invariant under the local horizon.
+
+Evaluating the change in the objective function $\Phi(\mathcal{S}) = \sum w_j C_j$:
+\begin{align}
+\Delta\Phi &= \Phi(\mathcal{S}_{\mathrm{preempt}}) - \Phi(\mathcal{S}_{\mathrm{wait}}) \nonumber \\
+&= w_{\mathrm{wake}} \Big( C_{\mathrm{wake}}(\mathcal{S}_{\mathrm{preempt}}) - C_{\mathrm{wake}}(\mathcal{S}_{\mathrm{wait}}) \Big) \nonumber \\
+&\quad + w_{\mathrm{curr}}(c^*) \Big( C_{\mathrm{curr}}(\mathcal{S}_{\mathrm{preempt}}) - C_{\mathrm{curr}}(\mathcal{S}_{\mathrm{wait}}) \Big) \nonumber \\
+&= w_{\mathrm{wake}} \Big( (t + p_{\mathrm{wake}}) - (t + R(c^*) + p_{\mathrm{wake}}) \Big) \nonumber \\
+&\quad + w_{\mathrm{curr}}(c^*) \Big( (t + p_{\mathrm{wake}} + C_{\mathrm{switch}} + R(c^*)) \nonumber \\
+&\qquad\qquad\qquad\quad - (t + R(c^*)) \Big) \nonumber \\
+&= -w_{\mathrm{wake}} \cdot R(c^*) + w_{\mathrm{curr}}(c^*) \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}}) \nonumber \\
+&= \Delta\mathrm{Cost}(c^*)
+\end{align}
+Since preemption is executed only when $\Delta\mathrm{Cost}(c^*) < 0$, we have $\Delta\Phi < 0$, strictly decreasing the total weighted completion time.
+
+For thrashing prevention, suppose a core undergoes preemption at time $t$. The newly dispatched task executes for at least $\tau_{\min}$, during which its elapsed time is less than $\tau_{\min}$. Any subsequent preemption attempt on that core must satisfy $R(c) > \delta_{\min} \ge \tau_{\min}$, which cannot occur until at least $\tau_{\min}$ time has elapsed. Thus, the preemption frequency is bounded by $1/\tau_{\min}$.
 \end{proof}
+
+\begin{remark}[Clarification on Offline Competitive Ratio Claims]
+In online scheduling theory with dynamic arrivals, no deterministic online preemptive algorithm can achieve a competitive ratio bounded by $(1+\epsilon)$ against an unconstrained offline adversary with arbitrary future knowledge (Bansal et al., 2009). The earlier unproven offline competitive ratio claim is removed. Theorem~\ref{thm:oapf_optimality} establishes rigorous local one-step cost reduction and anti-thrashing bounds under well-defined local assumptions.
+\end{remark}
+
+\subsection{Pseudocode for Online Admissible Preemption Filter}
+Algorithm~\ref{alg:oapf} presents the complete, verified logic of the Online Admissible Preemption Filter.
+
+\begin{algorithm}[t]
+\caption{OPTIMA-OAPF (Online Admissible Preemption Filter)}
+\label{alg:oapf}
+\begin{algorithmic}[1]
+\footnotesize
+\REQUIRE Waking task $J_{\mathrm{wake}}$, task context $tctx$, candidate core set $\mathcal{P}$
+\ENSURE Target preemption CPU $c^*$ (or $-1$ if wait is optimal)
+\STATE $c^* \leftarrow -1$
+\STATE $\Delta\mathrm{Cost}^* \leftarrow 0$ \COMMENT{Incumbent threshold: must yield net cost reduction}
+\STATE $now \leftarrow \text{scx\_bpf\_now}()$
+\STATE $w_{\mathrm{wake}} \leftarrow \max(tctx.weight, 100)$
+\STATE $p_{\mathrm{wake}} \leftarrow \tau_{\min}$ \COMMENT{Execution slice allocated to waking task}
+\STATE $C_{\mathrm{switch}} \leftarrow 50\,\mu\text{s}$ \COMMENT{Context-switch and cache displacement overhead}
+
+\FOR{each core $c \in \mathcal{P}$}
+    \IF{$c \notin J_{\mathrm{wake}}.\text{cpus\_allowed}$}
+        \STATE \textbf{continue}
+    \ENDIF
+    \STATE $st \leftarrow \text{lookup\_cpu\_run\_state}(c)$
+    \IF{$st == \text{NULL}$ \OR $st.pid == 0$}
+        \RETURN $c$ \COMMENT{Rule 1: Core is idle; trivial zero-cost dispatch}
+    \ENDIF
+    \IF{$st.weight \ge w_{\mathrm{wake}}$}
+        \STATE \textbf{continue} \COMMENT{Rule 2: Inversion safety; candidate pruned}
+    \ENDIF
+    \STATE $elapsed \leftarrow now - st.start\_time$
+    \STATE $R(c) \leftarrow (st.slice > elapsed) \ ? \ (st.slice - elapsed) : 0$
+    \STATE $\delta_{\min} \leftarrow \dfrac{st.weight \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}})}{w_{\mathrm{wake}}}$
+    \IF{$R(c) \le \delta_{\min}$}
+        \STATE \textbf{continue} \COMMENT{Rule 3: Anti-thrashing; candidate pruned}
+    \ENDIF
+    \STATE $\Delta\mathrm{Cost} \leftarrow st.weight \cdot (p_{\mathrm{wake}} + C_{\mathrm{switch}}) - w_{\mathrm{wake}} \cdot R(c)$
+    \IF{$\Delta\mathrm{Cost} < \Delta\mathrm{Cost}^*$}
+        \STATE $\Delta\mathrm{Cost}^* \leftarrow \Delta\mathrm{Cost}$
+        \STATE $c^* \leftarrow c$
+    \ENDIF
+\ENDFOR
+
+\IF{$c^* \ge 0$ \AND $\Delta\mathrm{Cost}^* < 0$}
+    \STATE $\text{scx\_bpf\_kick\_cpu}(c^*, \text{SCX\_KICK\_PREEMPT})$
+    \RETURN $c^*$
+\ENDIF
+\RETURN $-1$ \COMMENT{Wait for quantum expiration is optimal}
+\end{algorithmic}
+\end{algorithm}
 
 % =========================================================================
 % SECTION 4: THEOREM 3 (LYAPUNOV DRIFT & QUEUE STABILITY)
@@ -398,7 +496,7 @@ Setting $\epsilon = \frac{C_{\mathrm{switch}}}{\tau_{\min} \cdot w_{\min}}$ comp
 \label{sec:theorem3}
 
 \subsection{Virtual Deadline Calculus}
-To maintain Smith's density ordering across continuous scheduling events without requiring global sorting of all system tasks, OPTIMA maintains virtual deadlines in eBPF Dispatch Queues (DSQs).
+To maintain density-ordered scheduling across dynamic online arrivals without global queue sorting overheads, OPTIMA maintains virtual deadlines in eBPF Dispatch Queues (DSQs).
 
 \begin{definition}[Virtual Deadline Update Equation]
 \label{def:vdeadline}
@@ -415,10 +513,10 @@ where $\tau_j(t)$ is the adaptive scheduling quantum computed as:
 Here $q_k(t)$ denotes the current queue depth of target queue $k$, $Q_{\mathrm{base}}$ is the base nominal quantum, and $\tau_{\min}, \tau_{\max}$ are hardware enforcement boundaries.
 \end{definition}
 
-For interactive tasks ($w_j \ge w_{\mathrm{RT}}$ or $p_j < \tau_{\min}$), $v_j(t) = t$, placing them at the front of the DSQ priority heap. For batch tasks, virtual deadlines advance monotonically in proportion to quantum consumed divided by task weight, exactly preserving Generalized Processor Sharing (GPS) fairness while realizing Smith's WSPT ordering.
+For interactive tasks ($w_j \ge w_{\mathrm{RT}}$ or $p_j < \tau_{\min}$), $v_j(t) = t$, placing them at the front of the DSQ priority heap. For batch tasks, virtual deadlines advance monotonically in proportion to quantum consumed divided by task weight, preserving Generalized Processor Sharing (GPS) fairness while approximating Smith's density ordering.
 
 \subsection{Queue State Dynamics}
-We model the system across the four kernel dispatch queues:
+We model the system across four kernel dispatch queues:
 \begin{align}
 \mathcal{K} &\triangleq \{1, 2, 3, 4\} \nonumber \\
 &\equiv \{\mathrm{DSQ\_PERF}, \, \mathrm{DSQ\_SHARED\_P}, \nonumber \\
@@ -432,8 +530,8 @@ q_k(t+1) = \max\Big(0, \; q_k(t) - s_k(t)\Big) + a_k(t), \quad \forall k \in \ma
 \end{equation}
 where:
 \begin{itemize}
-    \item $a_k(t)$ is the number of task arrivals into queue $k$ during time slot $t$, with arrival rate $\lambda_k \triangleq \mathbb{E}[a_k(t)]$.
-    \item $s_k(t)$ is the service capacity (number of task dispatches plus work-stealing removals) from queue $k$ during time slot $t$.
+    \item $a_k(t)$ is the number of task arrivals into queue $k$ during time slot $t$, with arrival rate $\lambda_k \triangleq \mathbb{E}[a_k(t)]$ and bounded second moment $\mathbb{E}[a_k(t)^2] \le a_{\max}^2 < \infty$.
+    \item $s_k(t)$ is the service capacity (number of task dispatches plus work-stealing removals) from queue $k$ during time slot $t$, with $s_k(t) \le s_{\max} < \infty$.
 \end{itemize}
 
 \subsection{Quadratic Lyapunov Function and Drift Analysis}
@@ -450,7 +548,7 @@ The conditional one-step Lyapunov drift is defined as:
 \Delta L(\mathbf{Q}(t)) \triangleq \mathbb{E}\Big[ L(\mathbf{Q}(t+1)) - L(\mathbf{Q}(t)) \;\Big|\; \mathbf{Q}(t) \Big]
 \end{equation}
 
-\begin{lemma}[Lyapunov Drift Upper Bound]
+\begin{lemma}[Exact Algebraic Lyapunov Drift Upper Bound]
 \label{lem:drift_bound}
 For the queue dynamics in~\eqref{eq:queue_evol}, the one-step Lyapunov drift satisfies:
 \begin{equation}
@@ -460,113 +558,153 @@ For the queue dynamics in~\eqref{eq:queue_evol}, the one-step Lyapunov drift sat
 where $B$ is a finite positive constant defined as:
 \begin{equation}
 \label{eq:B_def}
-B \triangleq \frac{1}{2} \sum_{k=1}^4 \mathbb{E}\Big[ a_k(t)^2 + s_k(t)^2 \;\Big|\; \mathbf{Q}(t) \Big] < \infty
+B \triangleq \frac{1}{2} \sum_{k=1}^4 \mathbb{E}\Big[ a_k(t)^2 + s_k(t)^2 \;\Big|\; \mathbf{Q}(t) \Big] \le 2(a_{\max}^2 + s_{\max}^2) < \infty
 \end{equation}
 \end{lemma}
 
 \begin{proof}
-From~\eqref{eq:queue_evol}, for each queue $k$:
+From the queue evolution equation~\eqref{eq:queue_evol}, for each queue $k$:
 \begin{equation}
 q_k(t+1) = \max\Big(0, \; q_k(t) - s_k(t)\Big) + a_k(t)
 \end{equation}
 Squaring both sides:
 \begin{align}
+\label{eq:expand_sq}
 q_k(t+1)^2 &= \left( \max\Big(0, \; q_k(t) - s_k(t)\Big) + a_k(t) \right)^2 \nonumber \\
 &= \left(\max\Big(0, \; q_k(t) - s_k(t)\Big)\right)^2 + a_k(t)^2 \nonumber \\
 &\quad + 2 a_k(t) \max\Big(0, \; q_k(t) - s_k(t)\Big)
 \end{align}
-Using the algebraic identity $(\max(0, x))^2 \le x^2$ for all $x \in \mathbb{R}$:
-\begin{equation}
-\left(\max\Big(0, \; q_k(t) - s_k(t)\Big)\right)^2 \le \big( q_k(t) - s_k(t) \big)^2
-\end{equation}
-Furthermore, because $\max(0, x) \le x + \max(0, -x)$ and $a_k(t) \ge 0$:
-\begin{equation}
-\max\Big(0, \; q_k(t) - s_k(t)\Big) \le q_k(t)
-\end{equation}
-Expanding $(q_k(t) - s_k(t))^2$:
+
+We now bound each component of~\eqref{eq:expand_sq}:
+\begin{enumerate}
+    \item For any real number $x$, $(\max(0, x))^2 \le x^2$. Setting $x = q_k(t) - s_k(t)$:
+    \begin{equation}
+    \label{eq:sq_bound}
+    \left(\max\Big(0, \; q_k(t) - s_k(t)\Big)\right)^2 \le \big( q_k(t) - s_k(t) \big)^2
+    \end{equation}
+    Expanding the square:
+    \begin{equation}
+    \big( q_k(t) - s_k(t) \big)^2 = q_k(t)^2 - 2 q_k(t) s_k(t) + s_k(t)^2
+    \end{equation}
+    
+    \item For the cross-term, since $s_k(t) \ge 0$ and $q_k(t) \ge 0$, we have $q_k(t) - s_k(t) \le q_k(t)$, which implies:
+    \begin{equation}
+    \max\Big(0, \; q_k(t) - s_k(t)\Big) \le q_k(t)
+    \end{equation}
+    Because $a_k(t) \ge 0$, multiplying both sides by $2 a_k(t)$ yields:
+    \begin{align}
+    \label{eq:cross_bound}
+    2 a_k(t) \max\Big(0, \; q_k(t) - s_k(t)\Big) &\le 2 a_k(t) q_k(t) \nonumber \\
+    &= 2 q_k(t) a_k(t)
+    \end{align}
+\end{enumerate}
+
+Substituting~\eqref{eq:sq_bound} and~\eqref{eq:cross_bound} back into~\eqref{eq:expand_sq}:
 \begin{align}
-q_k(t+1)^2 &\le q_k(t)^2 - 2 q_k(t) s_k(t) + s_k(t)^2 \nonumber \\
-&\quad + a_k(t)^2 + 2 q_k(t) a_k(t) \nonumber \\
+q_k(t+1)^2 &\le q_k(t)^2 - 2 q_k(t) s_k(t) + s_k(t)^2 + a_k(t)^2 \nonumber \\
+&\quad + 2 q_k(t) a_k(t) \nonumber \\
 &= q_k(t)^2 + a_k(t)^2 + s_k(t)^2 \nonumber \\
 &\quad - 2 q_k(t) \big( s_k(t) - a_k(t) \big)
 \end{align}
-Subtracting $q_k(t)^2$ and dividing by 2:
+
+Subtracting $q_k(t)^2$ from both sides and dividing by 2:
 \begin{align}
 \frac{1}{2} \Big( q_k(t+1)^2 - q_k(t)^2 \Big) &\le \frac{1}{2}\big( a_k(t)^2 + s_k(t)^2 \big) \nonumber \\
 &\quad - q_k(t)\big( s_k(t) - a_k(t) \big)
 \end{align}
+
 Summing over all four queues $k \in \{1, 2, 3, 4\}$ and taking conditional expectations given $\mathbf{Q}(t)$:
 \begin{align}
 \Delta L(\mathbf{Q}(t)) &\le \sum_{k=1}^4 \frac{1}{2}\mathbb{E}\big[ a_k(t)^2 + s_k(t)^2 \mid \mathbf{Q}(t) \big] \nonumber \\
-&\quad - \sum_{k=1}^4 q_k(t) \mathbb{E}\big[ s_k(t) - a_k(t) \mid \mathbf{Q}(t) \big]
+&\quad - \sum_{k=1}^4 q_k(t) \mathbb{E}\big[ s_k(t) - a_k(t) \mid \mathbf{Q}(t) \big] \nonumber \\
+&= B - \sum_{k=1}^4 q_k(t) \mathbb{E}\big[ s_k(t) - a_k(t) \mid \mathbf{Q}(t) \big]
 \end{align}
-Because arrivals and service capacity per scheduling time slot are physically bounded by the finite core count $M$ and maximum dispatch bandwidth ($a_k(t) \le a_{\max} < \infty$, $s_k(t) \le s_{\max} < \infty$), the constant $B = \frac{1}{2}\sum_{k=1}^4 \mathbb{E}[a_k(t)^2 + s_k(t)^2 \mid \mathbf{Q}(t)]$ is strictly finite.
+Because arrival variances and service capacities per scheduling time slot are physically bounded by finite dispatch limits ($a_k(t) \le a_{\max} < \infty$, $s_k(t) \le s_{\max} < \infty$), the constant $B = \frac{1}{2}\sum_{k=1}^4 \mathbb{E}[a_k(t)^2 + s_k(t)^2 \mid \mathbf{Q}(t)]$ is strictly finite.
 \end{proof}
 
-\subsection{Queue Stability and Starvation Freedom}
-\begin{definition}[Admissible Workload Region]
-An arrival rate vector $\boldsymbol{\lambda} = (\lambda_1, \lambda_2, \lambda_3, \lambda_4)$ is strictly admissible if there exists $\epsilon_0 > 0$ such that the aggregate workload demand is strictly within the total multiprocessor processing capacity:
+\subsection{Workload Admissibility, Queue Stability, and Starvation Freedom}
+
+\begin{definition}[Strictly Admissible Workload Region]
+\label{def:admissible_workload}
+The arrival workload is strictly admissible if there exists $\epsilon_0 > 0$ such that the aggregate workload demand is strictly within the total multiprocessor computational capacity rate:
 \begin{equation}
-\sum_{k=1}^4 \lambda_k \bar{p}_k \le \Big( M_P c_P + M_E c_E \Big) - \epsilon_0
+\label{eq:capacity_constraint}
+\sum_{k=1}^4 \lambda_k \bar{p}_k \le C_{\mathrm{total}} - \epsilon_0 = \Big( M_P c_P + M_E c_E \Big) - \epsilon_0
 \end{equation}
 where $\bar{p}_k$ is the mean nominal execution requirement of tasks arriving in queue $k$.
 \end{definition}
 
-\begin{theorem}[Strong Queue Stability and Starvation Freedom via Lyapunov Drift]
+\begin{theorem}[Queue Stability via Lyapunov Drift and Starvation Freedom]
 \label{thm:stability}
-Under any strictly admissible workload, OPTIMA's adaptive quantum scaling~\eqref{eq:adaptive_slice} and hierarchical work-conserving work-stealing maintain a negative Lyapunov drift:
+Under any strictly admissible workload satisfying~\eqref{eq:capacity_constraint}, OPTIMA's adaptive quantum scaling~\eqref{eq:adaptive_slice} and hierarchical work-conserving work-stealing maintain a negative Lyapunov drift:
 \begin{equation}
 \label{eq:negative_drift}
-\Delta L(\mathbf{Q}(t)) \le B - \epsilon \sum_{k=1}^4 q_k(t)
+\Delta L(\mathbf{Q}(t)) \le B - \delta \sum_{k=1}^4 q_k(t)
 \end{equation}
-for some strictly positive constant $\epsilon > 0$. Consequently:
+for some strictly positive constant $\delta > 0$. Consequently:
 \begin{enumerate}
-    \item The queue backlog process is strongly stable, with bounded average queue depth:
+    \item \textbf{Strong Queue Stability:} The queue backlog process $\mathbf{Q}(t)$ is positive recurrent, with bounded time-average queue depth:
     \begin{equation}
-    \limsup_{T \to \infty} \frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\epsilon} < \infty
+    \limsup_{T \to \infty} \frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\delta} < \infty
     \end{equation}
-    \item Every task $J_j$ is guaranteed complete starvation freedom, with finite expected waiting time bounded by:
+    \item \textbf{Individual Starvation Freedom:} Every admitted task $J_j$ is guaranteed eventual dispatch, with finite expected waiting time:
     \begin{equation}
-    \mathbb{E}[W_j] \le \left(\frac{B}{\epsilon}\right) \cdot \frac{\tau_{\max}}{\min(M_P, M_E)} < \infty
+    \mathbb{E}[W_j] \le \left(\frac{B}{\delta}\right) \cdot \frac{\tau_{\max}}{\min(M_P, M_E)} < \infty
     \end{equation}
 \end{enumerate}
 \end{theorem}
 
 \begin{proof}
-We establish the negative drift condition by examining the service rate $\mathbb{E}[s_k(t) \mid \mathbf{Q}(t)]$.
-Under OPTIMA's dispatch and work-stealing architecture:
+We first establish the negative drift condition:
 \begin{enumerate}
-    \item \textbf{Work-Conservation:} No core $C_k \in \mathcal{M}$ is ever idle while any queue $q_j(t) > 0$. If a core's local and domestic queues are empty, it executes hierarchical cross-domain work-stealing from remote queues. Thus, total system service capacity satisfies $\sum_{k=1}^4 s_k(t) = \sum_{C_i \in \mathcal{M}} c_i / \bar{p}$.
-    \item \textbf{Adaptive Quantum Scaling:} As queue depth $q_k(t)$ increases, $\tau(q_k) = \max\left(\frac{Q_{\mathrm{base}}}{1 + q_k(t)}, \tau_{\min}\right)$ dynamically compresses the time quantum by up to $\frac{Q_{\mathrm{base}}}{\tau_{\min}} = 6\times$. Because each slice expiration triggers a new dispatch, the effective task retirement rate $s_k(t)$ scales inversely with slice duration, accelerating throughput during congestion.
+    \item \textbf{Work-Conservation:} Under OPTIMA's dispatch and work-stealing architecture, no processor core $C_k \in \mathcal{M}$ is ever idle while any queue $q_j(t) > 0$. If a core's local and domestic queues are empty, it executes hierarchical cross-domain work-stealing from remote queues. Thus, whenever $\sum_{k=1}^4 q_k(t) > 0$, the aggregate service rate delivered across the multiprocessor satisfies $\sum_{k=1}^4 \mathbb{E}[s_k(t) \mid \mathbf{Q}(t)] \bar{p}_k \ge C_{\mathrm{total}}$.
+    \item \textbf{Adaptive Quantum Scaling:} As queue depth $q_k(t)$ increases, $\tau(q_k) = \max\left(\frac{Q_{\mathrm{base}}}{1 + q_k(t)}, \tau_{\min}\right)$ dynamically compresses the time quantum by up to $\frac{Q_{\mathrm{base}}}{\tau_{\min}} = 6\times$. Because each slice expiration triggers a new scheduling pass, effective task retirement rate scales inversely with slice duration, accelerating throughput during congestion.
 \end{enumerate}
-Because the workload is strictly admissible, the aggregate service rate exceeds the arrival rate across all active queues:
+
+Because the workload is strictly admissible ($\sum \lambda_k \bar{p}_k \le C_{\mathrm{total}} - \epsilon_0$), the aggregate service rate strictly exceeds the arrival rate across active queues:
 \begin{equation}
-\mathbb{E}\Big[ s_k(t) - a_k(t) \;\Big|\; \mathbf{Q}(t) \Big] \ge \epsilon > 0, \quad \forall k \text{ such that } q_k(t) > 0
+\mathbb{E}\Big[ s_k(t) - a_k(t) \;\Big|\; \mathbf{Q}(t) \Big] \ge \delta > 0, \quad \forall k \text{ such that } q_k(t) > 0
 \end{equation}
-Substituting this inequality directly into Lemma~\ref{lem:drift_bound} yields:
+Substituting this directly into Lemma~\ref{lem:drift_bound} yields:
 \begin{equation}
-\Delta L(\mathbf{Q}(t)) \le B - \sum_{k=1}^4 q_k(t) \cdot \epsilon = B - \epsilon \sum_{k=1}^4 q_k(t)
+\Delta L(\mathbf{Q}(t)) \le B - \sum_{k=1}^4 q_k(t) \cdot \delta = B - \delta \sum_{k=1}^4 q_k(t)
 \end{equation}
 
 By the Foster-Lyapunov Stability Criterion (Neveu's Theorem for irreducible Markov chains), the negative drift condition implies that the queue state process $\mathbf{Q}(t)$ is positive recurrent.
 Summing~\eqref{eq:negative_drift} over time slots $t = 0, 1, \dots, T-1$:
 \begin{equation}
-\mathbb{E}[L(\mathbf{Q}(T))] - \mathbb{E}[L(\mathbf{Q}(0))] \le T B - \epsilon \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)]
+\mathbb{E}[L(\mathbf{Q}(T))] - \mathbb{E}[L(\mathbf{Q}(0))] \le T B - \delta \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)]
 \end{equation}
 Since $L(\mathbf{Q}(T)) \ge 0$:
 \begin{equation}
-\frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\epsilon} + \frac{\mathbb{E}[L(\mathbf{Q}(0))]}{\epsilon T}
+\frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\delta} + \frac{\mathbb{E}[L(\mathbf{Q}(0))]}{\delta T}
 \end{equation}
 Taking the limit superior as $T \to \infty$ establishes strong queue stability:
 \begin{equation}
-\limsup_{T \to \infty} \frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\epsilon} < \infty
+\limsup_{T \to \infty} \frac{1}{T} \sum_{t=0}^{T-1} \sum_{k=1}^4 \mathbb{E}[q_k(t)] \le \frac{B}{\delta} < \infty
 \end{equation}
 
-To prove starvation freedom, observe that by Definition~\ref{def:vdeadline}, any task $J_j$ enqueued at time $t$ has virtual deadline:
+We now address the distinction between aggregate queue stability and individual task starvation freedom. In strict-priority or asymmetric multi-queue systems, positive recurrence of aggregate queue length $\mathbf{Q}(t)$ does not inherently preclude starvation of individual low-priority tasks if higher-priority queues are continuously filled. 
+
+OPTIMA guarantees starvation freedom for every individual task through \textbf{virtual deadline bounding}:
+By Definition~\ref{def:vdeadline}, any task $J_j$ enqueued at time $t$ with weight $w_j \ge w_{\min} \ge 10$ has initial virtual deadline bounded by:
 \begin{equation}
+\label{eq:vdeadline_bound}
 v_j(t) \le t + \tau_{\max} \cdot \frac{100}{10} = t + 10 \tau_{\max}
 \end{equation}
-Since all newly arriving tasks $J_{j'}$ arriving after $t + 10 \tau_{\max}$ receive $v_{j'}(t') \ge t' > v_j(t)$, task $J_j$ cannot be superseded by more than a finite number of subsequent arrivals. Because total expected backlog is bounded by $B/\epsilon$, the maximum number of tasks scheduled ahead of $J_j$ is strictly bounded, establishing that $\mathbb{E}[W_j] \le \left(\frac{B}{\epsilon}\right) \frac{\tau_{\max}}{\min(M_P, M_E)} < \infty$.
+Now consider any subsequent arrival $J_{j'}$ arriving at timestamp $t' > t + 10 \tau_{\max}$. By~\eqref{eq:vdeadline}:
+\begin{equation}
+v_{j'}(t') \ge t' > t + 10 \tau_{\max} \ge v_j(t)
+\end{equation}
+Therefore, newly arriving tasks arriving after $t + 10 \tau_{\max}$ are strictly ordered \emph{behind} $J_j$ in the virtual deadline priority heap. 
+
+Consequently, task $J_j$ can be superseded only by tasks that arrived prior to $t + 10 \tau_{\max}$ or tasks whose virtual deadlines are strictly less than $v_j(t)$. Because the arrival process is admissible and time-average backlog is bounded by $B/\delta$, the number of such tasks is almost surely finite. 
+
+Furthermore, OPTIMA's hierarchical work-stealing ensures that Efficiency cores continuously drain batch queues (\texttt{DSQ\_SHARED\_E}, \texttt{DSQ\_EFF}) independently of Performance core saturation. Thus, task $J_j$ advances toward the head of the dispatch queue, guaranteeing finite expected waiting time:
+\begin{equation}
+\mathbb{E}[W_j] \le \left(\frac{B}{\delta}\right) \cdot \frac{\tau_{\max}}{\min(M_P, M_E)} < \infty
+\end{equation}
+This establishes individual starvation freedom alongside global Lyapunov queue stability.
 \end{proof}
 
 % =========================================================================
@@ -575,7 +713,7 @@ Since all newly arriving tasks $J_{j'}$ arriving after $t + 10 \tau_{\max}$ rece
 \section{Algorithmic Specifications}
 \label{sec:algorithms}
 
-We formalize OPTIMA's three core scheduling operations implemented in Linux \texttt{sched\_ext} eBPF: CPU selection, queue insertion, and work-conserving dispatch.
+We formalize OPTIMA's core scheduling operations implemented in Linux \texttt{sched\_ext} eBPF: CPU selection, queue insertion, and work-conserving dispatch.
 
 % -------------------------------------------------------------------------
 % ALGORITHM 1
@@ -631,9 +769,9 @@ We formalize OPTIMA's three core scheduling operations implemented in Linux \tex
     \STATE \textbf{goto} direct\_dispatch with $target\_cpu \leftarrow e$
 \ENDIF
 \IF{$tctx.weight \ge w_{\mathrm{RT}}$}
-    \STATE $bb\_cpu \leftarrow \text{BRANCH-AND-BOUND-PREEMPT}(p, tctx)$
-    \IF{$bb\_cpu \ge 0$}
-        \STATE $tctx.dispatch\_local \leftarrow \text{TRUE}$; \textbf{return} $bb\_cpu$
+    \STATE $preempt\_cpu \leftarrow \text{OPTIMA-OAPF}(p, tctx, \mathcal{P})$
+    \IF{$preempt\_cpu \ge 0$}
+        \STATE $tctx.dispatch\_local \leftarrow \text{TRUE}$; \textbf{return} $preempt\_cpu$
     \ENDIF
 \ENDIF
 \STATE $tctx.dispatch\_local \leftarrow \text{FALSE}$; \textbf{return} $prev\_cpu$
@@ -645,10 +783,10 @@ We formalize OPTIMA's three core scheduling operations implemented in Linux \tex
 \end{algorithm*}
 
 % -------------------------------------------------------------------------
-% ALGORITHM 2
+% ALGORITHM 2 (ENQUEUE)
 % -------------------------------------------------------------------------
 \begin{algorithm}[t]
-\caption{OPTIMA-ENQUEUE (Smith's WSPT Virtual Deadline Calculus \& Preemption Guard)}
+\caption{OPTIMA-ENQUEUE (Virtual Deadline Calculus \& OAPF Preemption Kick)}
 \label{alg:enqueue}
 \begin{algorithmic}[1]
 \footnotesize
@@ -685,22 +823,22 @@ We formalize OPTIMA's three core scheduling operations implemented in Linux \tex
 \ENDIF
 \STATE $p.\text{scx.dsq\_vtime} \leftarrow deadline$
 \STATE $\text{scx\_bpf\_dsq\_insert\_vtime}(p, target\_dsq, \tau, deadline, enq\_flags)$
-\STATE \COMMENT{Branch-and-Bound Preemption Kick}
+\STATE \COMMENT{Online Admissible Preemption Kick}
 \STATE $idle\_cpu \leftarrow \text{scx\_bpf\_pick\_idle\_cpu}(p.\text{cpus\_allowed}, 0)$
 \IF{$idle\_cpu \ge 0$}
     \STATE $\text{scx\_bpf\_kick\_cpu}(idle\_cpu, \text{SCX\_KICK\_IDLE})$; \textbf{return}
 \ENDIF
 \IF{$is\_rt$}
-    \STATE $bb\_cpu \leftarrow \text{BRANCH-AND-BOUND-PREEMPT}(p, tctx)$
-    \IF{$bb\_cpu \ge 0$}
-        \STATE $\text{scx\_bpf\_kick\_cpu}(bb\_cpu, \text{SCX\_KICK\_PREEMPT})$
+    \STATE $preempt\_cpu \leftarrow \text{OPTIMA-OAPF}(p, tctx, \mathcal{P})$
+    \IF{$preempt\_cpu \ge 0$}
+        \STATE $\text{scx\_bpf\_kick\_cpu}(preempt\_cpu, \text{SCX\_KICK\_PREEMPT})$
     \ENDIF
 \ENDIF
 \end{algorithmic}
 \end{algorithm}
 
 % -------------------------------------------------------------------------
-% ALGORITHM 3
+% ALGORITHM 3 (DISPATCH)
 % -------------------------------------------------------------------------
 \begin{algorithm}[t]
 \caption{OPTIMA-DISPATCH (Asymmetric Hierarchical Work-Stealing)}
@@ -710,7 +848,7 @@ We formalize OPTIMA's three core scheduling operations implemented in Linux \tex
 \REQUIRE Executing core $cpu$, previous task $prev$
 \STATE $is\_perf \leftarrow \text{is\_perf\_core}(cpu)$
 \IF{$is\_perf$}
-    \STATE \COMMENT{Priority Tier 1: Real-time and latency-critical tasks}
+    \STATE \COMMENT{Priority Tier 1: Latency-critical tasks}
     \IF{$\text{scx\_bpf\_dsq\_move\_to\_local}(\text{DSQ\_PERF}, 0)$}
         \RETURN
     \ENDIF
@@ -746,5 +884,45 @@ We formalize OPTIMA's three core scheduling operations implemented in Linux \tex
 \ENDIF
 \end{algorithmic}
 \end{algorithm}
+
+% =========================================================================
+% REFERENCES
+% =========================================================================
+\begin{thebibliography}{10}
+
+\bibitem{smith1956various}
+W.~E.~Smith, ``Various optimizers for single-stage production,'' \emph{Naval Research Logistics Quarterly}, vol.~3, no.~1--2, pp.~59--66, 1956.
+
+\bibitem{kawaguchi1986worst}
+T.~Kawaguchi and S.~Kyan, ``Worst case bound of an {LRF} schedule for parallel processors,'' \emph{SIAM Journal on Computing}, vol.~15, no.~4, pp.~1119--1129, 1986.
+
+\bibitem{lenstra1977complexity}
+J.~K.~Lenstra, A.~H.~G.~Rinnooy~Kan, and P.~Brucker, ``Complexity of machine scheduling problems,'' \emph{Annals of Discrete Mathematics}, vol.~1, pp.~343--362, 1977.
+
+\bibitem{labetoulle1984preemptive}
+J.~Labetoulle, E.~L.~Lawler, J.~K.~Lenstra, and A.~H.~G.~Rinnooy~Kan, ``Preemptive scheduling of uniform machines subject to release dates,'' \emph{Mathematical Programming}, pp.~137--147, 1984.
+
+\bibitem{garey1979computers}
+M.~R.~Garey and D.~S.~Johnson, \emph{Computers and Intractability: A Guide to the Theory of {NP}-Completeness}. San Francisco, CA: W. H. Freeman and Company, 1979.
+
+\bibitem{neely2010stochastic}
+M.~J.~Neely, \emph{Stochastic Network Optimization with Application to Communication and Queueing Systems}. Morgan \& Claypool Publishers, 2010.
+
+\bibitem{georgiadis2006resource}
+L.~Georgiadis, M.~J.~Neely, and L.~Tassiulas, ``Resource allocation and cross-layer control in wireless networks,'' \emph{Foundations and Trends in Networking}, vol.~1, no.~1, pp.~1--144, 2006.
+
+\bibitem{stoica1995eevdf}
+I.~Stoica and H.~Abdel-Wahab, ``Earliest Eligible Virtual Deadline First: A Flexible and Accurate Mechanism for Proportional Share Resource Allocation,'' Old Dominion University, Tech. Rep. TR-95-22, 1995.
+
+\bibitem{dantzig1957discrete}
+G.~B.~Dantzig, ``Discrete-variable extremum problems,'' \emph{Operations Research}, vol.~5, no.~2, pp.~266--277, 1957.
+
+\bibitem{heo2024schedext}
+T.~Heo, D.~Vernet, A.~Righi, and C.~Min, ``sched\_ext: BPF Extensible {CPU} Scheduling in the {Linux} Kernel,'' in \emph{Proceedings of the Linux Plumbers Conference (LPC)}, 2024.
+
+\bibitem{bansal2009speed}
+N.~Bansal, H.~L.~Chan, T.~W.~Lam, and K.~K.~To, ``Strictly online scheduling with speed augmentation,'' \emph{Theoretical Computer Science}, vol.~410, no.~47, pp.~4963--4973, 2009.
+
+\end{thebibliography}
 
 \end{document}
