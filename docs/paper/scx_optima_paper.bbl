@@ -203,9 +203,9 @@ M.~R. Garey and D.~S. Johnson, \emph{Computers and Intractability: A Guide to
   Francisco, CA, USA: W. H. Freeman and Company, 1979.
 
 \bibitem{kawaguchi1986worst}
-T.~Kawaguchi and S.~Kyan, ``Worst case bound of an {LRF} schedule for parallel
-  processors,'' \emph{SIAM Journal on Computing}, vol.~15, no.~4, pp.
-  1119--1129, 1986.
+T.~Kawaguchi and S.~Kyan, ``Worst case bound of an {LRF} schedule for the mean
+  weighted flow-time problem,'' \emph{SIAM Journal on Computing}, vol.~15,
+  no.~4, pp. 1119--1129, 1986.
 
 \bibitem{hall1997scheduling}
 L.~A. Hall, A.~S. Schulz, D.~B. Shmoys, and J.~Wein, ``Scheduling to minimize
