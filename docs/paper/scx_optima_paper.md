@@ -1,8 +1,8 @@
 # OPTIMA: Density-Aware Task Scheduling and Low-Latency IPC on Asymmetric Multiprocessors with Linux sched_ext
 
 **Author:** Risheendra MN  
-**Affiliation:** Systems Research  
 **Email:** rishindra.hackbox@gmail.com  
+**ORCID:** https://orcid.org/0009-0004-5568-614X  
 
 ---
 
